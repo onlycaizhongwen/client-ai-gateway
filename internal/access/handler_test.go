@@ -438,6 +438,57 @@ func TestMCPServersHTTP(t *testing.T) {
 	}
 }
 
+func TestMCPServersHTTPFilters(t *testing.T) {
+	path := writeHandlerConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "audit_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat"]}],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "mcp_runtime": {"enabled":true,"mode":"manifest_only","servers":[
+	    {"id":"desktop-context","tools":[
+	      {"id":"mcp.desktop.list_context","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":true},
+	      {"id":"mcp.desktop.disabled","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":false}
+	    ]},
+	    {"id":"repo-context","tools":[
+	      {"id":"mcp.repo.list","read_only":true,"risk_level":"low","scopes":["repo.read"],"enabled":true}
+	    ]}
+	  ]}
+	}`)
+	store := trace.NewMemoryStore()
+	manager, err := gatewayruntime.NewManager(path, store)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+	handler := NewRuntimeHandler(manager, store).Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/mcp/servers?server_id=desktop-context&scope=desktop.read&enabled=true", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Filters map[string]string `json:"filters"`
+		Servers []mcpServerView   `json:"servers"`
+	}
+	decodeBody(t, res, &body)
+	if body.Filters["server_id"] != "desktop-context" || body.Filters["scope"] != "desktop.read" || body.Filters["enabled"] != "true" {
+		t.Fatalf("unexpected filters echo: %+v", body.Filters)
+	}
+	if len(body.Servers) != 1 || body.Servers[0].ID != "desktop-context" {
+		t.Fatalf("expected only desktop-context server, got %+v", body.Servers)
+	}
+	if body.Servers[0].ToolCount != 1 || body.Servers[0].EnabledTools != 1 || len(body.Servers[0].Tools) != 1 {
+		t.Fatalf("expected only enabled desktop.read tool, got %+v", body.Servers[0])
+	}
+	if body.Servers[0].Tools[0].ID != "mcp.desktop.list_context" {
+		t.Fatalf("unexpected filtered tool: %+v", body.Servers[0].Tools[0])
+	}
+}
+
 func TestToolInvokeRequiresScope(t *testing.T) {
 	handler, store, cleanup := newRuntimeToolTestHandler(t, `[
 	    {"id":"dev-app","token":"dev-token","grants":["chat"]},
@@ -608,6 +659,10 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"id=\"audit-export\"",
 		"id=\"tool-select\"",
 		"id=\"tool-invoke\"",
+		"id=\"mcp-server-filter\"",
+		"id=\"mcp-scope-filter\"",
+		"id=\"mcp-enabled-filter\"",
+		"function loadMCPCatalog()",
 		"function exportTraces()",
 		"function exportAudit()",
 		"function loadTools()",

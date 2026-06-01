@@ -340,20 +340,38 @@ func (h *Handler) toolsList(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"tools": views})
 }
 
-func (h *Handler) mcpServers(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) mcpServers(w http.ResponseWriter, r *http.Request) {
 	snapshot := h.snapshot()
 	runtime := snapshot.Config.MCPRuntime
+	query := r.URL.Query()
+	serverFilter := query.Get("server_id")
+	scopeFilter := query.Get("scope")
+	enabledFilter := query.Get("enabled")
 	servers := make([]mcpServerView, 0, len(runtime.Servers))
 	for _, server := range runtime.Servers {
+		if serverFilter != "" && server.ID != serverFilter {
+			continue
+		}
 		view := mcpServerView{
-			ID:        server.ID,
-			Name:      server.Name,
-			Enabled:   runtime.Enabled && server.IsEnabled(),
-			ToolCount: len(server.Tools),
-			Tools:     make([]toolView, 0, len(server.Tools)),
+			ID:      server.ID,
+			Name:    server.Name,
+			Enabled: runtime.Enabled && server.IsEnabled(),
+			Tools:   make([]toolView, 0, len(server.Tools)),
 		}
 		for _, tool := range server.Tools {
 			enabled := view.Enabled && tool.IsEnabled()
+			if enabledFilter != "" {
+				if enabledFilter == "true" && !enabled {
+					continue
+				}
+				if enabledFilter == "false" && enabled {
+					continue
+				}
+			}
+			if scopeFilter != "" && !hasScope(tool.Scopes, scopeFilter) {
+				continue
+			}
+			view.ToolCount++
 			if enabled {
 				view.EnabledTools++
 			}
@@ -373,6 +391,11 @@ func (h *Handler) mcpServers(w http.ResponseWriter, _ *http.Request) {
 				Enabled:         enabled,
 			})
 		}
+		if scopeFilter != "" || enabledFilter != "" {
+			if len(view.Tools) == 0 {
+				continue
+			}
+		}
 		servers = append(servers, view)
 	}
 	mode := runtime.Mode
@@ -383,6 +406,11 @@ func (h *Handler) mcpServers(w http.ResponseWriter, _ *http.Request) {
 		"enabled": runtime.Enabled,
 		"mode":    mode,
 		"servers": servers,
+		"filters": map[string]string{
+			"server_id": serverFilter,
+			"scope":     scopeFilter,
+			"enabled":   enabledFilter,
+		},
 	})
 }
 
@@ -915,6 +943,15 @@ func hasToolScope(grants []string, scopes []string) bool {
 		}
 	}
 	return len(scopes) > 0
+}
+
+func hasScope(scopes []string, want string) bool {
+	for _, scope := range scopes {
+		if scope == want {
+			return true
+		}
+	}
+	return false
 }
 
 func toolErrorResponse(err error) (string, int) {

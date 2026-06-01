@@ -240,7 +240,17 @@ const consoleHTML = `<!doctype html>
         </section>
         <section class="panel">
           <div class="panel-head"><h2 data-i18n="mcpCatalog">MCP 目录</h2></div>
-          <div class="panel-body" id="mcp-catalog">正在加载 MCP 目录...</div>
+          <div class="panel-body form-grid">
+            <input id="mcp-server-filter" data-i18n-placeholder="mcpServerFilter" placeholder="Server ID" />
+            <input id="mcp-scope-filter" data-i18n-placeholder="mcpScopeFilter" placeholder="Scope" />
+            <select id="mcp-enabled-filter">
+              <option value="" data-i18n="allEnabled">全部启用状态</option>
+              <option value="true" data-i18n="enabled">启用</option>
+              <option value="false" data-i18n="disabled">禁用</option>
+            </select>
+            <button class="secondary" id="mcp-filter-apply" data-i18n="applyFilter">筛选</button>
+            <div id="mcp-catalog">正在加载 MCP 目录...</div>
+          </div>
         </section>
         <section class="panel">
           <div class="panel-head"><h2 data-i18n="traceDetail">追踪详情</h2></div>
@@ -263,6 +273,9 @@ const consoleHTML = `<!doctype html>
     const toolMeta = document.querySelector("#tool-meta");
     const toolResult = document.querySelector("#tool-result");
     const mcpCatalog = document.querySelector("#mcp-catalog");
+    const mcpServerFilter = document.querySelector("#mcp-server-filter");
+    const mcpScopeFilter = document.querySelector("#mcp-scope-filter");
+    const mcpEnabledFilter = document.querySelector("#mcp-enabled-filter");
     let allTraces = [];
     let traceTotal = 0;
     let traceStats = { total: 0, completed: 0, failed: 0, fallbacks: 0 };
@@ -343,6 +356,10 @@ const consoleHTML = `<!doctype html>
         noMCPServers: "暂无 MCP Server。",
         mcpMode: "模式",
         toolCount: "工具数",
+        mcpServerFilter: "Server ID",
+        mcpScopeFilter: "Scope",
+        allEnabled: "全部启用状态",
+        applyFilter: "筛选",
         loadingTools: "\u6b63\u5728\u52a0\u8f7d\u5de5\u5177...",
         noTools: "\u6682\u65e0\u53ef\u7528\u5de5\u5177\u3002",
         invokeTool: "\u6267\u884c\u5de5\u5177",
@@ -471,6 +488,10 @@ const consoleHTML = `<!doctype html>
         noMCPServers: "No MCP servers.",
         mcpMode: "Mode",
         toolCount: "Tools",
+        mcpServerFilter: "Server ID",
+        mcpScopeFilter: "Scope",
+        allEnabled: "All enabled states",
+        applyFilter: "Apply",
         loadingTools: "Loading tools...",
         noTools: "No tools available.",
         invokeTool: "Invoke Tool",
@@ -544,6 +565,7 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#explain").addEventListener("click", () => explainRouting(document.querySelector("#mode").value));
     document.querySelector("#tool-invoke").addEventListener("click", invokeTool);
     toolSelect.addEventListener("change", renderSelectedTool);
+    document.querySelector("#mcp-filter-apply").addEventListener("click", loadMCPCatalog);
     document.querySelector("#trace-prev").addEventListener("click", () => { tracePage = Math.max(1, tracePage - 1); loadTraces(); });
     document.querySelector("#trace-next").addEventListener("click", () => { tracePage += 1; loadTraces(); });
     document.querySelector("#audit-prev").addEventListener("click", () => { auditPage = Math.max(1, auditPage - 1); loadAudit(); });
@@ -565,6 +587,9 @@ const consoleHTML = `<!doctype html>
       document.querySelector("#lang-toggle").textContent = lang === "zh" ? "English" : "中文";
       document.querySelectorAll("[data-i18n]").forEach(node => {
         node.textContent = t(node.dataset.i18n);
+      });
+      document.querySelectorAll("[data-i18n-placeholder]").forEach(node => {
+        node.setAttribute("placeholder", t(node.dataset.i18nPlaceholder));
       });
       if (!allTraces.length) summary.textContent = t("loadingTraces");
       renderTraces();
@@ -763,7 +788,12 @@ const consoleHTML = `<!doctype html>
     async function loadMCPCatalog() {
       mcpCatalog.textContent = t("loadingMCP");
       try {
-        const res = await fetch("/gateway/v1/mcp/servers");
+        const query = new URLSearchParams();
+        if (mcpServerFilter.value.trim()) query.set("server_id", mcpServerFilter.value.trim());
+        if (mcpScopeFilter.value.trim()) query.set("scope", mcpScopeFilter.value.trim());
+        if (mcpEnabledFilter.value) query.set("enabled", mcpEnabledFilter.value);
+        const suffix = query.toString() ? "?" + query.toString() : "";
+        const res = await fetch("/gateway/v1/mcp/servers" + suffix);
         const data = await res.json();
         if (!res.ok) {
           mcpCatalog.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);

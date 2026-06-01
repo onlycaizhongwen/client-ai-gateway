@@ -269,6 +269,12 @@ Access 层会把工具错误码映射成 HTTP 错误响应、Trace 和 Audit 事
 curl http://127.0.0.1:18765/gateway/v1/mcp/servers
 ```
 
+支持查询参数：
+
+- `server_id`：只看指定 MCP server
+- `scope`：只看包含指定 scope 的工具
+- `enabled`：`true` 只看启用工具，`false` 只看禁用工具
+
 响应包含：
 
 - `enabled`
