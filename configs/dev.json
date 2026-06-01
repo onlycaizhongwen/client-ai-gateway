@@ -1,0 +1,93 @@
+{
+  "listen_addr": "127.0.0.1:18765",
+  "trace_store_path": "data/traces.jsonl",
+  "audit_store_path": "data/audit.jsonl",
+  "trace_retention_max": 5000,
+  "audit_retention_max": 5000,
+  "policy_version": "local-dev-v1",
+  "apps": [
+    {
+      "id": "dev-app",
+      "name": "Development App",
+      "token": "dev-token",
+      "grants": [
+        "chat",
+        "tool"
+      ]
+    },
+    {
+      "id": "admin-app",
+      "name": "Local Admin",
+      "token": "admin-token",
+      "grants": [
+        "admin"
+      ]
+    }
+  ],
+  "providers": [
+    {
+      "id": "local-mock",
+      "name": "Local Mock Provider",
+      "class": "local",
+      "models": [
+        "local-small",
+        "local-large"
+      ],
+      "healthy": true,
+      "enabled": true
+    },
+    {
+      "id": "cloud-mock",
+      "name": "Cloud Mock Provider",
+      "class": "cloud",
+      "models": [
+        "local-small",
+        "cloud-smart"
+      ],
+      "healthy": true,
+      "enabled": true
+    }
+  ],
+  "tools": [
+    {
+      "id": "gateway.runtime_health",
+      "name": "Gateway Runtime Health",
+      "adapter": "runtime-health",
+      "description": "Read-only snapshot of gateway runtime health",
+      "read_only": true,
+      "risk_level": "low",
+      "scopes": [
+        "runtime.read"
+      ],
+      "sandbox_required": false,
+      "enabled": true
+    }
+  ],
+  "policies": [
+    {
+      "id": "deny-sensitive-cloud",
+      "effect": "deny_cloud_for_sensitive",
+      "reason": "Sensitive data cannot use cloud providers",
+      "request_types": [
+        "chat"
+      ],
+      "data_labels": [
+        "sensitive"
+      ]
+    },
+    {
+      "id": "local-large-force-local",
+      "effect": "force_local",
+      "reason": "Large local model requests should stay on the local runtime first",
+      "request_types": [
+        "chat"
+      ],
+      "models": [
+        "local-large"
+      ],
+      "provider_classes": [
+        "cloud"
+      ]
+    }
+  ]
+}

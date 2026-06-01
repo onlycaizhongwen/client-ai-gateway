@@ -1,0 +1,5 @@
+data/*.jsonl
+*.exe
+*.test
+coverage.out
+.DS_Store

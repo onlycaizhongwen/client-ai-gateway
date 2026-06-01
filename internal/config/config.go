@@ -1,0 +1,311 @@
+package config
+
+import (
+	"encoding/json"
+	"fmt"
+	"net"
+	"os"
+	"strings"
+)
+
+type Config struct {
+	ListenAddr        string     `json:"listen_addr"`
+	TraceStorePath    string     `json:"trace_store_path"`
+	AuditStorePath    string     `json:"audit_store_path"`
+	TraceRetentionMax int        `json:"trace_retention_max,omitempty"`
+	AuditRetentionMax int        `json:"audit_retention_max,omitempty"`
+	PolicyVersion     string     `json:"policy_version"`
+	Apps              []App      `json:"apps"`
+	Providers         []Provider `json:"providers"`
+	Tools             []Tool     `json:"tools,omitempty"`
+	Policies          []Policy   `json:"policies"`
+}
+
+type App struct {
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Token  string   `json:"token"`
+	Grants []string `json:"grants"`
+}
+
+type Provider struct {
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Class     string   `json:"class"`
+	Adapter   string   `json:"adapter,omitempty"`
+	BaseURL   string   `json:"base_url,omitempty"`
+	APIKeyEnv string   `json:"api_key_env,omitempty"`
+	Models    []string `json:"models"`
+	Healthy   bool     `json:"healthy"`
+	Enabled   *bool    `json:"enabled,omitempty"`
+}
+
+type Tool struct {
+	ID              string         `json:"id"`
+	Name            string         `json:"name"`
+	Adapter         string         `json:"adapter"`
+	Description     string         `json:"description,omitempty"`
+	ReadOnly        bool           `json:"read_only"`
+	RiskLevel       string         `json:"risk_level,omitempty"`
+	Scopes          []string       `json:"scopes,omitempty"`
+	InputSchema     map[string]any `json:"input_schema,omitempty"`
+	OutputSchema    map[string]any `json:"output_schema,omitempty"`
+	SandboxRequired bool           `json:"sandbox_required,omitempty"`
+	Enabled         *bool          `json:"enabled,omitempty"`
+}
+
+type Policy struct {
+	ID              string   `json:"id"`
+	Effect          string   `json:"effect"`
+	Reason          string   `json:"reason"`
+	AppIDs          []string `json:"app_ids,omitempty"`
+	RequestTypes    []string `json:"request_types,omitempty"`
+	Models          []string `json:"models,omitempty"`
+	ProviderClasses []string `json:"provider_classes,omitempty"`
+	DataLabels      []string `json:"data_labels,omitempty"`
+}
+
+func Load(path string) (Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Config{}, err
+	}
+	var cfg Config
+	clean := strings.TrimPrefix(string(data), "\ufeff")
+	if err := json.Unmarshal([]byte(clean), &cfg); err != nil {
+		return Config{}, err
+	}
+	if cfg.ListenAddr == "" {
+		return Config{}, fmt.Errorf("listen_addr is required")
+	}
+	if cfg.PolicyVersion == "" {
+		cfg.PolicyVersion = "local-dev"
+	}
+	if cfg.TraceStorePath == "" {
+		cfg.TraceStorePath = "data/traces.jsonl"
+	}
+	if cfg.AuditStorePath == "" {
+		cfg.AuditStorePath = "data/audit.jsonl"
+	}
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+func (c Config) AppByToken(token string) (App, bool) {
+	for _, app := range c.Apps {
+		if app.Token == token {
+			return app, true
+		}
+	}
+	return App{}, false
+}
+
+func (c Config) Validate() error {
+	if _, _, err := net.SplitHostPort(c.ListenAddr); err != nil {
+		return fmt.Errorf("listen_addr must be host:port: %w", err)
+	}
+	if strings.TrimSpace(c.TraceStorePath) == "" {
+		return fmt.Errorf("trace_store_path is required")
+	}
+	if strings.TrimSpace(c.AuditStorePath) == "" {
+		return fmt.Errorf("audit_store_path is required")
+	}
+	if c.TraceRetentionMax < 0 {
+		return fmt.Errorf("trace_retention_max must be >= 0")
+	}
+	if c.AuditRetentionMax < 0 {
+		return fmt.Errorf("audit_retention_max must be >= 0")
+	}
+	if len(c.Apps) == 0 {
+		return fmt.Errorf("at least one app is required")
+	}
+	appIDs := map[string]struct{}{}
+	tokens := map[string]struct{}{}
+	for i, app := range c.Apps {
+		if app.ID == "" {
+			return fmt.Errorf("apps[%d].id is required", i)
+		}
+		if _, ok := appIDs[app.ID]; ok {
+			return fmt.Errorf("duplicate app id %q", app.ID)
+		}
+		appIDs[app.ID] = struct{}{}
+		if app.Token == "" {
+			return fmt.Errorf("apps[%d].token is required", i)
+		}
+		if _, ok := tokens[app.Token]; ok {
+			return fmt.Errorf("duplicate app token for app %q", app.ID)
+		}
+		tokens[app.Token] = struct{}{}
+		if len(app.Grants) == 0 {
+			return fmt.Errorf("apps[%d].grants must not be empty", i)
+		}
+		for _, grant := range app.Grants {
+			if !validGrant(grant) {
+				return fmt.Errorf("apps[%d].grants contains unsupported grant %q", i, grant)
+			}
+		}
+	}
+	if len(c.Providers) == 0 {
+		return fmt.Errorf("at least one provider is required")
+	}
+	providerIDs := map[string]struct{}{}
+	for i, provider := range c.Providers {
+		if provider.ID == "" {
+			return fmt.Errorf("providers[%d].id is required", i)
+		}
+		if _, ok := providerIDs[provider.ID]; ok {
+			return fmt.Errorf("duplicate provider id %q", provider.ID)
+		}
+		providerIDs[provider.ID] = struct{}{}
+		if provider.Class != "local" && provider.Class != "cloud" {
+			return fmt.Errorf("providers[%d].class must be local or cloud", i)
+		}
+		if provider.Adapter != "" && provider.Adapter != "mock" && provider.Adapter != "openai-compatible" {
+			return fmt.Errorf("providers[%d].adapter %q is unsupported", i, provider.Adapter)
+		}
+		if provider.Adapter == "openai-compatible" && strings.TrimSpace(provider.BaseURL) == "" {
+			return fmt.Errorf("providers[%d].base_url is required for openai-compatible adapter", i)
+		}
+		if len(provider.Models) == 0 {
+			return fmt.Errorf("providers[%d].models must not be empty", i)
+		}
+		models := map[string]struct{}{}
+		for _, model := range provider.Models {
+			if model == "" {
+				return fmt.Errorf("providers[%d].models contains empty model", i)
+			}
+			if _, ok := models[model]; ok {
+				return fmt.Errorf("providers[%d].models contains duplicate model %q", i, model)
+			}
+			models[model] = struct{}{}
+		}
+	}
+	toolIDs := map[string]struct{}{}
+	for i, tool := range c.Tools {
+		if tool.ID == "" {
+			return fmt.Errorf("tools[%d].id is required", i)
+		}
+		if _, ok := toolIDs[tool.ID]; ok {
+			return fmt.Errorf("duplicate tool id %q", tool.ID)
+		}
+		toolIDs[tool.ID] = struct{}{}
+		if tool.Adapter == "" {
+			return fmt.Errorf("tools[%d].adapter is required", i)
+		}
+		if tool.Adapter != "runtime-health" {
+			return fmt.Errorf("tools[%d].adapter %q is unsupported", i, tool.Adapter)
+		}
+		if !tool.ReadOnly {
+			return fmt.Errorf("tools[%d].read_only must be true for phase 2 read-only MVP", i)
+		}
+		if tool.RiskLevel == "" {
+			tool.RiskLevel = "low"
+		}
+		if !validToolRiskLevel(tool.RiskLevel) {
+			return fmt.Errorf("tools[%d].risk_level %q is unsupported", i, tool.RiskLevel)
+		}
+		if len(tool.Scopes) == 0 {
+			return fmt.Errorf("tools[%d].scopes must not be empty", i)
+		}
+		scopes := map[string]struct{}{}
+		for _, scope := range tool.Scopes {
+			if !validScopeName(scope) {
+				return fmt.Errorf("tools[%d].scopes contains invalid scope %q", i, scope)
+			}
+			if _, ok := scopes[scope]; ok {
+				return fmt.Errorf("tools[%d].scopes contains duplicate scope %q", i, scope)
+			}
+			scopes[scope] = struct{}{}
+		}
+		if tool.SandboxRequired {
+			return fmt.Errorf("tools[%d].sandbox_required is not supported before sandbox runtime is enabled", i)
+		}
+	}
+	policyIDs := map[string]struct{}{}
+	for i, rule := range c.Policies {
+		if rule.ID == "" {
+			return fmt.Errorf("policies[%d].id is required", i)
+		}
+		if _, ok := policyIDs[rule.ID]; ok {
+			return fmt.Errorf("duplicate policy id %q", rule.ID)
+		}
+		policyIDs[rule.ID] = struct{}{}
+		if !validPolicyEffect(rule.Effect) {
+			return fmt.Errorf("policies[%d].effect %q is unsupported", i, rule.Effect)
+		}
+		if rule.Reason == "" {
+			return fmt.Errorf("policies[%d].reason is required", i)
+		}
+		if err := validatePolicyValues(i, rule); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validGrant(grant string) bool {
+	if strings.HasPrefix(grant, "tool:") {
+		return validScopeName(strings.TrimPrefix(grant, "tool:"))
+	}
+	switch grant {
+	case "chat", "embedding", "tool", "admin":
+		return true
+	default:
+		return false
+	}
+}
+
+func validToolRiskLevel(level string) bool {
+	switch level {
+	case "low", "medium", "high":
+		return true
+	default:
+		return false
+	}
+}
+
+func validScopeName(scope string) bool {
+	if scope == "" {
+		return false
+	}
+	for _, ch := range scope {
+		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '.' || ch == '_' || ch == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func (p Provider) IsEnabled() bool {
+	return p.Enabled == nil || *p.Enabled
+}
+
+func (t Tool) IsEnabled() bool {
+	return t.Enabled == nil || *t.Enabled
+}
+
+func validPolicyEffect(effect string) bool {
+	switch effect {
+	case "allow", "deny", "deny_cloud_for_sensitive", "force_local":
+		return true
+	default:
+		return false
+	}
+}
+
+func validatePolicyValues(index int, rule Policy) error {
+	for _, requestType := range rule.RequestTypes {
+		if requestType != "chat" && requestType != "embedding" && requestType != "tool" {
+			return fmt.Errorf("policies[%d].request_types contains unsupported request type %q", index, requestType)
+		}
+	}
+	for _, providerClass := range rule.ProviderClasses {
+		if providerClass != "local" && providerClass != "cloud" {
+			return fmt.Errorf("policies[%d].provider_classes contains unsupported provider class %q", index, providerClass)
+		}
+	}
+	return nil
+}

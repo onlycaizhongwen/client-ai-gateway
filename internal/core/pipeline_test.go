@@ -1,0 +1,102 @@
+package core_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"client-ai-gateway/internal/adapters"
+	"client-ai-gateway/internal/config"
+	"client-ai-gateway/internal/core"
+	"client-ai-gateway/internal/fallback"
+	"client-ai-gateway/internal/policy"
+	"client-ai-gateway/internal/router"
+	"client-ai-gateway/internal/trace"
+)
+
+func TestPipelineChatSuccess(t *testing.T) {
+	pipeline, _ := newTestPipeline()
+
+	resp, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
+		Model:    "local-small",
+		Messages: []core.Message{{Role: "user", Content: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("chat failed: %v", err)
+	}
+	if resp.TraceID == "" {
+		t.Fatal("expected trace id")
+	}
+	if resp.Choices[0].Message.Content == "" {
+		t.Fatal("expected mock content")
+	}
+}
+
+func TestPipelineFallbackAllowed(t *testing.T) {
+	pipeline, store := newTestPipeline()
+
+	resp, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
+		Model:    "local-small",
+		Messages: []core.Message{{Role: "user", Content: "hello"}},
+		Metadata: map[string]string{"fail_provider": "local-mock"},
+	})
+	if err != nil {
+		t.Fatalf("chat failed: %v", err)
+	}
+	record, ok := store.Get(resp.TraceID)
+	if !ok {
+		t.Fatal("expected trace record")
+	}
+	if len(record.Fallbacks) == 0 {
+		t.Fatal("expected fallback attempt")
+	}
+	if record.ProviderID != "cloud-mock" {
+		t.Fatalf("expected cloud fallback, got %s", record.ProviderID)
+	}
+}
+
+func TestPipelineSensitiveBlocksCloudFallback(t *testing.T) {
+	pipeline, _ := newTestPipeline()
+
+	_, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
+		Model:      "local-small",
+		Messages:   []core.Message{{Role: "user", Content: "secret"}},
+		DataLabels: []string{"sensitive"},
+		Metadata:   map[string]string{"fail_provider": "local-mock"},
+	})
+	if err == nil {
+		t.Fatal("expected failure because cloud fallback is blocked")
+	}
+	var gatewayErr *core.GatewayError
+	if !errors.As(err, &gatewayErr) {
+		t.Fatal("expected gateway error")
+	}
+	if gatewayErr.TraceID == "" {
+		t.Fatal("expected trace id on failure")
+	}
+}
+
+func newTestPipeline() (*core.Pipeline, *trace.MemoryStore) {
+	cfg := config.Config{
+		ListenAddr:    "127.0.0.1:0",
+		PolicyVersion: "test",
+		Apps:          []config.App{{ID: "dev-app", Token: "dev-token", Grants: []string{"chat"}}},
+		Providers: []config.Provider{
+			{ID: "local-mock", Class: "local", Models: []string{"local-small"}, Healthy: true},
+			{ID: "cloud-mock", Class: "cloud", Models: []string{"local-small", "cloud-smart"}, Healthy: true},
+		},
+		Policies: []config.Policy{{ID: "deny-sensitive-cloud", Effect: "deny_cloud_for_sensitive", Reason: "Sensitive data cannot use cloud providers"}},
+	}
+	registry := adapters.NewRegistry()
+	registry.Register(adapters.NewMockProvider("local-mock"))
+	registry.Register(adapters.NewMockProvider("cloud-mock"))
+	store := trace.NewMemoryStore()
+	return core.NewPipeline(core.Dependencies{
+		Config:     cfg,
+		Policy:     policy.NewEngine(cfg.PolicyVersion, cfg.Policies),
+		Router:     router.New(cfg.Providers),
+		Fallback:   fallback.NewManager(),
+		Adapters:   registry,
+		TraceStore: store,
+	}), store
+}
