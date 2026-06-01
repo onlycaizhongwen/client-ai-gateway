@@ -71,14 +71,14 @@ sequenceDiagram
 
 ```mermaid
 flowchart TB
-  Catalog[GET /gateway/v1/tools<br/>分页 / 过滤 / 导出] --> BuiltinTool[内置只读工具]
-  Catalog --> MCPTool[MCP 工具 Manifest]
-  MCPServer[GET /gateway/v1/mcp/servers<br/>Server 目录 / 过滤 / 导出] --> MCPTool
-  Invoke[POST /gateway/v1/tools/{id}/invoke] --> Scope[tool grant / tool:scope]
-  Scope --> ReadOnly{read_only?}
-  ReadOnly -- yes --> BuiltinExec[执行已注册内置工具]
-  ReadOnly -- MCP manifest_only --> FailClosed[tool_unavailable<br/>失败关闭 + Trace/Audit]
-  ReadOnly -- no --> Deny[tool_denied]
+  Catalog["GET /gateway/v1/tools<br/>分页 / 过滤 / 导出"] --> BuiltinTool["内置只读工具"]
+  Catalog --> MCPTool["MCP 工具 Manifest"]
+  MCPServer["GET /gateway/v1/mcp/servers<br/>Server 目录 / 过滤 / 导出"] --> MCPTool
+  Invoke["POST /gateway/v1/tools/:id/invoke"] --> Scope["tool grant / tool:scope"]
+  Scope --> ReadOnly{"read_only?"}
+  ReadOnly -- "yes" --> BuiltinExec["执行已注册内置工具"]
+  ReadOnly -- "MCP manifest_only" --> FailClosed["tool_unavailable<br/>失败关闭 + Trace/Audit"]
+  ReadOnly -- "no" --> Deny["tool_denied"]
 ```
 
 ## 启动
