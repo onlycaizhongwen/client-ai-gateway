@@ -229,7 +229,10 @@ const consoleHTML = `<!doctype html>
           <div class="panel-body" id="route-explain"><p class="muted" data-i18n="routingExplainHint">点击“解释路由”预览策略和 Provider 路由。</p></div>
         </section>
         <section class="panel">
-          <div class="panel-head"><h2 data-i18n="tools">工具调用</h2></div>
+          <div class="panel-head">
+            <h2 data-i18n="tools">工具调用</h2>
+            <button class="secondary" id="tool-export" data-i18n="export">导出</button>
+          </div>
           <div class="panel-body form-grid">
             <select id="tool-select"></select>
             <div class="muted tool-meta" id="tool-meta" data-i18n="loadingTools">正在加载工具...</div>
@@ -567,6 +570,7 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#send").addEventListener("click", () => sendQuick(document.querySelector("#mode").value));
     document.querySelector("#explain").addEventListener("click", () => explainRouting(document.querySelector("#mode").value));
     document.querySelector("#tool-invoke").addEventListener("click", invokeTool);
+    document.querySelector("#tool-export").addEventListener("click", exportTools);
     toolSelect.addEventListener("change", renderSelectedTool);
     document.querySelector("#mcp-filter-apply").addEventListener("click", loadMCPCatalog);
     document.querySelector("#mcp-export").addEventListener("click", exportMCPCatalog);
@@ -876,6 +880,9 @@ const consoleHTML = `<!doctype html>
         return;
       }
       toolMeta.textContent = tool.id + " / " + (tool.origin || "builtin") + (tool.server_id ? ":" + tool.server_id : "") + " / " + tool.adapter + " / " + (tool.read_only ? t("readOnlyTool") : t("writeTool")) + " / " + (tool.risk_level || "-") + " / " + ((tool.scopes || []).join(", ") || "-");
+    }
+    function exportTools() {
+      downloadURL("/gateway/v1/tools/export", "tools.jsonl");
     }
     async function invokeTool() {
       const toolID = toolSelect.value;

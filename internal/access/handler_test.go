@@ -408,6 +408,40 @@ func TestToolsListFiltersAndPages(t *testing.T) {
 	}
 }
 
+func TestToolsExportHTTP(t *testing.T) {
+	path := writeHandlerConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "audit_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat","tool"]}],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "tools": [{"id":"gateway.runtime_health","name":"Runtime Health","adapter":"runtime-health","read_only":true,"risk_level":"low","scopes":["runtime.read"],"enabled":true}],
+	  "mcp_runtime": {"enabled":true,"mode":"manifest_only","servers":[{"id":"desktop-context","tools":[{"id":"mcp.desktop.list_context","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":true}]}]}
+	}`)
+	store := trace.NewMemoryStore()
+	manager, err := gatewayruntime.NewManager(path, store)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+	handler := NewRuntimeHandler(manager, store).Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/tools/export?origin=mcp&scope=desktop.read", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); got != "application/x-ndjson" {
+		t.Fatalf("expected jsonl content type, got %q", got)
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, `"id":"mcp.desktop.list_context"`) || strings.Contains(body, `"id":"gateway.runtime_health"`) {
+		t.Fatalf("unexpected tools export body: %s", body)
+	}
+}
+
 func TestMCPPlaceholderToolInvocationFailsClosed(t *testing.T) {
 	path := writeHandlerConfig(t, `{
 	  "listen_addr": "127.0.0.1:0",
@@ -741,6 +775,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"id=\"audit-export\"",
 		"id=\"tool-select\"",
 		"id=\"tool-invoke\"",
+		"id=\"tool-export\"",
 		"id=\"mcp-server-filter\"",
 		"id=\"mcp-scope-filter\"",
 		"id=\"mcp-enabled-filter\"",
@@ -751,6 +786,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function exportAudit()",
 		"function loadTools()",
 		"function invokeTool()",
+		"function exportTools()",
 		"function shortTraceID",
 		"auditRows.querySelectorAll(\"tr[data-trace]\")",
 	} {

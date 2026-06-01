@@ -75,6 +75,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /gateway/v1/models", h.models)
 	mux.HandleFunc("GET /gateway/v1/runtime/health", h.runtimeHealth)
 	mux.HandleFunc("GET /gateway/v1/tools", h.toolsList)
+	mux.HandleFunc("GET /gateway/v1/tools/export", h.toolsExport)
 	mux.HandleFunc("POST /gateway/v1/tools/", h.toolInvoke)
 	mux.HandleFunc("GET /gateway/v1/mcp/servers", h.mcpServers)
 	mux.HandleFunc("GET /gateway/v1/mcp/servers/export", h.mcpServersExport)
@@ -318,6 +319,10 @@ func (h *Handler) toolsList(w http.ResponseWriter, r *http.Request) {
 		end = total
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tools": views[offset:end], "total": total, "offset": offset, "limit": limit})
+}
+
+func (h *Handler) toolsExport(w http.ResponseWriter, r *http.Request) {
+	writeJSONL(w, "tools.jsonl", h.toolViews(r))
 }
 
 func (h *Handler) toolViews(r *http.Request) []toolView {
@@ -1067,6 +1072,10 @@ func writeJSONL(w http.ResponseWriter, filename string, items any) {
 			_ = json.NewEncoder(w).Encode(item)
 		}
 	case []mcpServerView:
+		for _, item := range values {
+			_ = json.NewEncoder(w).Encode(item)
+		}
+	case []toolView:
 		for _, item := range values {
 			_ = json.NewEncoder(w).Encode(item)
 		}

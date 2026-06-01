@@ -183,6 +183,13 @@ curl http://127.0.0.1:18765/gateway/v1/tools
 - `scope`：只看包含指定 scope 的工具
 - `enabled`：`true` 或 `false`
 
+导出工具列表：
+
+```powershell
+curl "http://127.0.0.1:18765/gateway/v1/tools/export?origin=mcp&scope=desktop.read" `
+  -o tools.jsonl
+```
+
 调用内置只读工具：
 
 ```powershell
