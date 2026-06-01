@@ -65,6 +65,7 @@
   ],
   "mcp_runtime": {
     "enabled": true,
+    "mode": "manifest_only",
     "servers": [
       {
         "id": "desktop-context",

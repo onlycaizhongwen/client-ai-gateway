@@ -57,6 +57,7 @@ type Tool struct {
 
 type MCPRuntime struct {
 	Enabled bool        `json:"enabled"`
+	Mode    string      `json:"mode,omitempty"`
 	Servers []MCPServer `json:"servers,omitempty"`
 }
 
@@ -336,6 +337,16 @@ func validPolicyEffect(effect string) bool {
 func validateMCPRuntime(runtime MCPRuntime) error {
 	if !runtime.Enabled && len(runtime.Servers) == 0 {
 		return nil
+	}
+	mode := runtime.Mode
+	if mode == "" {
+		mode = "manifest_only"
+	}
+	if mode != "manifest_only" && mode != "disabled" {
+		return fmt.Errorf("mcp_runtime.mode %q is not supported before sandbox runtime is enabled", runtime.Mode)
+	}
+	if runtime.Enabled && mode == "disabled" {
+		return fmt.Errorf("mcp_runtime.mode disabled requires enabled=false")
 	}
 	serverIDs := map[string]struct{}{}
 	toolIDs := map[string]struct{}{}

@@ -334,6 +334,17 @@ type toolInvokeRequest struct {
 	Arguments map[string]any `json:"arguments,omitempty"`
 }
 
+type toolConfigRef struct {
+	ID              string
+	Adapter         string
+	Origin          string
+	ServerID        string
+	ReadOnly        bool
+	Scopes          []string
+	SandboxRequired bool
+	Enabled         bool
+}
+
 func (h *Handler) toolInvoke(w http.ResponseWriter, r *http.Request) {
 	traceID := trace.NewID()
 	startedAt := time.Now().UTC()
@@ -374,8 +385,8 @@ func (h *Handler) toolInvoke(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, traceID, "invalid_request", err.Error())
 		return
 	}
-	toolCfg, ok := findTool(snapshot.Config.Tools, toolID)
-	if !ok || !toolCfg.IsEnabled() {
+	toolCfg, ok := findTool(snapshot.Config, toolID)
+	if !ok || !toolCfg.Enabled {
 		h.finishToolTrace(record, app.ID, "failed", "tool not found or disabled", startedAt)
 		h.saveAudit(audit.Event{TraceID: traceID, AppID: app.ID, Action: "tool.invoke", Target: toolID, Result: audit.ResultFailed, Error: "tool not found or disabled"})
 		writeError(w, http.StatusNotFound, traceID, "not_found", "tool not found")
@@ -408,6 +419,26 @@ func (h *Handler) toolInvoke(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, traceID, "tool_unavailable", "tool registry is not configured")
 		return
 	}
+	if toolCfg.Origin == "mcp" {
+		message := "MCP tool execution is unavailable in manifest-only mode"
+		h.finishToolTrace(record, app.ID, "failed", message, startedAt)
+		h.saveAudit(audit.Event{
+			TraceID: traceID,
+			AppID:   app.ID,
+			Action:  "tool.invoke",
+			Target:  toolID,
+			Result:  audit.ResultFailed,
+			Error:   message,
+			Metadata: map[string]any{
+				"adapter":   toolCfg.Adapter,
+				"origin":    toolCfg.Origin,
+				"server_id": toolCfg.ServerID,
+				"read_only": toolCfg.ReadOnly,
+			},
+		})
+		writeError(w, http.StatusServiceUnavailable, traceID, tools.ErrCodeUnavailable, message)
+		return
+	}
 	tool, ok := snapshot.Tools.Get(toolID)
 	if !ok {
 		h.finishToolTrace(record, app.ID, "failed", "tool adapter not registered", startedAt)
@@ -435,6 +466,8 @@ func (h *Handler) toolInvoke(w http.ResponseWriter, r *http.Request) {
 			DurationMS: durationMS,
 			Metadata: map[string]any{
 				"adapter":   toolCfg.Adapter,
+				"origin":    toolCfg.Origin,
+				"server_id": toolCfg.ServerID,
 				"read_only": toolCfg.ReadOnly,
 			},
 		})
@@ -459,6 +492,8 @@ func (h *Handler) toolInvoke(w http.ResponseWriter, r *http.Request) {
 		DurationMS: durationMS,
 		Metadata: map[string]any{
 			"adapter":   toolCfg.Adapter,
+			"origin":    toolCfg.Origin,
+			"server_id": toolCfg.ServerID,
 			"read_only": toolCfg.ReadOnly,
 		},
 	})
@@ -737,13 +772,39 @@ func parseProviderAction(path string) (string, string, bool) {
 	return parts[0], parts[1], true
 }
 
-func findTool(tools []config.Tool, toolID string) (config.Tool, bool) {
-	for _, tool := range tools {
+func findTool(cfg config.Config, toolID string) (toolConfigRef, bool) {
+	for _, tool := range cfg.Tools {
 		if tool.ID == toolID {
-			return tool, true
+			return toolConfigRef{
+				ID:              tool.ID,
+				Adapter:         tool.Adapter,
+				Origin:          "builtin",
+				ReadOnly:        tool.ReadOnly,
+				Scopes:          append([]string(nil), tool.Scopes...),
+				SandboxRequired: tool.SandboxRequired,
+				Enabled:         tool.IsEnabled(),
+			}, true
 		}
 	}
-	return config.Tool{}, false
+	if cfg.MCPRuntime.Enabled {
+		for _, server := range cfg.MCPRuntime.Servers {
+			for _, tool := range server.Tools {
+				if tool.ID == toolID {
+					return toolConfigRef{
+						ID:              tool.ID,
+						Adapter:         "mcp-placeholder",
+						Origin:          "mcp",
+						ServerID:        server.ID,
+						ReadOnly:        tool.ReadOnly,
+						Scopes:          append([]string(nil), tool.Scopes...),
+						SandboxRequired: tool.SandboxRequired,
+						Enabled:         server.IsEnabled() && tool.IsEnabled(),
+					}, true
+				}
+			}
+		}
+	}
+	return toolConfigRef{}, false
 }
 
 func (h *Handler) saveAudit(event audit.Event) {

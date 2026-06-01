@@ -259,8 +259,9 @@ Access 层会把工具错误码映射成 HTTP 错误响应、Trace 和 Audit 事
 - 只加载 manifest，不启动 MCP server。
 - 不执行外部命令、不读取 command 字段。
 - MCP 工具会出现在 `GET /gateway/v1/tools`，`origin` 为 `mcp`，`adapter` 为 `mcp-placeholder`。
-- MCP 工具目前不会注册为可执行适配器，调用会按“工具未注册”失败关闭。
+- MCP 工具目前不会注册为可执行适配器，调用会返回稳定错误码 `tool_unavailable` 并写入 Trace/Audit。
 - 所有 MCP 工具必须 `read_only=true`，且 `sandbox_required=false`。
+- `mcp_runtime.mode` 当前只支持 `manifest_only` 或 `disabled`；`stdio`、`direct`、`sandboxed` 等真实执行模式会在配置加载时被拒绝。
 
 配置示例：
 
@@ -268,6 +269,7 @@ Access 层会把工具错误码映射成 HTTP 错误响应、Trace 和 Audit 事
 {
   "mcp_runtime": {
     "enabled": true,
+    "mode": "manifest_only",
     "servers": [
       {
         "id": "desktop-context",
@@ -290,7 +292,7 @@ Access 层会把工具错误码映射成 HTTP 错误响应、Trace 和 Audit 事
 }
 ```
 
-运行时健康接口会返回 `mcp_runtime.status`、server/tool 总数和启用数量。后续接入真实 MCP 适配器前，需要先补沙箱进程模型、授权弹窗、审计字段和 Provider SDK 边界。
+运行时健康接口会返回 `mcp_runtime.status`、`mode`、server/tool 总数和启用数量。后续接入真实 MCP 适配器前，需要先补沙箱进程模型、授权弹窗、审计字段和 Provider SDK 边界。
 
 ## OpenAI-Compatible Provider
 

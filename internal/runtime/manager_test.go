@@ -138,6 +138,7 @@ func TestManagerHealthViewWithMCPRuntimePlaceholder(t *testing.T) {
 	  "providers": [{"id":"local","class":"local","models":["m"],"healthy":true}],
 	  "mcp_runtime": {
 	    "enabled": true,
+	    "mode": "manifest_only",
 	    "servers": [{
 	      "id": "desktop-context",
 	      "enabled": true,
@@ -154,6 +155,9 @@ func TestManagerHealthViewWithMCPRuntimePlaceholder(t *testing.T) {
 	health := manager.Health()
 	if health.MCPRuntime.Status != "configured" {
 		t.Fatalf("expected configured mcp runtime, got %+v", health.MCPRuntime)
+	}
+	if health.MCPRuntime.Mode != "manifest_only" {
+		t.Fatalf("expected manifest_only mode, got %+v", health.MCPRuntime)
 	}
 	if health.MCPRuntime.ServerCount != 1 || health.MCPRuntime.EnabledServers != 1 || health.MCPRuntime.ToolCount != 1 || health.MCPRuntime.EnabledTools != 1 {
 		t.Fatalf("unexpected mcp runtime counts: %+v", health.MCPRuntime)

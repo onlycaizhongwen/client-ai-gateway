@@ -705,8 +705,9 @@ const consoleHTML = `<!doctype html>
       const countText = component.server_count !== undefined
         ? " / " + t("mcpCounts") + ": " + esc(component.enabled_servers || 0) + "/" + esc(component.server_count || 0) + " · " + esc(component.enabled_tools || 0) + "/" + esc(component.tool_count || 0)
         : "";
+      const modeText = component.mode ? " / " + esc(component.mode) : "";
       const reasonText = component.reason ? " / " + esc(component.reason) : "";
-      return esc(labelRuntime(component.status)) + countText + reasonText;
+      return esc(labelRuntime(component.status)) + modeText + countText + reasonText;
     }
     function renderProviderMonitor(monitor) {
       return esc(labelRuntime(monitor.status)) + " / " +

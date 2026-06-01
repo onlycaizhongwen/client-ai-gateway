@@ -54,6 +54,7 @@ type ProviderMonitorHealth struct {
 type ComponentHealth struct {
 	Status         string `json:"status"`
 	Reason         string `json:"reason,omitempty"`
+	Mode           string `json:"mode,omitempty"`
 	ServerCount    int    `json:"server_count,omitempty"`
 	EnabledServers int    `json:"enabled_servers,omitempty"`
 	ToolCount      int    `json:"tool_count,omitempty"`
@@ -134,9 +135,14 @@ func providerMonitorHealth(snapshot Snapshot, running bool) ProviderMonitorHealt
 }
 
 func mcpRuntimeHealth(runtime config.MCPRuntime) ComponentHealth {
+	mode := runtime.Mode
+	if mode == "" {
+		mode = "manifest_only"
+	}
 	health := ComponentHealth{
 		Status:         "not_configured",
 		Reason:         "MCP runtime is not configured",
+		Mode:           mode,
 		ServerCount:    len(runtime.Servers),
 		EnabledServers: countEnabledMCPServers(runtime),
 		ToolCount:      countMCPTools(runtime),

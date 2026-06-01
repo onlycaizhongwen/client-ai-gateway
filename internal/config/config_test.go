@@ -46,6 +46,7 @@ func TestLoadValidMCPRuntimePlaceholder(t *testing.T) {
 	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
 	  "mcp_runtime": {
 	    "enabled": true,
+	    "mode": "manifest_only",
 	    "servers": [{
 	      "id": "desktop-context",
 	      "tools": [{
@@ -201,6 +202,26 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 			  "tools": [{"id":"tool.sandbox","adapter":"runtime-health","read_only":true,"scopes":["runtime.read"],"sandbox_required":true}]
 			}`,
 			want: "sandbox_required",
+		},
+		{
+			name: "mcp execution mode unsupported before sandbox",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "mcp_runtime": {"enabled":true,"mode":"stdio","servers":[{"id":"s","tools":[]}]}
+			}`,
+			want: "mcp_runtime.mode",
+		},
+		{
+			name: "mcp disabled mode cannot be enabled",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "mcp_runtime": {"enabled":true,"mode":"disabled","servers":[{"id":"s","tools":[]}]}
+			}`,
+			want: "disabled requires enabled=false",
 		},
 		{
 			name: "mcp server id required",

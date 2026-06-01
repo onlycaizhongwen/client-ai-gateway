@@ -329,7 +329,7 @@ func TestToolsListIncludesMCPPlaceholderManifests(t *testing.T) {
 	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat","tool"]}],
 	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
 	  "tools": [{"id":"gateway.runtime_health","name":"Runtime Health","adapter":"runtime-health","read_only":true,"risk_level":"low","scopes":["runtime.read"],"enabled":true}],
-	  "mcp_runtime": {"enabled":true,"servers":[{"id":"desktop-context","tools":[{"id":"mcp.desktop.list_context","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":true}]}]}
+	  "mcp_runtime": {"enabled":true,"mode":"manifest_only","servers":[{"id":"desktop-context","tools":[{"id":"mcp.desktop.list_context","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":true}]}]}
 	}`)
 	store := trace.NewMemoryStore()
 	manager, err := gatewayruntime.NewManager(path, store)
@@ -355,6 +355,44 @@ func TestToolsListIncludesMCPPlaceholderManifests(t *testing.T) {
 	mcpTool := body.Tools[1]
 	if mcpTool.ID != "mcp.desktop.list_context" || mcpTool.Origin != "mcp" || mcpTool.ServerID != "desktop-context" || mcpTool.Adapter != "mcp-placeholder" || !mcpTool.Enabled {
 		t.Fatalf("unexpected mcp tool view: %+v", mcpTool)
+	}
+}
+
+func TestMCPPlaceholderToolInvocationFailsClosed(t *testing.T) {
+	path := writeHandlerConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "audit_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat","tool:desktop.read"]}],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "tools": [{"id":"gateway.runtime_health","name":"Runtime Health","adapter":"runtime-health","read_only":true,"risk_level":"low","scopes":["runtime.read"],"enabled":true}],
+	  "mcp_runtime": {"enabled":true,"mode":"manifest_only","servers":[{"id":"desktop-context","tools":[{"id":"mcp.desktop.list_context","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":true}]}]}
+	}`)
+	store := trace.NewMemoryStore()
+	manager, err := gatewayruntime.NewManager(path, store)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+	auditStore := audit.NewMemoryStore()
+	handler := NewRuntimeHandler(manager, store).WithAudit(auditStore).Routes()
+
+	res := postJSON(handler, "/gateway/v1/tools/mcp.desktop.list_context/invoke", "dev-token", map[string]any{})
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d: %s", res.Code, res.Body.String())
+	}
+	traceID := errorTraceID(t, res)
+	record, ok := store.Get(traceID)
+	if !ok {
+		t.Fatalf("expected mcp placeholder trace %s to be saved", traceID)
+	}
+	if record.ToolID != "mcp.desktop.list_context" || record.Status != "failed" || !strings.Contains(record.Error, "manifest-only") {
+		t.Fatalf("unexpected mcp placeholder trace: %+v", record)
+	}
+	events := auditStore.List(audit.ListQuery{Action: "tool.invoke", TraceID: traceID})
+	if len(events) != 1 || events[0].Result != audit.ResultFailed || events[0].Metadata["origin"] != "mcp" || events[0].Metadata["server_id"] != "desktop-context" {
+		t.Fatalf("expected mcp placeholder audit metadata, got %+v", events)
 	}
 }
 
