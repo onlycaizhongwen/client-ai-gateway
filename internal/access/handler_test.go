@@ -313,9 +313,11 @@ func TestToolsListHTTP(t *testing.T) {
 	}
 	var body struct {
 		Tools []toolView `json:"tools"`
+		Total int        `json:"total"`
+		Limit int        `json:"limit"`
 	}
 	decodeBody(t, res, &body)
-	if len(body.Tools) != 1 || body.Tools[0].ID != "gateway.runtime_health" || !body.Tools[0].ReadOnly || body.Tools[0].RiskLevel != "low" {
+	if body.Total != 1 || body.Limit != 100 || len(body.Tools) != 1 || body.Tools[0].ID != "gateway.runtime_health" || !body.Tools[0].ReadOnly || body.Tools[0].RiskLevel != "low" {
 		t.Fatalf("unexpected tools body: %+v", body)
 	}
 }
@@ -355,6 +357,54 @@ func TestToolsListIncludesMCPPlaceholderManifests(t *testing.T) {
 	mcpTool := body.Tools[1]
 	if mcpTool.ID != "mcp.desktop.list_context" || mcpTool.Origin != "mcp" || mcpTool.ServerID != "desktop-context" || mcpTool.Adapter != "mcp-placeholder" || !mcpTool.Enabled {
 		t.Fatalf("unexpected mcp tool view: %+v", mcpTool)
+	}
+}
+
+func TestToolsListFiltersAndPages(t *testing.T) {
+	path := writeHandlerConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "audit_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat","tool"]}],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "tools": [{"id":"gateway.runtime_health","name":"Runtime Health","adapter":"runtime-health","read_only":true,"risk_level":"low","scopes":["runtime.read"],"enabled":true}],
+	  "mcp_runtime": {"enabled":true,"mode":"manifest_only","servers":[
+	    {"id":"desktop-context","tools":[
+	      {"id":"mcp.desktop.list_context","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":true},
+	      {"id":"mcp.desktop.disabled","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":false}
+	    ]},
+	    {"id":"repo-context","tools":[
+	      {"id":"mcp.repo.list","read_only":true,"risk_level":"low","scopes":["repo.read"],"enabled":true}
+	    ]}
+	  ]}
+	}`)
+	store := trace.NewMemoryStore()
+	manager, err := gatewayruntime.NewManager(path, store)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+	handler := NewRuntimeHandler(manager, store).Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/tools?origin=mcp&server_id=desktop-context&scope=desktop.read&enabled=true&limit=1&offset=0", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Tools  []toolView `json:"tools"`
+		Total  int        `json:"total"`
+		Offset int        `json:"offset"`
+		Limit  int        `json:"limit"`
+	}
+	decodeBody(t, res, &body)
+	if body.Total != 1 || body.Offset != 0 || body.Limit != 1 || len(body.Tools) != 1 {
+		t.Fatalf("unexpected paged tools body: %+v", body)
+	}
+	if body.Tools[0].ID != "mcp.desktop.list_context" {
+		t.Fatalf("unexpected filtered tool: %+v", body.Tools[0])
 	}
 }
 

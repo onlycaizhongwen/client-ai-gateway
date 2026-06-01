@@ -839,7 +839,7 @@ const consoleHTML = `<!doctype html>
     async function loadTools() {
       toolMeta.textContent = t("loadingTools");
       try {
-        const res = await fetch("/gateway/v1/tools");
+        const res = await fetch("/gateway/v1/tools?limit=100");
         const data = await res.json();
         if (!res.ok) {
           allTools = [];

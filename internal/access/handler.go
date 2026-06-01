@@ -292,8 +292,41 @@ type mcpServerView struct {
 	Tools        []toolView `json:"tools,omitempty"`
 }
 
-func (h *Handler) toolsList(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) toolsList(w http.ResponseWriter, r *http.Request) {
+	limit, ok := intQuery(w, r, "limit", 100)
+	if !ok {
+		return
+	}
+	offset, ok := intQuery(w, r, "offset", 0)
+	if !ok {
+		return
+	}
+	views := h.toolViews(r)
+	total := len(views)
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	if offset >= total {
+		writeJSON(w, http.StatusOK, map[string]any{"tools": []toolView{}, "total": total, "offset": offset, "limit": limit})
+		return
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tools": views[offset:end], "total": total, "offset": offset, "limit": limit})
+}
+
+func (h *Handler) toolViews(r *http.Request) []toolView {
 	snapshot := h.snapshot()
+	query := r.URL.Query()
+	originFilter := query.Get("origin")
+	serverFilter := query.Get("server_id")
+	scopeFilter := query.Get("scope")
+	enabledFilter := query.Get("enabled")
 	views := make([]toolView, 0, len(snapshot.Config.Tools))
 	for _, tool := range snapshot.Config.Tools {
 		manifest := tools.ManifestFromConfig(tool)
@@ -302,7 +335,7 @@ func (h *Handler) toolsList(w http.ResponseWriter, _ *http.Request) {
 				manifest = registered.Manifest()
 			}
 		}
-		views = append(views, toolView{
+		view := toolView{
 			ID:              manifest.ID,
 			Name:            manifest.Name,
 			Adapter:         manifest.Adapter,
@@ -315,12 +348,15 @@ func (h *Handler) toolsList(w http.ResponseWriter, _ *http.Request) {
 			OutputSchema:    manifest.OutputSchema,
 			SandboxRequired: manifest.SandboxRequired,
 			Enabled:         tool.IsEnabled(),
-		})
+		}
+		if includeToolView(view, originFilter, serverFilter, scopeFilter, enabledFilter) {
+			views = append(views, view)
+		}
 	}
 	if snapshot.Config.MCPRuntime.Enabled {
 		for _, server := range snapshot.Config.MCPRuntime.Servers {
 			for _, tool := range server.Tools {
-				views = append(views, toolView{
+				view := toolView{
 					ID:              tool.ID,
 					Name:            tool.Name,
 					Adapter:         "mcp-placeholder",
@@ -334,11 +370,35 @@ func (h *Handler) toolsList(w http.ResponseWriter, _ *http.Request) {
 					OutputSchema:    tool.OutputSchema,
 					SandboxRequired: tool.SandboxRequired,
 					Enabled:         server.IsEnabled() && tool.IsEnabled(),
-				})
+				}
+				if includeToolView(view, originFilter, serverFilter, scopeFilter, enabledFilter) {
+					views = append(views, view)
+				}
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"tools": views})
+	return views
+}
+
+func includeToolView(view toolView, originFilter, serverFilter, scopeFilter, enabledFilter string) bool {
+	if originFilter != "" && view.Origin != originFilter {
+		return false
+	}
+	if serverFilter != "" && view.ServerID != serverFilter {
+		return false
+	}
+	if scopeFilter != "" && !hasScope(view.Scopes, scopeFilter) {
+		return false
+	}
+	if enabledFilter != "" {
+		if enabledFilter == "true" && !view.Enabled {
+			return false
+		}
+		if enabledFilter == "false" && view.Enabled {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *Handler) mcpServers(w http.ResponseWriter, r *http.Request) {
