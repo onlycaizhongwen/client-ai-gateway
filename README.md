@@ -223,6 +223,33 @@ curl -X POST http://127.0.0.1:18765/gateway/v1/tools/gateway.runtime_health/invo
 - `risk_level` 支持 `low`、`medium`、`high`
 - `sandbox_required` 暂时必须为 `false`
 
+## 新增只读工具
+
+工具扩展走 `internal/tools` 包的稳定契约：
+
+```go
+type Tool interface {
+    ID() string
+    Manifest() tools.Manifest
+    Invoke(context.Context, tools.Input) (tools.Result, error)
+}
+```
+
+新增一个只读工具的步骤：
+
+1. 在 `internal/tools` 中实现 `Tool` 接口。
+2. 在 `NewRegistryFromConfig` 中按 adapter 名称注册工具。
+3. 在 `configs/dev.json` 的 `tools` 数组中增加工具 manifest。
+4. 为调用方 app 添加 `tool:<scope>` 或 broad `tool` grant。
+5. 增加 registry contract test 和 access HTTP test。
+
+工具错误应返回 `tools.Error`，并带稳定 `Code`。当前内置错误码：
+
+- `tool_unavailable`
+- `tool_failed`
+
+Access 层会把工具错误码映射成 HTTP 错误响应、Trace 和 Audit 事件；新增只读工具通常不需要修改 access 层。
+
 ## OpenAI-Compatible Provider
 
 Provider 在 `configs/dev.json` 中注册。未配置 `adapter` 时默认使用内置 `mock` adapter。

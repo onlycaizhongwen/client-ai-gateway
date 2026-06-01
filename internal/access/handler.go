@@ -283,17 +283,23 @@ func (h *Handler) toolsList(w http.ResponseWriter, _ *http.Request) {
 	snapshot := h.snapshot()
 	views := make([]toolView, 0, len(snapshot.Config.Tools))
 	for _, tool := range snapshot.Config.Tools {
+		manifest := tools.ManifestFromConfig(tool)
+		if snapshot.Tools != nil {
+			if registered, ok := snapshot.Tools.Get(tool.ID); ok {
+				manifest = registered.Manifest()
+			}
+		}
 		views = append(views, toolView{
-			ID:              tool.ID,
-			Name:            tool.Name,
-			Adapter:         tool.Adapter,
-			Description:     tool.Description,
-			ReadOnly:        tool.ReadOnly,
-			RiskLevel:       tool.RiskLevel,
-			Scopes:          tool.Scopes,
-			InputSchema:     tool.InputSchema,
-			OutputSchema:    tool.OutputSchema,
-			SandboxRequired: tool.SandboxRequired,
+			ID:              manifest.ID,
+			Name:            manifest.Name,
+			Adapter:         manifest.Adapter,
+			Description:     manifest.Description,
+			ReadOnly:        manifest.ReadOnly,
+			RiskLevel:       manifest.RiskLevel,
+			Scopes:          manifest.Scopes,
+			InputSchema:     manifest.InputSchema,
+			OutputSchema:    manifest.OutputSchema,
+			SandboxRequired: manifest.SandboxRequired,
 			Enabled:         tool.IsEnabled(),
 		})
 	}
@@ -408,7 +414,8 @@ func (h *Handler) toolInvoke(w http.ResponseWriter, r *http.Request) {
 				"read_only": toolCfg.ReadOnly,
 			},
 		})
-		writeError(w, http.StatusBadGateway, traceID, "tool_failed", err.Error())
+		code, status := toolErrorResponse(err)
+		writeError(w, status, traceID, code, err.Error())
 		return
 	}
 	record.FinishedAt = finishedAt
@@ -767,6 +774,19 @@ func hasToolScope(grants []string, scopes []string) bool {
 		}
 	}
 	return len(scopes) > 0
+}
+
+func toolErrorResponse(err error) (string, int) {
+	var toolErr *tools.Error
+	if errors.As(err, &toolErr) && toolErr.Code != "" {
+		switch toolErr.Code {
+		case tools.ErrCodeUnavailable:
+			return toolErr.Code, http.StatusServiceUnavailable
+		default:
+			return toolErr.Code, http.StatusBadGateway
+		}
+	}
+	return "tool_failed", http.StatusBadGateway
 }
 
 func bearerToken(header string) string {

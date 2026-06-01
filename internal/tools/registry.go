@@ -7,6 +7,24 @@ import (
 	"client-ai-gateway/internal/config"
 )
 
+const (
+	ErrCodeUnavailable = "tool_unavailable"
+	ErrCodeFailed      = "tool_failed"
+)
+
+type Manifest struct {
+	ID              string         `json:"id"`
+	Name            string         `json:"name,omitempty"`
+	Adapter         string         `json:"adapter"`
+	Description     string         `json:"description,omitempty"`
+	ReadOnly        bool           `json:"read_only"`
+	RiskLevel       string         `json:"risk_level,omitempty"`
+	Scopes          []string       `json:"scopes,omitempty"`
+	InputSchema     map[string]any `json:"input_schema,omitempty"`
+	OutputSchema    map[string]any `json:"output_schema,omitempty"`
+	SandboxRequired bool           `json:"sandbox_required"`
+}
+
 type Input struct {
 	AppID     string         `json:"app_id"`
 	ToolID    string         `json:"tool_id"`
@@ -23,7 +41,41 @@ type Result struct {
 
 type Tool interface {
 	ID() string
+	Manifest() Manifest
 	Invoke(context.Context, Input) (Result, error)
+}
+
+type Error struct {
+	Code    string
+	Message string
+	Err     error
+}
+
+func (e *Error) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Message != "" {
+		return e.Message
+	}
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	return e.Code
+}
+
+func (e *Error) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func NewError(code, message string, err error) *Error {
+	if code == "" {
+		code = ErrCodeFailed
+	}
+	return &Error{Code: code, Message: message, Err: err}
 }
 
 type Registry struct {
@@ -38,7 +90,7 @@ func NewRegistryFromConfig(cfg []config.Tool, runtimeHealth func() any) (*Regist
 		}
 		switch toolCfg.Adapter {
 		case "runtime-health":
-			registry.Register(&RuntimeHealthTool{id: toolCfg.ID, health: runtimeHealth})
+			registry.Register(&RuntimeHealthTool{manifest: ManifestFromConfig(toolCfg), health: runtimeHealth})
 		default:
 			return nil, fmt.Errorf("tools[%d] %s: unsupported adapter %q", i, toolCfg.ID, toolCfg.Adapter)
 		}
@@ -55,18 +107,37 @@ func (r *Registry) Get(id string) (Tool, bool) {
 	return tool, ok
 }
 
+func ManifestFromConfig(tool config.Tool) Manifest {
+	return Manifest{
+		ID:              tool.ID,
+		Name:            tool.Name,
+		Adapter:         tool.Adapter,
+		Description:     tool.Description,
+		ReadOnly:        tool.ReadOnly,
+		RiskLevel:       tool.RiskLevel,
+		Scopes:          append([]string(nil), tool.Scopes...),
+		InputSchema:     tool.InputSchema,
+		OutputSchema:    tool.OutputSchema,
+		SandboxRequired: tool.SandboxRequired,
+	}
+}
+
 type RuntimeHealthTool struct {
-	id     string
-	health func() any
+	manifest Manifest
+	health   func() any
 }
 
 func (t *RuntimeHealthTool) ID() string {
-	return t.id
+	return t.manifest.ID
+}
+
+func (t *RuntimeHealthTool) Manifest() Manifest {
+	return t.manifest
 }
 
 func (t *RuntimeHealthTool) Invoke(_ context.Context, input Input) (Result, error) {
 	if t.health == nil {
-		return Result{}, fmt.Errorf("runtime health is unavailable")
+		return Result{}, NewError(ErrCodeUnavailable, "runtime health is unavailable", nil)
 	}
 	return Result{
 		ToolID: input.ToolID,

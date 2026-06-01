@@ -37,7 +37,7 @@ The gateway returns stable error codes in JSON error responses and records the f
 | `audit_unavailable` | Audit store is not configured. |
 | `tool_denied` | Tool invocation was blocked by the current read-only MVP safety boundary. |
 | `tool_scope_denied` | The app token is valid but does not include all required tool scopes. |
-| `tool_unavailable` | Tool registry is not configured. |
-| `tool_failed` | Tool adapter execution failed. |
+| `tool_unavailable` | Tool registry is not configured, or the selected tool dependency is unavailable. |
+| `tool_failed` | Tool adapter execution failed with a stable tool SDK error or an unclassified error. |
 
 Tool invocation errors include a `trace_id` when the request reached the tool invocation handler.
