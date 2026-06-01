@@ -2,6 +2,17 @@
 
 这是一个面向 AI PC、本地开发环境、企业桌面 AI 能力底座的客户端 AI 网关原型。当前实现提供 OpenAI 兼容聊天入口、Provider 路由与健康管理、策略试算、Trace/Audit 可观测能力、只读工具调用、中文优先的本地控制台。
 
+## 快速链接
+
+- 本地控制台：<http://127.0.0.1:18765/console>
+- 开发配置：[configs/dev.json](configs/dev.json)
+- 错误码：[docs/error-codes.md](docs/error-codes.md)
+- 入口程序：[cmd/gateway-daemon](cmd/gateway-daemon)
+- 核心流水线：[internal/core](internal/core)
+- HTTP 接入层：[internal/access](internal/access)
+- Provider 适配器：[internal/adapters](internal/adapters)
+- 工具注册表：[internal/tools](internal/tools)
+
 ## 当前能力
 
 - OpenAI 兼容接口：`POST /v1/chat/completions`
@@ -15,6 +26,60 @@
 - 只读工具运行时 MVP
 - 工具调用 Trace 化、Audit 关联、权限 scope 校验
 - 中文优先、中英文切换控制台
+
+## 总体架构
+
+```mermaid
+flowchart LR
+  App[桌面应用 / IDE / Agent] --> API[客户端 AI 网关 HTTP API]
+  API --> Auth[App Token / Grant 校验]
+  Auth --> Policy[Policy Engine<br/>allow / deny / force_local]
+  Policy --> Router[Router + Provider Health]
+  Router --> Local[本地 Provider<br/>LM Studio / Ollama / Mock]
+  Router --> Cloud[云端 OpenAI-Compatible Provider]
+  API --> Tools[统一工具目录 / 只读工具调用]
+  Tools --> Builtin[内置工具<br/>gateway.runtime_health]
+  Tools --> MCP[MCP Manifest Catalog<br/>manifest_only]
+  API --> Obs[Trace / Audit / Runtime Health]
+  Obs --> JSONL[(JSONL Stores)]
+  API --> Console[中文优先控制台]
+```
+
+## 请求链路
+
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant G as Gateway
+  participant P as Policy
+  participant R as Router
+  participant U as Provider
+  participant O as Trace/Audit
+
+  C->>G: POST /v1/chat/completions
+  G->>G: Token / App Grant
+  G->>P: dry-run policy
+  P-->>G: allow / deny / force_local
+  G->>R: select provider by model + health
+  R->>U: chat completion
+  U-->>G: response or failure
+  G->>O: write trace + audit
+  G-->>C: response with trace_id
+```
+
+## 工具与 MCP 治理
+
+```mermaid
+flowchart TB
+  Catalog[GET /gateway/v1/tools<br/>分页 / 过滤 / 导出] --> BuiltinTool[内置只读工具]
+  Catalog --> MCPTool[MCP 工具 Manifest]
+  MCPServer[GET /gateway/v1/mcp/servers<br/>Server 目录 / 过滤 / 导出] --> MCPTool
+  Invoke[POST /gateway/v1/tools/{id}/invoke] --> Scope[tool grant / tool:scope]
+  Scope --> ReadOnly{read_only?}
+  ReadOnly -- yes --> BuiltinExec[执行已注册内置工具]
+  ReadOnly -- MCP manifest_only --> FailClosed[tool_unavailable<br/>失败关闭 + Trace/Audit]
+  ReadOnly -- no --> Deny[tool_denied]
+```
 
 ## 启动
 
