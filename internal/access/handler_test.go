@@ -396,6 +396,48 @@ func TestMCPPlaceholderToolInvocationFailsClosed(t *testing.T) {
 	}
 }
 
+func TestMCPServersHTTP(t *testing.T) {
+	path := writeHandlerConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "audit_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat"]}],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "mcp_runtime": {"enabled":true,"mode":"manifest_only","servers":[{"id":"desktop-context","name":"Desktop Context","tools":[{"id":"mcp.desktop.list_context","name":"List Context","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":true}]}]}
+	}`)
+	store := trace.NewMemoryStore()
+	manager, err := gatewayruntime.NewManager(path, store)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+	handler := NewRuntimeHandler(manager, store).Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/mcp/servers", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Enabled bool            `json:"enabled"`
+		Mode    string          `json:"mode"`
+		Servers []mcpServerView `json:"servers"`
+	}
+	decodeBody(t, res, &body)
+	if !body.Enabled || body.Mode != "manifest_only" || len(body.Servers) != 1 {
+		t.Fatalf("unexpected mcp catalog body: %+v", body)
+	}
+	server := body.Servers[0]
+	if server.ID != "desktop-context" || !server.Enabled || server.ToolCount != 1 || server.EnabledTools != 1 {
+		t.Fatalf("unexpected mcp server view: %+v", server)
+	}
+	if len(server.Tools) != 1 || server.Tools[0].ID != "mcp.desktop.list_context" || server.Tools[0].Origin != "mcp" {
+		t.Fatalf("unexpected mcp tool view: %+v", server.Tools)
+	}
+}
+
 func TestToolInvokeRequiresScope(t *testing.T) {
 	handler, store, cleanup := newRuntimeToolTestHandler(t, `[
 	    {"id":"dev-app","token":"dev-token","grants":["chat"]},

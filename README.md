@@ -263,6 +263,21 @@ Access 层会把工具错误码映射成 HTTP 错误响应、Trace 和 Audit 事
 - 所有 MCP 工具必须 `read_only=true`，且 `sandbox_required=false`。
 - `mcp_runtime.mode` 当前只支持 `manifest_only` 或 `disabled`；`stdio`、`direct`、`sandboxed` 等真实执行模式会在配置加载时被拒绝。
 
+查看 MCP 目录：
+
+```powershell
+curl http://127.0.0.1:18765/gateway/v1/mcp/servers
+```
+
+响应包含：
+
+- `enabled`
+- `mode`
+- `servers[].enabled`
+- `servers[].tool_count`
+- `servers[].enabled_tools`
+- `servers[].tools[]`
+
 配置示例：
 
 ```json

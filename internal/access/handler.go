@@ -76,6 +76,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /gateway/v1/runtime/health", h.runtimeHealth)
 	mux.HandleFunc("GET /gateway/v1/tools", h.toolsList)
 	mux.HandleFunc("POST /gateway/v1/tools/", h.toolInvoke)
+	mux.HandleFunc("GET /gateway/v1/mcp/servers", h.mcpServers)
 	mux.HandleFunc("POST /gateway/v1/providers/", h.providerAction)
 	mux.HandleFunc("GET /gateway/v1/audit/events", h.auditList)
 	mux.HandleFunc("GET /gateway/v1/audit/events/export", h.auditExport)
@@ -281,6 +282,15 @@ type toolView struct {
 	Enabled         bool           `json:"enabled"`
 }
 
+type mcpServerView struct {
+	ID           string     `json:"id"`
+	Name         string     `json:"name,omitempty"`
+	Enabled      bool       `json:"enabled"`
+	ToolCount    int        `json:"tool_count"`
+	EnabledTools int        `json:"enabled_tools"`
+	Tools        []toolView `json:"tools,omitempty"`
+}
+
 func (h *Handler) toolsList(w http.ResponseWriter, _ *http.Request) {
 	snapshot := h.snapshot()
 	views := make([]toolView, 0, len(snapshot.Config.Tools))
@@ -328,6 +338,52 @@ func (h *Handler) toolsList(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tools": views})
+}
+
+func (h *Handler) mcpServers(w http.ResponseWriter, _ *http.Request) {
+	snapshot := h.snapshot()
+	runtime := snapshot.Config.MCPRuntime
+	servers := make([]mcpServerView, 0, len(runtime.Servers))
+	for _, server := range runtime.Servers {
+		view := mcpServerView{
+			ID:        server.ID,
+			Name:      server.Name,
+			Enabled:   runtime.Enabled && server.IsEnabled(),
+			ToolCount: len(server.Tools),
+			Tools:     make([]toolView, 0, len(server.Tools)),
+		}
+		for _, tool := range server.Tools {
+			enabled := view.Enabled && tool.IsEnabled()
+			if enabled {
+				view.EnabledTools++
+			}
+			view.Tools = append(view.Tools, toolView{
+				ID:              tool.ID,
+				Name:            tool.Name,
+				Adapter:         "mcp-placeholder",
+				Origin:          "mcp",
+				ServerID:        server.ID,
+				Description:     tool.Description,
+				ReadOnly:        tool.ReadOnly,
+				RiskLevel:       tool.RiskLevel,
+				Scopes:          append([]string(nil), tool.Scopes...),
+				InputSchema:     tool.InputSchema,
+				OutputSchema:    tool.OutputSchema,
+				SandboxRequired: tool.SandboxRequired,
+				Enabled:         enabled,
+			})
+		}
+		servers = append(servers, view)
+	}
+	mode := runtime.Mode
+	if mode == "" {
+		mode = "manifest_only"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"enabled": runtime.Enabled,
+		"mode":    mode,
+		"servers": servers,
+	})
 }
 
 type toolInvokeRequest struct {

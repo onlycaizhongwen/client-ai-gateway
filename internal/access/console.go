@@ -74,6 +74,7 @@ const consoleHTML = `<!doctype html>
     .provider, .route-item { border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-bottom: 9px; }
     .provider strong, .route-item strong { display: block; margin-bottom: 3px; }
     .route-item.skipped { background: #fff7ed; }
+    .mcp-tool { margin-top: 8px; padding: 8px; border-top: 1px solid var(--line); }
     .tool-meta { min-height: 20px; }
     .provider-actions button { padding: 5px 8px; font-size: 12px; }
     .pager { border-top: 1px solid var(--line); padding: 9px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -238,6 +239,10 @@ const consoleHTML = `<!doctype html>
           </div>
         </section>
         <section class="panel">
+          <div class="panel-head"><h2 data-i18n="mcpCatalog">MCP 目录</h2></div>
+          <div class="panel-body" id="mcp-catalog">正在加载 MCP 目录...</div>
+        </section>
+        <section class="panel">
           <div class="panel-head"><h2 data-i18n="traceDetail">追踪详情</h2></div>
           <div class="panel-body" id="detail"><p class="muted" data-i18n="selectTrace">从表格中选择一条追踪。</p></div>
         </section>
@@ -257,6 +262,7 @@ const consoleHTML = `<!doctype html>
     const toolSelect = document.querySelector("#tool-select");
     const toolMeta = document.querySelector("#tool-meta");
     const toolResult = document.querySelector("#tool-result");
+    const mcpCatalog = document.querySelector("#mcp-catalog");
     let allTraces = [];
     let traceTotal = 0;
     let traceStats = { total: 0, completed: 0, failed: 0, fallbacks: 0 };
@@ -332,6 +338,11 @@ const consoleHTML = `<!doctype html>
         routingExplain: "路由解释",
         routingExplainHint: "点击“解释路由”预览策略和 Provider 路由。",
         tools: "\u5de5\u5177\u8c03\u7528",
+        mcpCatalog: "MCP 目录",
+        loadingMCP: "正在加载 MCP 目录...",
+        noMCPServers: "暂无 MCP Server。",
+        mcpMode: "模式",
+        toolCount: "工具数",
         loadingTools: "\u6b63\u5728\u52a0\u8f7d\u5de5\u5177...",
         noTools: "\u6682\u65e0\u53ef\u7528\u5de5\u5177\u3002",
         invokeTool: "\u6267\u884c\u5de5\u5177",
@@ -455,6 +466,11 @@ const consoleHTML = `<!doctype html>
         routingExplain: "Routing Explain",
         routingExplainHint: "Run Explain to preview policy and provider routing.",
         tools: "Tool Invocation",
+        mcpCatalog: "MCP Catalog",
+        loadingMCP: "Loading MCP catalog...",
+        noMCPServers: "No MCP servers.",
+        mcpMode: "Mode",
+        toolCount: "Tools",
         loadingTools: "Loading tools...",
         noTools: "No tools available.",
         invokeTool: "Invoke Tool",
@@ -596,7 +612,7 @@ const consoleHTML = `<!doctype html>
       })[value] || value || "";
     }
     async function loadAll() {
-      await Promise.all([loadTraces(), loadRuntimeHealth(), loadProviders(), loadModels(), loadAudit(), loadTools()]);
+      await Promise.all([loadTraces(), loadRuntimeHealth(), loadProviders(), loadModels(), loadAudit(), loadTools(), loadMCPCatalog()]);
     }
     function traceQuery(limit = tracePageSize, offset = (tracePage - 1) * tracePageSize) {
       const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
@@ -743,6 +759,39 @@ const consoleHTML = `<!doctype html>
       document.querySelector("#model-options").innerHTML = options.map(item =>
         "<option value=\"" + esc(item.model) + "\">" + esc(item.provider_id) + " / " + esc(labelRuntime(item.runtime_status) || t("available")) + "</option>"
       ).join("");
+    }
+    async function loadMCPCatalog() {
+      mcpCatalog.textContent = t("loadingMCP");
+      try {
+        const res = await fetch("/gateway/v1/mcp/servers");
+        const data = await res.json();
+        if (!res.ok) {
+          mcpCatalog.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
+          return;
+        }
+        const servers = data.servers || [];
+        if (!servers.length) {
+          mcpCatalog.innerHTML = "<div class=\"muted\">" + t("mcpMode") + ": " + esc(data.mode || "-") + " / " + t("noMCPServers") + "</div>";
+          return;
+        }
+        mcpCatalog.innerHTML =
+          "<div class=\"muted\">" + t("mcpMode") + ": " + esc(data.mode || "-") + " / " + (data.enabled ? t("enabled") : t("disabled")) + "</div>" +
+          servers.map(server =>
+            "<div class=\"provider\">" +
+              "<strong>" + esc(server.name || server.id) + "</strong>" +
+              "<div class=\"muted\">" + esc(server.id) + " / " + (server.enabled ? t("enabled") : t("disabled")) + " / " + t("toolCount") + ": " + esc(server.enabled_tools || 0) + "/" + esc(server.tool_count || 0) + "</div>" +
+              (server.tools || []).map(tool =>
+                "<div class=\"mcp-tool\">" +
+                  "<strong>" + esc(tool.name || tool.id) + "</strong>" +
+                  "<div class=\"muted\">" + esc(tool.id) + " / " + esc(tool.risk_level || "-") + " / " + (tool.read_only ? t("readOnlyTool") : t("writeTool")) + " / " + ((tool.scopes || []).map(esc).join(", ") || "-") + "</div>" +
+                  (tool.description ? "<div class=\"muted\">" + esc(tool.description) + "</div>" : "") +
+                "</div>"
+              ).join("") +
+            "</div>"
+          ).join("");
+      } catch (err) {
+        mcpCatalog.textContent = t("failedPrefix") + err.message;
+      }
     }
     async function loadTools() {
       toolMeta.textContent = t("loadingTools");
