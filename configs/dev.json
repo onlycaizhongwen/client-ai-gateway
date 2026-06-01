@@ -63,6 +63,30 @@
       "enabled": true
     }
   ],
+  "mcp_runtime": {
+    "enabled": true,
+    "servers": [
+      {
+        "id": "desktop-context",
+        "name": "Desktop Context MCP Placeholder",
+        "enabled": true,
+        "tools": [
+          {
+            "id": "mcp.desktop.list_context",
+            "name": "Desktop Context List",
+            "description": "Read-only MCP manifest placeholder; external command execution is not enabled yet",
+            "read_only": true,
+            "risk_level": "low",
+            "scopes": [
+              "desktop.read"
+            ],
+            "sandbox_required": false,
+            "enabled": true
+          }
+        ]
+      }
+    ]
+  },
   "policies": [
     {
       "id": "deny-sensitive-cloud",

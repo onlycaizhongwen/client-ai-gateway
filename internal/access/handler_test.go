@@ -320,6 +320,44 @@ func TestToolsListHTTP(t *testing.T) {
 	}
 }
 
+func TestToolsListIncludesMCPPlaceholderManifests(t *testing.T) {
+	path := writeHandlerConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "audit_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat","tool"]}],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "tools": [{"id":"gateway.runtime_health","name":"Runtime Health","adapter":"runtime-health","read_only":true,"risk_level":"low","scopes":["runtime.read"],"enabled":true}],
+	  "mcp_runtime": {"enabled":true,"servers":[{"id":"desktop-context","tools":[{"id":"mcp.desktop.list_context","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":true}]}]}
+	}`)
+	store := trace.NewMemoryStore()
+	manager, err := gatewayruntime.NewManager(path, store)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+	handler := NewRuntimeHandler(manager, store).Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/tools", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Tools []toolView `json:"tools"`
+	}
+	decodeBody(t, res, &body)
+	if len(body.Tools) != 2 {
+		t.Fatalf("expected builtin and mcp placeholder tools, got %+v", body.Tools)
+	}
+	mcpTool := body.Tools[1]
+	if mcpTool.ID != "mcp.desktop.list_context" || mcpTool.Origin != "mcp" || mcpTool.ServerID != "desktop-context" || mcpTool.Adapter != "mcp-placeholder" || !mcpTool.Enabled {
+		t.Fatalf("unexpected mcp tool view: %+v", mcpTool)
+	}
+}
+
 func TestToolInvokeRequiresScope(t *testing.T) {
 	handler, store, cleanup := newRuntimeToolTestHandler(t, `[
 	    {"id":"dev-app","token":"dev-token","grants":["chat"]},

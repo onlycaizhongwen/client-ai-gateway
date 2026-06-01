@@ -128,6 +128,38 @@ func TestManagerHealthView(t *testing.T) {
 	}
 }
 
+func TestManagerHealthViewWithMCPRuntimePlaceholder(t *testing.T) {
+	path := writeRuntimeConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "audit_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"app","token":"token","grants":["chat"]}],
+	  "providers": [{"id":"local","class":"local","models":["m"],"healthy":true}],
+	  "mcp_runtime": {
+	    "enabled": true,
+	    "servers": [{
+	      "id": "desktop-context",
+	      "enabled": true,
+	      "tools": [{"id":"mcp.desktop.list_context","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":true}]
+	    }]
+	  }
+	}`)
+	manager, err := NewManager(path, trace.NewMemoryStore())
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+
+	health := manager.Health()
+	if health.MCPRuntime.Status != "configured" {
+		t.Fatalf("expected configured mcp runtime, got %+v", health.MCPRuntime)
+	}
+	if health.MCPRuntime.ServerCount != 1 || health.MCPRuntime.EnabledServers != 1 || health.MCPRuntime.ToolCount != 1 || health.MCPRuntime.EnabledTools != 1 {
+		t.Fatalf("unexpected mcp runtime counts: %+v", health.MCPRuntime)
+	}
+}
+
 func writeRuntimeConfig(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.json")

@@ -18,6 +18,7 @@ type Config struct {
 	Apps              []App      `json:"apps"`
 	Providers         []Provider `json:"providers"`
 	Tools             []Tool     `json:"tools,omitempty"`
+	MCPRuntime        MCPRuntime `json:"mcp_runtime,omitempty"`
 	Policies          []Policy   `json:"policies"`
 }
 
@@ -44,6 +45,31 @@ type Tool struct {
 	ID              string         `json:"id"`
 	Name            string         `json:"name"`
 	Adapter         string         `json:"adapter"`
+	Description     string         `json:"description,omitempty"`
+	ReadOnly        bool           `json:"read_only"`
+	RiskLevel       string         `json:"risk_level,omitempty"`
+	Scopes          []string       `json:"scopes,omitempty"`
+	InputSchema     map[string]any `json:"input_schema,omitempty"`
+	OutputSchema    map[string]any `json:"output_schema,omitempty"`
+	SandboxRequired bool           `json:"sandbox_required,omitempty"`
+	Enabled         *bool          `json:"enabled,omitempty"`
+}
+
+type MCPRuntime struct {
+	Enabled bool        `json:"enabled"`
+	Servers []MCPServer `json:"servers,omitempty"`
+}
+
+type MCPServer struct {
+	ID      string    `json:"id"`
+	Name    string    `json:"name,omitempty"`
+	Enabled *bool     `json:"enabled,omitempty"`
+	Tools   []MCPTool `json:"tools,omitempty"`
+}
+
+type MCPTool struct {
+	ID              string         `json:"id"`
+	Name            string         `json:"name,omitempty"`
 	Description     string         `json:"description,omitempty"`
 	ReadOnly        bool           `json:"read_only"`
 	RiskLevel       string         `json:"risk_level,omitempty"`
@@ -223,6 +249,9 @@ func (c Config) Validate() error {
 			return fmt.Errorf("tools[%d].sandbox_required is not supported before sandbox runtime is enabled", i)
 		}
 	}
+	if err := validateMCPRuntime(c.MCPRuntime); err != nil {
+		return err
+	}
 	policyIDs := map[string]struct{}{}
 	for i, rule := range c.Policies {
 		if rule.ID == "" {
@@ -287,6 +316,14 @@ func (t Tool) IsEnabled() bool {
 	return t.Enabled == nil || *t.Enabled
 }
 
+func (s MCPServer) IsEnabled() bool {
+	return s.Enabled == nil || *s.Enabled
+}
+
+func (t MCPTool) IsEnabled() bool {
+	return t.Enabled == nil || *t.Enabled
+}
+
 func validPolicyEffect(effect string) bool {
 	switch effect {
 	case "allow", "deny", "deny_cloud_for_sensitive", "force_local":
@@ -294,6 +331,58 @@ func validPolicyEffect(effect string) bool {
 	default:
 		return false
 	}
+}
+
+func validateMCPRuntime(runtime MCPRuntime) error {
+	if !runtime.Enabled && len(runtime.Servers) == 0 {
+		return nil
+	}
+	serverIDs := map[string]struct{}{}
+	toolIDs := map[string]struct{}{}
+	for i, server := range runtime.Servers {
+		if server.ID == "" {
+			return fmt.Errorf("mcp_runtime.servers[%d].id is required", i)
+		}
+		if _, ok := serverIDs[server.ID]; ok {
+			return fmt.Errorf("duplicate mcp server id %q", server.ID)
+		}
+		serverIDs[server.ID] = struct{}{}
+		for j, tool := range server.Tools {
+			if tool.ID == "" {
+				return fmt.Errorf("mcp_runtime.servers[%d].tools[%d].id is required", i, j)
+			}
+			if _, ok := toolIDs[tool.ID]; ok {
+				return fmt.Errorf("duplicate mcp tool id %q", tool.ID)
+			}
+			toolIDs[tool.ID] = struct{}{}
+			if !tool.ReadOnly {
+				return fmt.Errorf("mcp_runtime.servers[%d].tools[%d].read_only must be true for read-only MCP placeholder", i, j)
+			}
+			if tool.RiskLevel == "" {
+				tool.RiskLevel = "low"
+			}
+			if !validToolRiskLevel(tool.RiskLevel) {
+				return fmt.Errorf("mcp_runtime.servers[%d].tools[%d].risk_level %q is unsupported", i, j, tool.RiskLevel)
+			}
+			if len(tool.Scopes) == 0 {
+				return fmt.Errorf("mcp_runtime.servers[%d].tools[%d].scopes must not be empty", i, j)
+			}
+			scopes := map[string]struct{}{}
+			for _, scope := range tool.Scopes {
+				if !validScopeName(scope) {
+					return fmt.Errorf("mcp_runtime.servers[%d].tools[%d].scopes contains invalid scope %q", i, j, scope)
+				}
+				if _, ok := scopes[scope]; ok {
+					return fmt.Errorf("mcp_runtime.servers[%d].tools[%d].scopes contains duplicate scope %q", i, j, scope)
+				}
+				scopes[scope] = struct{}{}
+			}
+			if tool.SandboxRequired {
+				return fmt.Errorf("mcp_runtime.servers[%d].tools[%d].sandbox_required is not supported before sandbox runtime is enabled", i, j)
+			}
+		}
+	}
+	return nil
 }
 
 func validatePolicyValues(index int, rule Policy) error {

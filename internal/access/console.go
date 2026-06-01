@@ -316,10 +316,12 @@ const consoleHTML = `<!doctype html>
         auditStore: "Audit 存储",
         lastReloadedAt: "最近重载",
         notConfigured: "未配置",
+        configured: "已配置",
         loaded: "已加载",
         availableStatus: "可用",
         running: "运行中",
         unavailable: "不可用",
+        mcpCounts: "Server / Tool",
         providersHealth: "Provider / 健康状态",
         quickRequest: "快捷请求",
         modeSuccess: "成功请求",
@@ -437,10 +439,12 @@ const consoleHTML = `<!doctype html>
         auditStore: "Audit Store",
         lastReloadedAt: "Last Reloaded At",
         notConfigured: "not configured",
+        configured: "configured",
         loaded: "loaded",
         availableStatus: "available",
         running: "running",
         unavailable: "unavailable",
+        mcpCounts: "Servers / Tools",
         providersHealth: "Providers / Health",
         quickRequest: "Quick Request",
         modeSuccess: "success",
@@ -584,6 +588,7 @@ const consoleHTML = `<!doctype html>
         unhealthy: t("runtimeUnhealthy"),
         disabled: t("runtimeDisabled"),
         not_configured: t("notConfigured"),
+        configured: t("configured"),
         loaded: t("loaded"),
         available: t("availableStatus"),
         running: t("running"),
@@ -690,11 +695,18 @@ const consoleHTML = `<!doctype html>
             "<div class=\"k\">" + t("auditStore") + "</div><div>" + esc(data.stores && data.stores.audit && data.stores.audit.path) + "</div>" +
             "<div class=\"k\">" + t("providerMonitor") + "</div><div>" + renderProviderMonitor(data.provider_monitor || {}) + "</div>" +
             "<div class=\"k\">" + t("modelRuntime") + "</div><div>" + esc(labelRuntime(data.model_runtime && data.model_runtime.status)) + "</div>" +
-            "<div class=\"k\">" + t("mcpRuntime") + "</div><div>" + esc(labelRuntime(data.mcp_runtime && data.mcp_runtime.status)) + "</div>" +
+            "<div class=\"k\">" + t("mcpRuntime") + "</div><div>" + renderComponentHealth(data.mcp_runtime || {}) + "</div>" +
           "</div>";
       } catch (err) {
         runtimeHealth.textContent = t("failedPrefix") + err.message;
       }
+    }
+    function renderComponentHealth(component) {
+      const countText = component.server_count !== undefined
+        ? " / " + t("mcpCounts") + ": " + esc(component.enabled_servers || 0) + "/" + esc(component.server_count || 0) + " · " + esc(component.enabled_tools || 0) + "/" + esc(component.tool_count || 0)
+        : "";
+      const reasonText = component.reason ? " / " + esc(component.reason) : "";
+      return esc(labelRuntime(component.status)) + countText + reasonText;
     }
     function renderProviderMonitor(monitor) {
       return esc(labelRuntime(monitor.status)) + " / " +
@@ -770,7 +782,7 @@ const consoleHTML = `<!doctype html>
         toolMeta.textContent = t("noTools");
         return;
       }
-      toolMeta.textContent = tool.id + " / " + tool.adapter + " / " + (tool.read_only ? t("readOnlyTool") : t("writeTool")) + " / " + (tool.risk_level || "-") + " / " + ((tool.scopes || []).join(", ") || "-");
+      toolMeta.textContent = tool.id + " / " + (tool.origin || "builtin") + (tool.server_id ? ":" + tool.server_id : "") + " / " + tool.adapter + " / " + (tool.read_only ? t("readOnlyTool") : t("writeTool")) + " / " + (tool.risk_level || "-") + " / " + ((tool.scopes || []).join(", ") || "-");
     }
     async function invokeTool() {
       const toolID = toolSelect.value;

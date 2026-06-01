@@ -3,6 +3,7 @@ package runtime
 import (
 	"time"
 
+	"client-ai-gateway/internal/config"
 	"client-ai-gateway/internal/providerhealth"
 )
 
@@ -51,8 +52,12 @@ type ProviderMonitorHealth struct {
 }
 
 type ComponentHealth struct {
-	Status string `json:"status"`
-	Reason string `json:"reason,omitempty"`
+	Status         string `json:"status"`
+	Reason         string `json:"reason,omitempty"`
+	ServerCount    int    `json:"server_count,omitempty"`
+	EnabledServers int    `json:"enabled_servers,omitempty"`
+	ToolCount      int    `json:"tool_count,omitempty"`
+	EnabledTools   int    `json:"enabled_tools,omitempty"`
 }
 
 func (m *Manager) Health() HealthView {
@@ -69,7 +74,7 @@ func (m *Manager) Health() HealthView {
 	if providerMonitor.Unhealthy > 0 {
 		status = "degraded"
 	}
-	return HealthView{
+	view := HealthView{
 		Status: status,
 		Daemon: DaemonHealth{
 			Status:    "healthy",
@@ -95,9 +100,11 @@ func (m *Manager) Health() HealthView {
 		},
 		MCPRuntime: ComponentHealth{
 			Status: "not_configured",
-			Reason: "MCP runtime management is planned for a later phase",
+			Reason: "MCP runtime is not configured",
 		},
 	}
+	view.MCPRuntime = mcpRuntimeHealth(snapshot.Config.MCPRuntime)
+	return view
 }
 
 func providerMonitorHealth(snapshot Snapshot, running bool) ProviderMonitorHealth {
@@ -124,4 +131,66 @@ func providerMonitorHealth(snapshot Snapshot, running bool) ProviderMonitorHealt
 		}
 	}
 	return view
+}
+
+func mcpRuntimeHealth(runtime config.MCPRuntime) ComponentHealth {
+	health := ComponentHealth{
+		Status:         "not_configured",
+		Reason:         "MCP runtime is not configured",
+		ServerCount:    len(runtime.Servers),
+		EnabledServers: countEnabledMCPServers(runtime),
+		ToolCount:      countMCPTools(runtime),
+		EnabledTools:   countEnabledMCPTools(runtime),
+	}
+	if !runtime.Enabled {
+		if len(runtime.Servers) > 0 {
+			health.Reason = "MCP runtime is configured but disabled"
+		}
+		return health
+	}
+	if len(runtime.Servers) == 0 {
+		health.Status = "not_configured"
+		health.Reason = "MCP runtime is enabled but no servers are configured"
+		return health
+	}
+	health.Status = "configured"
+	health.Reason = "MCP tool manifests are loaded; command execution is not enabled yet"
+	if health.EnabledServers == 0 || health.EnabledTools == 0 {
+		health.Status = "degraded"
+		health.Reason = "MCP runtime has no enabled server or no enabled read-only tool"
+	}
+	return health
+}
+
+func countEnabledMCPServers(runtime config.MCPRuntime) int {
+	total := 0
+	for _, server := range runtime.Servers {
+		if server.IsEnabled() {
+			total++
+		}
+	}
+	return total
+}
+
+func countMCPTools(runtime config.MCPRuntime) int {
+	total := 0
+	for _, server := range runtime.Servers {
+		total += len(server.Tools)
+	}
+	return total
+}
+
+func countEnabledMCPTools(runtime config.MCPRuntime) int {
+	total := 0
+	for _, server := range runtime.Servers {
+		if !server.IsEnabled() {
+			continue
+		}
+		for _, tool := range server.Tools {
+			if tool.IsEnabled() {
+				total++
+			}
+		}
+	}
+	return total
 }

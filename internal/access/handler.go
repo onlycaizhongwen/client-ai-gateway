@@ -269,6 +269,8 @@ type toolView struct {
 	ID              string         `json:"id"`
 	Name            string         `json:"name,omitempty"`
 	Adapter         string         `json:"adapter"`
+	Origin          string         `json:"origin,omitempty"`
+	ServerID        string         `json:"server_id,omitempty"`
 	Description     string         `json:"description,omitempty"`
 	ReadOnly        bool           `json:"read_only"`
 	RiskLevel       string         `json:"risk_level,omitempty"`
@@ -293,6 +295,7 @@ func (h *Handler) toolsList(w http.ResponseWriter, _ *http.Request) {
 			ID:              manifest.ID,
 			Name:            manifest.Name,
 			Adapter:         manifest.Adapter,
+			Origin:          "builtin",
 			Description:     manifest.Description,
 			ReadOnly:        manifest.ReadOnly,
 			RiskLevel:       manifest.RiskLevel,
@@ -302,6 +305,27 @@ func (h *Handler) toolsList(w http.ResponseWriter, _ *http.Request) {
 			SandboxRequired: manifest.SandboxRequired,
 			Enabled:         tool.IsEnabled(),
 		})
+	}
+	if snapshot.Config.MCPRuntime.Enabled {
+		for _, server := range snapshot.Config.MCPRuntime.Servers {
+			for _, tool := range server.Tools {
+				views = append(views, toolView{
+					ID:              tool.ID,
+					Name:            tool.Name,
+					Adapter:         "mcp-placeholder",
+					Origin:          "mcp",
+					ServerID:        server.ID,
+					Description:     tool.Description,
+					ReadOnly:        tool.ReadOnly,
+					RiskLevel:       tool.RiskLevel,
+					Scopes:          append([]string(nil), tool.Scopes...),
+					InputSchema:     tool.InputSchema,
+					OutputSchema:    tool.OutputSchema,
+					SandboxRequired: tool.SandboxRequired,
+					Enabled:         server.IsEnabled() && tool.IsEnabled(),
+				})
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tools": views})
 }

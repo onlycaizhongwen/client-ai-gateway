@@ -39,6 +39,34 @@ func TestLoadValidScopedToolGrant(t *testing.T) {
 	}
 }
 
+func TestLoadValidMCPRuntimePlaceholder(t *testing.T) {
+	path := writeConfig(t, `{
+	  "listen_addr": "127.0.0.1:18765",
+	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat","tool:desktop.read"]}],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "mcp_runtime": {
+	    "enabled": true,
+	    "servers": [{
+	      "id": "desktop-context",
+	      "tools": [{
+	        "id":"mcp.desktop.list_context",
+	        "read_only":true,
+	        "risk_level":"low",
+	        "scopes":["desktop.read"]
+	      }]
+	    }]
+	  }
+	}`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load valid mcp runtime placeholder: %v", err)
+	}
+	if !cfg.MCPRuntime.Enabled || len(cfg.MCPRuntime.Servers) != 1 || len(cfg.MCPRuntime.Servers[0].Tools) != 1 {
+		t.Fatalf("unexpected mcp runtime config: %+v", cfg.MCPRuntime)
+	}
+}
+
 func TestProviderEnabledDefaultsToTrue(t *testing.T) {
 	provider := Provider{ID: "p", Class: "local", Models: []string{"m"}, Healthy: true}
 	if !provider.IsEnabled() {
@@ -171,6 +199,46 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
 			  "providers": [{"id":"p","class":"local","models":["m"]}],
 			  "tools": [{"id":"tool.sandbox","adapter":"runtime-health","read_only":true,"scopes":["runtime.read"],"sandbox_required":true}]
+			}`,
+			want: "sandbox_required",
+		},
+		{
+			name: "mcp server id required",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "mcp_runtime": {"enabled":true,"servers":[{"tools":[]}]}
+			}`,
+			want: "mcp_runtime.servers[0].id",
+		},
+		{
+			name: "mcp tool must be read only",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "mcp_runtime": {"enabled":true,"servers":[{"id":"s","tools":[{"id":"mcp.write","read_only":false,"scopes":["desktop.read"]}]}]}
+			}`,
+			want: "read_only",
+		},
+		{
+			name: "mcp tool scopes required",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "mcp_runtime": {"enabled":true,"servers":[{"id":"s","tools":[{"id":"mcp.no_scope","read_only":true}]}]}
+			}`,
+			want: "scopes must not be empty",
+		},
+		{
+			name: "mcp sandbox required unsupported",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "mcp_runtime": {"enabled":true,"servers":[{"id":"s","tools":[{"id":"mcp.sandbox","read_only":true,"scopes":["desktop.read"],"sandbox_required":true}]}]}
 			}`,
 			want: "sandbox_required",
 		},

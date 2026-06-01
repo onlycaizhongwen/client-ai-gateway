@@ -250,6 +250,48 @@ type Tool interface {
 
 Access 层会把工具错误码映射成 HTTP 错误响应、Trace 和 Audit 事件；新增只读工具通常不需要修改 access 层。
 
+## MCP 运行时占位
+
+当前版本支持在配置中声明 MCP server 和只读工具 manifest，用于提前打通企业桌面工具目录、权限 scope、风险等级和运行时健康展示。
+
+重要边界：
+
+- 只加载 manifest，不启动 MCP server。
+- 不执行外部命令、不读取 command 字段。
+- MCP 工具会出现在 `GET /gateway/v1/tools`，`origin` 为 `mcp`，`adapter` 为 `mcp-placeholder`。
+- MCP 工具目前不会注册为可执行适配器，调用会按“工具未注册”失败关闭。
+- 所有 MCP 工具必须 `read_only=true`，且 `sandbox_required=false`。
+
+配置示例：
+
+```json
+{
+  "mcp_runtime": {
+    "enabled": true,
+    "servers": [
+      {
+        "id": "desktop-context",
+        "name": "Desktop Context MCP Placeholder",
+        "enabled": true,
+        "tools": [
+          {
+            "id": "mcp.desktop.list_context",
+            "name": "Desktop Context List",
+            "read_only": true,
+            "risk_level": "low",
+            "scopes": ["desktop.read"],
+            "sandbox_required": false,
+            "enabled": true
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+运行时健康接口会返回 `mcp_runtime.status`、server/tool 总数和启用数量。后续接入真实 MCP 适配器前，需要先补沙箱进程模型、授权弹窗、审计字段和 Provider SDK 边界。
+
 ## OpenAI-Compatible Provider
 
 Provider 在 `configs/dev.json` 中注册。未配置 `adapter` 时默认使用内置 `mock` adapter。
