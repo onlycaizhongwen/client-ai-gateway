@@ -77,6 +77,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /gateway/v1/tools", h.toolsList)
 	mux.HandleFunc("POST /gateway/v1/tools/", h.toolInvoke)
 	mux.HandleFunc("GET /gateway/v1/mcp/servers", h.mcpServers)
+	mux.HandleFunc("GET /gateway/v1/mcp/servers/export", h.mcpServersExport)
 	mux.HandleFunc("POST /gateway/v1/providers/", h.providerAction)
 	mux.HandleFunc("GET /gateway/v1/audit/events", h.auditList)
 	mux.HandleFunc("GET /gateway/v1/audit/events/export", h.auditExport)
@@ -341,6 +342,30 @@ func (h *Handler) toolsList(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *Handler) mcpServers(w http.ResponseWriter, r *http.Request) {
+	runtime, servers := h.mcpServerViews(r)
+	mode := runtime.Mode
+	if mode == "" {
+		mode = "manifest_only"
+	}
+	query := r.URL.Query()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"enabled": runtime.Enabled,
+		"mode":    mode,
+		"servers": servers,
+		"filters": map[string]string{
+			"server_id": query.Get("server_id"),
+			"scope":     query.Get("scope"),
+			"enabled":   query.Get("enabled"),
+		},
+	})
+}
+
+func (h *Handler) mcpServersExport(w http.ResponseWriter, r *http.Request) {
+	_, servers := h.mcpServerViews(r)
+	writeJSONL(w, "mcp-servers.jsonl", servers)
+}
+
+func (h *Handler) mcpServerViews(r *http.Request) (config.MCPRuntime, []mcpServerView) {
 	snapshot := h.snapshot()
 	runtime := snapshot.Config.MCPRuntime
 	query := r.URL.Query()
@@ -398,20 +423,7 @@ func (h *Handler) mcpServers(w http.ResponseWriter, r *http.Request) {
 		}
 		servers = append(servers, view)
 	}
-	mode := runtime.Mode
-	if mode == "" {
-		mode = "manifest_only"
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"enabled": runtime.Enabled,
-		"mode":    mode,
-		"servers": servers,
-		"filters": map[string]string{
-			"server_id": serverFilter,
-			"scope":     scopeFilter,
-			"enabled":   enabledFilter,
-		},
-	})
+	return runtime, servers
 }
 
 type toolInvokeRequest struct {
@@ -991,6 +1003,10 @@ func writeJSONL(w http.ResponseWriter, filename string, items any) {
 			_ = json.NewEncoder(w).Encode(item)
 		}
 	case []audit.Event:
+		for _, item := range values {
+			_ = json.NewEncoder(w).Encode(item)
+		}
+	case []mcpServerView:
 		for _, item := range values {
 			_ = json.NewEncoder(w).Encode(item)
 		}

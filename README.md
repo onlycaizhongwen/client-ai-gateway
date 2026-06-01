@@ -269,6 +269,13 @@ Access 层会把工具错误码映射成 HTTP 错误响应、Trace 和 Audit 事
 curl http://127.0.0.1:18765/gateway/v1/mcp/servers
 ```
 
+导出 MCP 目录：
+
+```powershell
+curl "http://127.0.0.1:18765/gateway/v1/mcp/servers/export?scope=desktop.read" `
+  -o mcp-servers.jsonl
+```
+
 支持查询参数：
 
 - `server_id`：只看指定 MCP server

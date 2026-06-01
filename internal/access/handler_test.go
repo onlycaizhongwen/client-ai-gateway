@@ -489,6 +489,38 @@ func TestMCPServersHTTPFilters(t *testing.T) {
 	}
 }
 
+func TestMCPServersExportHTTP(t *testing.T) {
+	path := writeHandlerConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "audit_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat"]}],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "mcp_runtime": {"enabled":true,"mode":"manifest_only","servers":[{"id":"desktop-context","tools":[{"id":"mcp.desktop.list_context","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":true}]}]}
+	}`)
+	store := trace.NewMemoryStore()
+	manager, err := gatewayruntime.NewManager(path, store)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+	handler := NewRuntimeHandler(manager, store).Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/mcp/servers/export?scope=desktop.read", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); got != "application/x-ndjson" {
+		t.Fatalf("expected jsonl content type, got %q", got)
+	}
+	if !strings.Contains(res.Body.String(), `"id":"desktop-context"`) || !strings.Contains(res.Body.String(), `"mcp.desktop.list_context"`) {
+		t.Fatalf("unexpected mcp export body: %s", res.Body.String())
+	}
+}
+
 func TestToolInvokeRequiresScope(t *testing.T) {
 	handler, store, cleanup := newRuntimeToolTestHandler(t, `[
 	    {"id":"dev-app","token":"dev-token","grants":["chat"]},
@@ -662,7 +694,9 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"id=\"mcp-server-filter\"",
 		"id=\"mcp-scope-filter\"",
 		"id=\"mcp-enabled-filter\"",
+		"id=\"mcp-export\"",
 		"function loadMCPCatalog()",
+		"function exportMCPCatalog()",
 		"function exportTraces()",
 		"function exportAudit()",
 		"function loadTools()",

@@ -239,7 +239,10 @@ const consoleHTML = `<!doctype html>
           </div>
         </section>
         <section class="panel">
-          <div class="panel-head"><h2 data-i18n="mcpCatalog">MCP 目录</h2></div>
+          <div class="panel-head">
+            <h2 data-i18n="mcpCatalog">MCP 目录</h2>
+            <button class="secondary" id="mcp-export" data-i18n="export">导出</button>
+          </div>
           <div class="panel-body form-grid">
             <input id="mcp-server-filter" data-i18n-placeholder="mcpServerFilter" placeholder="Server ID" />
             <input id="mcp-scope-filter" data-i18n-placeholder="mcpScopeFilter" placeholder="Scope" />
@@ -566,6 +569,7 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#tool-invoke").addEventListener("click", invokeTool);
     toolSelect.addEventListener("change", renderSelectedTool);
     document.querySelector("#mcp-filter-apply").addEventListener("click", loadMCPCatalog);
+    document.querySelector("#mcp-export").addEventListener("click", exportMCPCatalog);
     document.querySelector("#trace-prev").addEventListener("click", () => { tracePage = Math.max(1, tracePage - 1); loadTraces(); });
     document.querySelector("#trace-next").addEventListener("click", () => { tracePage += 1; loadTraces(); });
     document.querySelector("#audit-prev").addEventListener("click", () => { auditPage = Math.max(1, auditPage - 1); loadAudit(); });
@@ -788,10 +792,7 @@ const consoleHTML = `<!doctype html>
     async function loadMCPCatalog() {
       mcpCatalog.textContent = t("loadingMCP");
       try {
-        const query = new URLSearchParams();
-        if (mcpServerFilter.value.trim()) query.set("server_id", mcpServerFilter.value.trim());
-        if (mcpScopeFilter.value.trim()) query.set("scope", mcpScopeFilter.value.trim());
-        if (mcpEnabledFilter.value) query.set("enabled", mcpEnabledFilter.value);
+        const query = mcpCatalogQuery();
         const suffix = query.toString() ? "?" + query.toString() : "";
         const res = await fetch("/gateway/v1/mcp/servers" + suffix);
         const data = await res.json();
@@ -822,6 +823,18 @@ const consoleHTML = `<!doctype html>
       } catch (err) {
         mcpCatalog.textContent = t("failedPrefix") + err.message;
       }
+    }
+    function mcpCatalogQuery() {
+      const query = new URLSearchParams();
+      if (mcpServerFilter.value.trim()) query.set("server_id", mcpServerFilter.value.trim());
+      if (mcpScopeFilter.value.trim()) query.set("scope", mcpScopeFilter.value.trim());
+      if (mcpEnabledFilter.value) query.set("enabled", mcpEnabledFilter.value);
+      return query;
+    }
+    function exportMCPCatalog() {
+      const query = mcpCatalogQuery();
+      const suffix = query.toString() ? "?" + query.toString() : "";
+      downloadURL("/gateway/v1/mcp/servers/export" + suffix, "mcp-servers.jsonl");
     }
     async function loadTools() {
       toolMeta.textContent = t("loadingTools");
