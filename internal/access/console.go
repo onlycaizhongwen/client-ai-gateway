@@ -47,6 +47,7 @@ const consoleHTML = `<!doctype html>
     .audit-table { min-width: 760px; font-size: 13px; }
     .tool-table, .mcp-table { min-width: 980px; }
     .app-table { min-width: 860px; }
+    .grant-table { min-width: 1040px; }
     th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; }
     th { position: sticky; top: 0; background: var(--head); z-index: 1; font-weight: 700; }
     td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -82,6 +83,11 @@ const consoleHTML = `<!doctype html>
     .app-table th:nth-child(1), .app-table td:nth-child(1) { width: 240px; }
     .app-table th:nth-child(2), .app-table td:nth-child(2) { width: 180px; }
     .app-table th:nth-child(3), .app-table td:nth-child(3) { width: 360px; }
+    .grant-table th:nth-child(1), .grant-table td:nth-child(1) { width: 230px; }
+    .grant-table th:nth-child(2), .grant-table td:nth-child(2) { width: 130px; }
+    .grant-table th:nth-child(3), .grant-table td:nth-child(3) { width: 230px; }
+    .grant-table th:nth-child(4), .grant-table td:nth-child(4) { width: 220px; }
+    .grant-table th:nth-child(5), .grant-table td:nth-child(5) { width: 240px; }
     .trace-id { font-family: Consolas, "Courier New", monospace; color: var(--blue); }
     .status { display: inline-block; border-radius: 999px; padding: 2px 8px; font-weight: 700; font-size: 12px; }
     .completed, .success, .healthy, .available, .running, .loaded { color: var(--green); background: #e9f7ef; }
@@ -172,6 +178,54 @@ const consoleHTML = `<!doctype html>
             <div class="pager-actions">
               <button class="secondary" id="app-prev" data-i18n="prev">上一页</button>
               <button class="secondary" id="app-next" data-i18n="next">下一页</button>
+            </div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 data-i18n="grantCatalog">Grant Catalog</h2>
+              <div class="muted" id="grant-page-summary">Page 1</div>
+            </div>
+            <div class="actions">
+              <button class="secondary" id="grant-refresh" data-i18n="refresh">Refresh</button>
+            </div>
+          </div>
+          <div class="panel-body form-grid">
+            <div class="filters">
+              <input id="grant-id-filter" data-i18n-placeholder="grantFilter" placeholder="Grant" />
+              <select id="grant-type-filter">
+                <option value="" data-i18n="allGrantTypes">All types</option>
+                <option value="core" data-i18n="grantTypeCore">Core</option>
+                <option value="tool_broad" data-i18n="grantTypeToolBroad">Tool broad</option>
+                <option value="tool_scope" data-i18n="grantTypeToolScope">Tool Scope</option>
+                <option value="admin" data-i18n="grantTypeAdmin">Admin</option>
+              </select>
+              <input id="grant-app-filter" data-i18n-placeholder="appFilter" placeholder="App ID" />
+              <input id="grant-tool-filter" data-i18n-placeholder="toolIdPlaceholder" placeholder="Tool ID" />
+              <button class="secondary" id="grant-filter-apply" data-i18n="applyFilter">Apply</button>
+            </div>
+            <div class="muted" id="grant-message" data-i18n="loadingGrants">Loading grant catalog...</div>
+          </div>
+          <div class="table-wrap" style="height: 300px;">
+            <table class="grant-table">
+              <thead>
+                <tr>
+                  <th data-i18n="grants">Grants</th>
+                  <th data-i18n="type">Type</th>
+                  <th data-i18n="app">App</th>
+                  <th data-i18n="tools">Tool Invocation</th>
+                  <th data-i18n="description">Description</th>
+                </tr>
+              </thead>
+              <tbody id="grant-rows"></tbody>
+            </table>
+          </div>
+          <div class="pager">
+            <div class="muted" id="grant-range-summary">0 / 0</div>
+            <div class="pager-actions">
+              <button class="secondary" id="grant-prev" data-i18n="prev">Prev</button>
+              <button class="secondary" id="grant-next" data-i18n="next">Next</button>
             </div>
           </div>
         </section>
@@ -471,6 +525,12 @@ const consoleHTML = `<!doctype html>
     const appMessage = document.querySelector("#app-message");
     const appIDFilter = document.querySelector("#app-id-filter");
     const appGrantFilter = document.querySelector("#app-grant-filter");
+    const grantRows = document.querySelector("#grant-rows");
+    const grantMessage = document.querySelector("#grant-message");
+    const grantIDFilter = document.querySelector("#grant-id-filter");
+    const grantTypeFilter = document.querySelector("#grant-type-filter");
+    const grantAppFilter = document.querySelector("#grant-app-filter");
+    const grantToolFilter = document.querySelector("#grant-tool-filter");
     const mcpCatalog = document.querySelector("#mcp-catalog");
     const mcpRows = document.querySelector("#mcp-rows");
     const mcpServerFilter = document.querySelector("#mcp-server-filter");
@@ -493,6 +553,10 @@ const consoleHTML = `<!doctype html>
     let appTotal = 0;
     let appPage = 1;
     const appPageSize = 8;
+    let allGrants = [];
+    let grantTotal = 0;
+    let grantPage = 1;
+    const grantPageSize = 8;
     let mcpTotal = 0;
     let mcpPage = 1;
     const mcpPageSize = 5;
@@ -574,6 +638,16 @@ const consoleHTML = `<!doctype html>
         appCatalog: "\u5e94\u7528\u4e0e\u6388\u6743",
         tokenHint: "Token \u63d0\u793a",
         grants: "\u6388\u6743",
+        type: "\u7c7b\u578b",
+        description: "\u8bf4\u660e",
+        grantCatalog: "Grant \u76ee\u5f55",
+        allGrantTypes: "\u5168\u90e8\u7c7b\u578b",
+        grantTypeCore: "\u6838\u5fc3",
+        grantTypeToolBroad: "\u5de5\u5177\u901a\u914d",
+        grantTypeToolScope: "\u5de5\u5177 Scope",
+        grantTypeAdmin: "\u7ba1\u7406",
+        loadingGrants: "\u6b63\u5728\u52a0\u8f7d Grant \u76ee\u5f55...",
+        noGrants: "\u6682\u65e0 Grant\u3002",
         loadingApps: "\u6b63\u5728\u52a0\u8f7d\u5e94\u7528\u6388\u6743...",
         noApps: "\u6682\u65e0\u5e94\u7528\u3002",
         chatAction: "聊天",
@@ -739,6 +813,16 @@ const consoleHTML = `<!doctype html>
         appCatalog: "Apps / Grants",
         tokenHint: "Token Hint",
         grants: "Grants",
+        type: "Type",
+        description: "Description",
+        grantCatalog: "Grant Catalog",
+        allGrantTypes: "All types",
+        grantTypeCore: "Core",
+        grantTypeToolBroad: "Tool broad",
+        grantTypeToolScope: "Tool Scope",
+        grantTypeAdmin: "Admin",
+        loadingGrants: "Loading grant catalog...",
+        noGrants: "No grants.",
         loadingApps: "Loading apps and grants...",
         noApps: "No apps.",
         chatAction: "Chat",
@@ -848,6 +932,8 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#tool-filter-apply").addEventListener("click", () => { toolPage = 1; loadTools(); });
     document.querySelector("#app-refresh").addEventListener("click", loadApps);
     document.querySelector("#app-filter-apply").addEventListener("click", () => { appPage = 1; loadApps(); });
+    document.querySelector("#grant-refresh").addEventListener("click", loadGrants);
+    document.querySelector("#grant-filter-apply").addEventListener("click", () => { grantPage = 1; loadGrants(); });
     toolSelect.addEventListener("change", renderSelectedTool);
     document.querySelector("#mcp-filter-apply").addEventListener("click", () => { mcpPage = 1; loadMCPCatalog(); });
     document.querySelector("#mcp-export").addEventListener("click", exportMCPCatalog);
@@ -860,6 +946,8 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#tool-next").addEventListener("click", () => { toolPage += 1; loadTools(); });
     document.querySelector("#app-prev").addEventListener("click", () => { appPage = Math.max(1, appPage - 1); loadApps(); });
     document.querySelector("#app-next").addEventListener("click", () => { appPage += 1; loadApps(); });
+    document.querySelector("#grant-prev").addEventListener("click", () => { grantPage = Math.max(1, grantPage - 1); loadGrants(); });
+    document.querySelector("#grant-next").addEventListener("click", () => { grantPage += 1; loadGrants(); });
     document.querySelector("#mcp-prev").addEventListener("click", () => { mcpPage = Math.max(1, mcpPage - 1); loadMCPCatalog(); });
     document.querySelector("#mcp-next").addEventListener("click", () => { mcpPage += 1; loadMCPCatalog(); });
     statusFilter.addEventListener("change", () => { tracePage = 1; loadTraces(); });
@@ -929,7 +1017,7 @@ const consoleHTML = `<!doctype html>
       })[value] || value || "";
     }
     async function loadAll() {
-      await Promise.all([loadTraces(), loadRuntimeHealth(), loadProviders(), loadModels(), loadAudit(), loadApps(), loadTools(), loadMCPCatalog()]);
+      await Promise.all([loadTraces(), loadRuntimeHealth(), loadProviders(), loadModels(), loadAudit(), loadApps(), loadGrants(), loadTools(), loadMCPCatalog()]);
     }
     function traceQuery(limit = tracePageSize, offset = (tracePage - 1) * tracePageSize) {
       const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
@@ -1285,6 +1373,75 @@ const consoleHTML = `<!doctype html>
       ).join("");
       if (!allApps.length) {
         appRows.innerHTML = "<tr><td colspan=\"3\" class=\"muted\">" + t("noApps") + "</td></tr>";
+      }
+    }
+    async function loadGrants() {
+      const token = adminToken();
+      if (!token) {
+        allGrants = [];
+        grantTotal = 0;
+        grantMessage.textContent = t("adminTokenRequired");
+        renderGrants();
+        return;
+      }
+      grantMessage.textContent = t("loadingGrants");
+      try {
+        const query = grantCatalogQuery();
+        query.set("limit", String(grantPageSize));
+        query.set("offset", String((grantPage - 1) * grantPageSize));
+        const res = await fetch("/gateway/v1/grants?" + query.toString(), {
+          headers: { "Authorization": "Bearer " + token }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          allGrants = [];
+          grantTotal = 0;
+          grantMessage.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
+          renderGrants();
+          return;
+        }
+        allGrants = data.grants || [];
+        grantTotal = data.total || allGrants.length;
+        grantMessage.textContent = grantTotal ? "" : t("noGrants");
+        renderGrants();
+      } catch (err) {
+        allGrants = [];
+        grantTotal = 0;
+        grantMessage.textContent = t("failedPrefix") + err.message;
+        renderGrants();
+      }
+    }
+    function grantCatalogQuery() {
+      const query = new URLSearchParams();
+      if (grantIDFilter.value.trim()) query.set("grant", grantIDFilter.value.trim());
+      if (grantTypeFilter.value) query.set("type", grantTypeFilter.value);
+      if (grantAppFilter.value.trim()) query.set("app_id", grantAppFilter.value.trim());
+      if (grantToolFilter.value.trim()) query.set("tool_id", grantToolFilter.value.trim());
+      return query;
+    }
+    function renderGrants() {
+      const totalPages = pageCount(grantTotal, grantPageSize);
+      grantPage = clampPage(grantPage, totalPages);
+      const range = pageRange(grantTotal, grantPage, grantPageSize);
+      document.querySelector("#grant-page-summary").textContent = t("page", { page: grantPage, total: totalPages });
+      document.querySelector("#grant-range-summary").textContent = t("catalogRange", { range: range.label, total: grantTotal });
+      document.querySelector("#grant-prev").disabled = grantPage <= 1;
+      document.querySelector("#grant-next").disabled = grantPage >= totalPages;
+      grantRows.innerHTML = allGrants.map(item => {
+        const apps = (item.apps || []).join(", ") || "-";
+        const tools = (item.tools || []).join(", ") || "-";
+        const servers = (item.servers || []).join(", ");
+        const toolText = servers ? tools + " / " + servers : tools;
+        return "<tr>" +
+          "<td class=\"trace-id\">" + esc(item.id) + "</td>" +
+          "<td>" + esc(item.type || "-") + "</td>" +
+          "<td title=\"" + esc(apps) + "\">" + esc(apps) + "</td>" +
+          "<td title=\"" + esc(toolText) + "\">" + esc(toolText) + "</td>" +
+          "<td title=\"" + esc(item.description || "") + "\">" + esc(item.description || "") + "</td>" +
+        "</tr>";
+      }).join("");
+      if (!allGrants.length) {
+        grantRows.innerHTML = "<tr><td colspan=\"5\" class=\"muted\">" + t("noGrants") + "</td></tr>";
       }
     }
     async function invokeTool() {
