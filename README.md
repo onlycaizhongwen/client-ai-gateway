@@ -22,6 +22,7 @@
 - Provider 健康监控、启停、探测、模型目录
 - Runtime Health 状态接口
 - Policy dry-run 和 Routing explain
+- Access dry-run 权限试算
 - OpenAI-compatible Provider 适配器
 - 只读工具运行时 MVP
 - 工具调用 Trace 化、Audit 关联、权限 scope 校验
@@ -231,6 +232,24 @@ curl -X POST http://127.0.0.1:18765/gateway/v1/routing/explain `
   "provider_classes": ["cloud"]
 }
 ```
+
+## 权限试算
+
+Access dry-run 用于在不真实调用模型或工具的情况下，检查某个应用是否具备指定动作权限。
+
+```powershell
+curl -X POST http://127.0.0.1:18765/gateway/v1/access/dry-run `
+  -H "Content-Type: application/json" `
+  -d "{\"app_id\":\"dev-app\",\"action\":\"tool.invoke\",\"tool_id\":\"gateway.runtime_health\"}"
+```
+
+支持动作：
+
+- `chat`：要求 `chat` grant。
+- `admin`：要求 `admin` grant。
+- `tool.invoke`：要求 `tool` 宽权限，或工具 manifest 中所有 scope 对应的 `tool:<scope>` 细粒度权限。
+
+响应会说明 `allowed`、`reason`、`matched_grant`、`missing_grants`，工具试算还会返回工具来源、scope、只读状态和 sandbox 要求。控制台提供“权限试算”面板，并会把试算事件写入 Audit。
 
 ## 工具调用
 

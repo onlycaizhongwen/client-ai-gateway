@@ -824,6 +824,12 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"id=\"audit-app-filter\"",
 		"id=\"audit-trace-filter\"",
 		"id=\"audit-filter-apply\"",
+		"id=\"access-app-id\"",
+		"id=\"access-token\"",
+		"id=\"access-action\"",
+		"id=\"access-tool-id\"",
+		"id=\"access-dry-run\"",
+		"id=\"access-result\"",
 		"id=\"tool-select\"",
 		"id=\"tool-invoke\"",
 		"id=\"tool-export\"",
@@ -845,6 +851,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function exportTraces()",
 		"function exportAudit()",
 		"function auditQuery",
+		"function accessDryRun",
 		"function loadTools()",
 		"function toolCatalogQuery()",
 		"function invokeTool()",
@@ -911,6 +918,65 @@ func TestPolicyDryRunMatchesModelRuleHTTP(t *testing.T) {
 	decodeBody(t, res, &body)
 	if body.Decision.Allowed || body.Decision.RuleID != "deny-cloud-smart" {
 		t.Fatalf("expected deny-cloud-smart decision, got %+v", body.Decision)
+	}
+}
+
+func TestAccessDryRunAllowsChatByAppID(t *testing.T) {
+	handler, _ := newTestHandler()
+	res := postJSON(handler, "/gateway/v1/access/dry-run", "", map[string]any{
+		"app_id": "dev-app",
+		"action": "chat",
+	})
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Allowed      bool   `json:"allowed"`
+		AppID        string `json:"app_id"`
+		MatchedGrant string `json:"matched_grant"`
+	}
+	decodeBody(t, res, &body)
+	if !body.Allowed || body.AppID != "dev-app" || body.MatchedGrant != "chat" {
+		t.Fatalf("unexpected access dry-run body: %+v", body)
+	}
+}
+
+func TestAccessDryRunExplainsMissingToolScope(t *testing.T) {
+	handler, _ := newTestHandler()
+	res := postJSON(handler, "/gateway/v1/access/dry-run", "", map[string]any{
+		"token":   "admin-token",
+		"action":  "tool.invoke",
+		"tool_id": "gateway.runtime_health",
+	})
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Allowed       bool     `json:"allowed"`
+		AppID         string   `json:"app_id"`
+		MissingGrants []string `json:"missing_grants"`
+		Tool          struct {
+			ID     string   `json:"id"`
+			Scopes []string `json:"scopes"`
+		} `json:"tool"`
+	}
+	decodeBody(t, res, &body)
+	if body.Allowed || body.AppID != "admin-app" || body.Tool.ID != "gateway.runtime_health" {
+		t.Fatalf("unexpected access dry-run denial: %+v", body)
+	}
+	if len(body.MissingGrants) != 1 || body.MissingGrants[0] != "tool:runtime.read" {
+		t.Fatalf("expected missing runtime scope, got %+v", body.MissingGrants)
+	}
+}
+
+func TestAccessDryRunRejectsUnsupportedAction(t *testing.T) {
+	handler, _ := newTestHandler()
+	res := postJSON(handler, "/gateway/v1/access/dry-run", "", map[string]any{
+		"app_id": "dev-app",
+		"action": "provider.enabled",
+	})
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", res.Code, res.Body.String())
 	}
 }
 

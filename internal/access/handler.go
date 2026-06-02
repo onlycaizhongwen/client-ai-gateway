@@ -85,6 +85,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /gateway/v1/config/reload", h.configReload)
 	mux.HandleFunc("POST /gateway/v1/policy/dry-run", h.policyDryRun)
 	mux.HandleFunc("POST /gateway/v1/routing/explain", h.routingExplain)
+	mux.HandleFunc("POST /gateway/v1/access/dry-run", h.accessDryRun)
 	return h.accessLog(mux)
 }
 
@@ -708,6 +709,13 @@ type routingExplainRequest struct {
 	RequestType string   `json:"request_type"`
 }
 
+type accessDryRunRequest struct {
+	AppID  string `json:"app_id"`
+	Token  string `json:"token"`
+	Action string `json:"action"`
+	ToolID string `json:"tool_id"`
+}
+
 func (h *Handler) policyDryRun(w http.ResponseWriter, r *http.Request) {
 	var req policyDryRunRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -736,6 +744,117 @@ func (h *Handler) policyDryRun(w http.ResponseWriter, r *http.Request) {
 		"decision": decision,
 		"input":    req,
 	})
+}
+
+func (h *Handler) accessDryRun(w http.ResponseWriter, r *http.Request) {
+	var req accessDryRunRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "", "invalid_request", err.Error())
+		return
+	}
+	if req.Action == "" {
+		req.Action = "chat"
+	}
+	snapshot := h.snapshot()
+	app, ok := resolveAccessDryRunApp(snapshot.Config, req)
+	if !ok {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"allowed": false,
+			"reason":  "app not found",
+			"input":   req,
+		})
+		return
+	}
+
+	allowed := false
+	reason := ""
+	matchedGrant := ""
+	missingGrants := []string{}
+	var toolRef *toolConfigRef
+
+	switch req.Action {
+	case "chat":
+		allowed = hasGrant(app.Grants, "chat")
+		matchedGrant = grantIfAllowed(allowed, "chat")
+		missingGrants = grantsIfDenied(allowed, "chat")
+	case "admin":
+		allowed = hasGrant(app.Grants, "admin")
+		matchedGrant = grantIfAllowed(allowed, "admin")
+		missingGrants = grantsIfDenied(allowed, "admin")
+	case "tool.invoke":
+		if req.ToolID == "" {
+			writeError(w, http.StatusBadRequest, "", "invalid_request", "tool_id is required for tool.invoke")
+			return
+		}
+		toolCfg, found := findTool(snapshot.Config, req.ToolID)
+		if !found {
+			reason = "tool not found"
+			missingGrants = []string{"tool"}
+			break
+		}
+		toolRef = &toolCfg
+		if !toolCfg.Enabled {
+			reason = "tool is disabled"
+			missingGrants = []string{"enabled tool"}
+			break
+		}
+		allowed = hasToolScope(app.Grants, toolCfg.Scopes)
+		if allowed {
+			if hasGrant(app.Grants, "tool") {
+				matchedGrant = "tool"
+			} else if len(toolCfg.Scopes) > 0 {
+				matchedGrant = "tool:" + toolCfg.Scopes[0]
+			}
+		} else {
+			for _, scope := range toolCfg.Scopes {
+				missingGrants = append(missingGrants, "tool:"+scope)
+			}
+		}
+	default:
+		writeError(w, http.StatusBadRequest, "", "invalid_request", "action must be chat, admin, or tool.invoke")
+		return
+	}
+	if reason == "" {
+		if allowed {
+			reason = "required grant is present"
+		} else {
+			reason = "required grant is missing"
+		}
+	}
+
+	response := map[string]any{
+		"allowed":        allowed,
+		"reason":         reason,
+		"app_id":         app.ID,
+		"action":         req.Action,
+		"matched_grant":  matchedGrant,
+		"missing_grants": missingGrants,
+		"grants":         app.Grants,
+		"input":          req,
+	}
+	if toolRef != nil {
+		response["tool"] = map[string]any{
+			"id":               toolRef.ID,
+			"origin":           toolRef.Origin,
+			"server_id":        toolRef.ServerID,
+			"adapter":          toolRef.Adapter,
+			"read_only":        toolRef.ReadOnly,
+			"scopes":           toolRef.Scopes,
+			"sandbox_required": toolRef.SandboxRequired,
+			"enabled":          toolRef.Enabled,
+		}
+	}
+	h.saveAudit(audit.Event{
+		AppID:  app.ID,
+		Action: "access.dry_run",
+		Target: req.Action,
+		Result: audit.ResultSuccess,
+		Metadata: map[string]any{
+			"allowed": allowed,
+			"tool_id": req.ToolID,
+		},
+	})
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (h *Handler) routingExplain(w http.ResponseWriter, r *http.Request) {
@@ -1046,6 +1165,32 @@ func hasToolScope(grants []string, scopes []string) bool {
 		}
 	}
 	return len(scopes) > 0
+}
+
+func resolveAccessDryRunApp(cfg config.Config, req accessDryRunRequest) (config.App, bool) {
+	if req.Token != "" {
+		return cfg.AppByToken(req.Token)
+	}
+	for _, app := range cfg.Apps {
+		if app.ID == req.AppID {
+			return app, true
+		}
+	}
+	return config.App{}, false
+}
+
+func grantIfAllowed(allowed bool, grant string) string {
+	if allowed {
+		return grant
+	}
+	return ""
+}
+
+func grantsIfDenied(allowed bool, grant string) []string {
+	if allowed {
+		return []string{}
+	}
+	return []string{grant}
 }
 
 func hasScope(scopes []string, want string) bool {

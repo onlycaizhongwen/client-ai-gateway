@@ -362,6 +362,21 @@ const consoleHTML = `<!doctype html>
           <div class="panel-body" id="route-explain"><p class="muted" data-i18n="routingExplainHint">点击“解释路由”预览策略和 Provider 路由。</p></div>
         </section>
         <section class="panel">
+          <div class="panel-head"><h2 data-i18n="accessDryRun">权限试算</h2></div>
+          <div class="panel-body form-grid">
+            <input id="access-app-id" value="dev-app" data-i18n-placeholder="appFilter" placeholder="App ID" />
+            <input id="access-token" value="dev-token" data-i18n-placeholder="tokenPlaceholder" placeholder="Token" />
+            <select id="access-action">
+              <option value="chat" data-i18n="chatAction">聊天</option>
+              <option value="tool.invoke" data-i18n="toolInvokeAction">工具调用</option>
+              <option value="admin" data-i18n="adminAction">管理</option>
+            </select>
+            <input id="access-tool-id" value="gateway.runtime_health" data-i18n-placeholder="toolIdPlaceholder" placeholder="Tool ID" />
+            <button id="access-dry-run" data-i18n="dryRun">试算</button>
+            <pre id="access-result" data-i18n="accessResultPlaceholder">权限试算结果会显示在这里。</pre>
+          </div>
+        </section>
+        <section class="panel">
           <div class="panel-head">
             <h2 data-i18n="tools">工具调用</h2>
           </div>
@@ -396,6 +411,7 @@ const consoleHTML = `<!doctype html>
     const auditTraceFilter = document.querySelector("#audit-trace-filter");
     const routeExplain = document.querySelector("#route-explain");
     const runtimeHealth = document.querySelector("#runtime-health");
+    const accessResult = document.querySelector("#access-result");
     const toolSelect = document.querySelector("#tool-select");
     const toolMeta = document.querySelector("#tool-meta");
     const toolResult = document.querySelector("#tool-result");
@@ -494,6 +510,15 @@ const consoleHTML = `<!doctype html>
         explain: "解释路由",
         routingExplain: "路由解释",
         routingExplainHint: "点击“解释路由”预览策略和 Provider 路由。",
+        accessDryRun: "权限试算",
+        tokenPlaceholder: "Token",
+        toolIdPlaceholder: "Tool ID",
+        chatAction: "聊天",
+        toolInvokeAction: "工具调用",
+        adminAction: "管理",
+        dryRun: "试算",
+        accessResultPlaceholder: "权限试算结果会显示在这里。",
+        dryRunning: "试算中...",
         tools: "\u5de5\u5177\u8c03\u7528",
         toolCatalog: "工具目录",
         toolName: "工具",
@@ -642,6 +667,15 @@ const consoleHTML = `<!doctype html>
         explain: "Explain",
         routingExplain: "Routing Explain",
         routingExplainHint: "Run Explain to preview policy and provider routing.",
+        accessDryRun: "Access Dry-run",
+        tokenPlaceholder: "Token",
+        toolIdPlaceholder: "Tool ID",
+        chatAction: "Chat",
+        toolInvokeAction: "Tool Invoke",
+        adminAction: "Admin",
+        dryRun: "Dry-run",
+        accessResultPlaceholder: "Access dry-run result will appear here.",
+        dryRunning: "Dry-running...",
         tools: "Tool Invocation",
         toolCatalog: "Tool Catalog",
         toolName: "Tool",
@@ -736,6 +770,7 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#sample").addEventListener("click", () => sendQuick("success"));
     document.querySelector("#send").addEventListener("click", () => sendQuick(document.querySelector("#mode").value));
     document.querySelector("#explain").addEventListener("click", () => explainRouting(document.querySelector("#mode").value));
+    document.querySelector("#access-dry-run").addEventListener("click", accessDryRun);
     document.querySelector("#tool-invoke").addEventListener("click", invokeTool);
     document.querySelector("#tool-export").addEventListener("click", exportTools);
     document.querySelector("#tool-refresh").addEventListener("click", loadTools);
@@ -1335,6 +1370,27 @@ const consoleHTML = `<!doctype html>
           renderRouteItems(data.skipped || [], true);
       } catch (err) {
         routeExplain.textContent = t("failedPrefix") + err.message;
+      }
+    }
+    async function accessDryRun() {
+      accessResult.textContent = t("dryRunning");
+      const body = {
+        app_id: document.querySelector("#access-app-id").value.trim(),
+        token: document.querySelector("#access-token").value.trim(),
+        action: document.querySelector("#access-action").value,
+        tool_id: document.querySelector("#access-tool-id").value.trim()
+      };
+      try {
+        const res = await fetch("/gateway/v1/access/dry-run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        accessResult.textContent = JSON.stringify(data, null, 2);
+        await loadAudit();
+      } catch (err) {
+        accessResult.textContent = t("failedPrefix") + err.message;
       }
     }
     function renderRouteItems(items, skipped) {

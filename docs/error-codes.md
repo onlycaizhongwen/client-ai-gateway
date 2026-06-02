@@ -41,3 +41,5 @@ The gateway returns stable error codes in JSON error responses and records the f
 | `tool_failed` | Tool adapter execution failed with a stable tool SDK error or an unclassified error. |
 
 Tool invocation errors include a `trace_id` when the request reached the tool invocation handler.
+
+Access dry-run returns `invalid_request` for malformed JSON, unsupported actions, or `tool.invoke` requests without `tool_id`. Permission denials are represented as a successful dry-run response with `allowed=false`, `reason`, and `missing_grants`.
