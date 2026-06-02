@@ -150,6 +150,7 @@ const consoleHTML = `<!doctype html>
               <div class="muted" id="app-page-summary">\u7b2c 1 \u9875</div>
             </div>
             <div class="actions">
+              <button class="secondary" id="app-export" data-i18n="export">Export</button>
               <button class="secondary" id="app-refresh" data-i18n="refresh">刷新</button>
             </div>
           </div>
@@ -188,6 +189,7 @@ const consoleHTML = `<!doctype html>
               <div class="muted" id="grant-page-summary">Page 1</div>
             </div>
             <div class="actions">
+              <button class="secondary" id="grant-export" data-i18n="export">Export</button>
               <button class="secondary" id="grant-refresh" data-i18n="refresh">Refresh</button>
             </div>
           </div>
@@ -930,8 +932,10 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#tool-export").addEventListener("click", exportTools);
     document.querySelector("#tool-refresh").addEventListener("click", loadTools);
     document.querySelector("#tool-filter-apply").addEventListener("click", () => { toolPage = 1; loadTools(); });
+    document.querySelector("#app-export").addEventListener("click", exportApps);
     document.querySelector("#app-refresh").addEventListener("click", loadApps);
     document.querySelector("#app-filter-apply").addEventListener("click", () => { appPage = 1; loadApps(); });
+    document.querySelector("#grant-export").addEventListener("click", exportGrants);
     document.querySelector("#grant-refresh").addEventListener("click", loadGrants);
     document.querySelector("#grant-filter-apply").addEventListener("click", () => { grantPage = 1; loadGrants(); });
     toolSelect.addEventListener("change", renderSelectedTool);
@@ -1314,6 +1318,10 @@ const consoleHTML = `<!doctype html>
       const suffix = query.toString() ? "?" + query.toString() : "";
       downloadURL("/gateway/v1/tools/export" + suffix, "tools.jsonl");
     }
+    function exportApps() {
+      const query = appCatalogQuery();
+      exportAdminJSONL("/gateway/v1/apps/export", query, "apps.jsonl", appMessage);
+    }
     async function loadApps() {
       const token = adminToken();
       if (!token) {
@@ -1374,6 +1382,10 @@ const consoleHTML = `<!doctype html>
       if (!allApps.length) {
         appRows.innerHTML = "<tr><td colspan=\"3\" class=\"muted\">" + t("noApps") + "</td></tr>";
       }
+    }
+    function exportGrants() {
+      const query = grantCatalogQuery();
+      exportAdminJSONL("/gateway/v1/grants/export", query, "grants.jsonl", grantMessage);
     }
     async function loadGrants() {
       const token = adminToken();
@@ -1580,6 +1592,32 @@ const consoleHTML = `<!doctype html>
         })
         .catch(err => {
           auditMessage.textContent = t("failedPrefix") + err.message;
+        });
+    }
+    function exportAdminJSONL(path, query, filename, messageNode) {
+      const token = adminToken();
+      if (!token) {
+        messageNode.textContent = t("adminTokenRequired");
+        return;
+      }
+      const suffix = query.toString() ? "?" + query.toString() : "";
+      fetch(path + suffix, {
+        headers: { "Authorization": "Bearer " + token }
+      })
+        .then(async res => {
+          if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error && data.error.message || String(res.status));
+          }
+          return res.blob();
+        })
+        .then(blob => {
+          const url = URL.createObjectURL(blob);
+          downloadURL(url, filename);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        })
+        .catch(err => {
+          messageNode.textContent = t("failedPrefix") + err.message;
         });
     }
     function renderAudit() {

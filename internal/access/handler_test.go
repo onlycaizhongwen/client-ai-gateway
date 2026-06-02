@@ -360,6 +360,34 @@ func TestAppsListMasksTokensAndFilters(t *testing.T) {
 	}
 }
 
+func TestAppsExportMasksTokens(t *testing.T) {
+	handler, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/apps/export?grant=tool", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without admin token, got %d", res.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/apps/export?grant=tool", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); got != "application/x-ndjson" {
+		t.Fatalf("expected jsonl content type, got %q", got)
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, `"id":"dev-app"`) || !strings.Contains(body, `"token_hint":"dev-...oken"`) {
+		t.Fatalf("unexpected apps export body: %s", body)
+	}
+	if strings.Contains(body, "dev-token") || strings.Contains(body, "admin-token") {
+		t.Fatalf("apps export leaked raw token: %s", body)
+	}
+}
+
 func TestGrantsListRequiresAdmin(t *testing.T) {
 	handler, _ := newTestHandler()
 	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/grants", nil)
@@ -375,6 +403,27 @@ func TestGrantsListRequiresAdmin(t *testing.T) {
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 with non-admin token, got %d", res.Code)
+	}
+}
+
+func TestGrantsExportFiltersJSONL(t *testing.T) {
+	handler, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/grants/export?type=tool_scope", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); got != "application/x-ndjson" {
+		t.Fatalf("expected jsonl content type, got %q", got)
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, `"id":"tool:runtime.read"`) || !strings.Contains(body, `"tools":["gateway.runtime_health"]`) {
+		t.Fatalf("unexpected grants export body: %s", body)
+	}
+	if strings.Contains(body, `"id":"chat"`) || strings.Contains(body, `"id":"admin"`) {
+		t.Fatalf("grant export ignored type filter: %s", body)
 	}
 }
 
@@ -985,6 +1034,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"id=\"app-id-filter\"",
 		"id=\"app-grant-filter\"",
 		"id=\"app-filter-apply\"",
+		"id=\"app-export\"",
 		"id=\"app-refresh\"",
 		"id=\"app-rows\"",
 		"id=\"app-prev\"",
@@ -994,6 +1044,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"id=\"grant-app-filter\"",
 		"id=\"grant-tool-filter\"",
 		"id=\"grant-filter-apply\"",
+		"id=\"grant-export\"",
 		"id=\"grant-refresh\"",
 		"id=\"grant-rows\"",
 		"id=\"grant-prev\"",
@@ -1024,9 +1075,12 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function loadApps()",
 		"function appCatalogQuery()",
 		"function renderApps()",
+		"function exportApps()",
 		"function loadGrants()",
 		"function grantCatalogQuery()",
 		"function renderGrants()",
+		"function exportGrants()",
+		"function exportAdminJSONL",
 		"function loadTools()",
 		"function toolCatalogQuery()",
 		"function invokeTool()",

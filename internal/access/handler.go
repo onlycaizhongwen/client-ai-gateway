@@ -76,7 +76,9 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /gateway/v1/models", h.models)
 	mux.HandleFunc("GET /gateway/v1/runtime/health", h.runtimeHealth)
 	mux.HandleFunc("GET /gateway/v1/apps", h.appsList)
+	mux.HandleFunc("GET /gateway/v1/apps/export", h.appsExport)
 	mux.HandleFunc("GET /gateway/v1/grants", h.grantsList)
+	mux.HandleFunc("GET /gateway/v1/grants/export", h.grantsExport)
 	mux.HandleFunc("GET /gateway/v1/tools", h.toolsList)
 	mux.HandleFunc("GET /gateway/v1/tools/export", h.toolsExport)
 	mux.HandleFunc("POST /gateway/v1/tools/", h.toolInvoke)
@@ -377,6 +379,13 @@ func (h *Handler) appViews(r *http.Request) []appView {
 	return views
 }
 
+func (h *Handler) appsExport(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	writeJSONL(w, "apps.jsonl", h.appViews(r))
+}
+
 func (h *Handler) grantsList(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -479,6 +488,13 @@ func (h *Handler) grantViews(r *http.Request) []grantView {
 	}
 	sortGrantViews(views)
 	return views
+}
+
+func (h *Handler) grantsExport(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	writeJSONL(w, "grants.jsonl", h.grantViews(r))
 }
 
 func (h *Handler) toolsList(w http.ResponseWriter, r *http.Request) {
@@ -1553,6 +1569,14 @@ func writeJSONL(w http.ResponseWriter, filename string, items any) {
 			_ = json.NewEncoder(w).Encode(item)
 		}
 	case []toolView:
+		for _, item := range values {
+			_ = json.NewEncoder(w).Encode(item)
+		}
+	case []appView:
+		for _, item := range values {
+			_ = json.NewEncoder(w).Encode(item)
+		}
+	case []grantView:
 		for _, item := range values {
 			_ = json.NewEncoder(w).Encode(item)
 		}

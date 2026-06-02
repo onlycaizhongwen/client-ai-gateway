@@ -529,7 +529,7 @@ curl "http://127.0.0.1:18765/gateway/v1/apps?limit=20&offset=0&grant=tool" `
 - `app_id`：只看指定应用。
 - `grant`：只看具备指定 grant 的应用，例如 `chat`、`tool`、`tool:runtime.read` 或 `admin`。
 
-响应包含 `apps`、`total`、`offset`、`limit` 和当前 `filters`。控制台“应用与授权”面板复用同一接口，列表展示 App、Token 提示和 Grants。
+响应包含 `apps`、`total`、`offset`、`limit` 和当前 `filters`。控制台“应用与授权”面板复用同一接口，列表展示 App、Token 提示和 Grants，并支持按当前筛选条件导出 JSONL。
 
 ## Grant 目录
 
@@ -547,4 +547,4 @@ curl "http://127.0.0.1:18765/gateway/v1/grants?type=tool_scope&limit=20&offset=0
 - `app_id`：只看某个应用持有的 grant。
 - `tool_id`：只看某个工具需要的 grant。
 
-响应包含 `grants`、`total`、`offset`、`limit` 和当前 `filters`。控制台“Grant 目录”面板会展示授权、类型、使用应用、关联工具和说明。
+响应包含 `grants`、`total`、`offset`、`limit` 和当前 `filters`。控制台“Grant 目录”面板会展示授权、类型、使用应用、关联工具和说明，并支持按当前筛选条件导出 JSONL。
