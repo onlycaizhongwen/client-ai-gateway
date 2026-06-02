@@ -824,6 +824,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"id=\"audit-app-filter\"",
 		"id=\"audit-trace-filter\"",
 		"id=\"audit-filter-apply\"",
+		"id=\"audit-detail\"",
 		"id=\"access-app-id\"",
 		"id=\"access-token\"",
 		"id=\"access-action\"",
@@ -851,13 +852,14 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function exportTraces()",
 		"function exportAudit()",
 		"function auditQuery",
+		"function showAuditDetail",
 		"function accessDryRun",
 		"function loadTools()",
 		"function toolCatalogQuery()",
 		"function invokeTool()",
 		"function exportTools()",
 		"function shortTraceID",
-		"auditRows.querySelectorAll(\"tr[data-trace]\")",
+		"auditRows.querySelectorAll(\"tr[data-audit]\")",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("expected console html to contain %q", want)

@@ -144,7 +144,7 @@ curl "http://127.0.0.1:18765/gateway/v1/audit/events/export?limit=500&action=too
   -o audit-events.jsonl
 ```
 
-Audit 支持 `action`、`result`、`app_id`、`trace_id`、`limit`、`offset` 查询。控制台可按动作、结果、应用和 Trace ID 筛选，导出会带上当前筛选条件。默认持久化到 `data/audit.jsonl`，可通过 `audit_store_path` 调整路径，通过 `audit_retention_max` 控制保留条数。
+Audit 支持 `action`、`result`、`app_id`、`trace_id`、`limit`、`offset` 查询。控制台可按动作、结果、应用和 Trace ID 筛选，导出会带上当前筛选条件；点击审计行可查看完整事件 JSON，并在存在 `trace_id` 时联动打开 Trace 详情。默认持久化到 `data/audit.jsonl`，可通过 `audit_store_path` 调整路径，通过 `audit_retention_max` 控制保留条数。
 
 ## Provider 与模型目录
 

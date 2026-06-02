@@ -233,6 +233,10 @@ const consoleHTML = `<!doctype html>
           </div>
         </section>
         <section class="panel">
+          <div class="panel-head"><h2 data-i18n="auditDetail">审计详情</h2></div>
+          <div class="panel-body" id="audit-detail"><p class="muted" data-i18n="selectAudit">从审计表格中选择一条事件。</p></div>
+        </section>
+        <section class="panel">
           <div class="panel-head">
             <div>
               <h2 data-i18n="toolCatalog">工具目录</h2>
@@ -405,6 +409,7 @@ const consoleHTML = `<!doctype html>
     const sendResult = document.querySelector("#send-result");
     const auditRows = document.querySelector("#audit-rows");
     const auditMessage = document.querySelector("#audit-message");
+    const auditDetail = document.querySelector("#audit-detail");
     const auditActionFilter = document.querySelector("#audit-action-filter");
     const auditResultFilter = document.querySelector("#audit-result-filter");
     const auditAppFilter = document.querySelector("#audit-app-filter");
@@ -474,6 +479,8 @@ const consoleHTML = `<!doctype html>
         prev: "上一页",
         next: "下一页",
         auditEvents: "审计事件",
+        auditDetail: "审计详情",
+        selectAudit: "从审计表格中选择一条事件。",
         action: "动作",
         result: "结果",
         appTarget: "应用 / 目标",
@@ -631,6 +638,8 @@ const consoleHTML = `<!doctype html>
         prev: "Prev",
         next: "Next",
         auditEvents: "Audit Events",
+        auditDetail: "Audit Detail",
+        selectAudit: "Select an audit event from the table.",
         action: "Action",
         result: "Result",
         appTarget: "App / Target",
@@ -1297,7 +1306,7 @@ const consoleHTML = `<!doctype html>
       document.querySelector("#audit-prev").disabled = auditPage <= 1;
       document.querySelector("#audit-next").disabled = auditPage >= totalPages;
       auditRows.innerHTML = allAuditEvents.map(item =>
-        "<tr data-trace=\"" + esc(item.trace_id || "") + "\" title=\"" + esc(item.error || item.trace_id || "") + "\">" +
+        "<tr data-audit=\"" + esc(item.id || "") + "\" data-trace=\"" + esc(item.trace_id || "") + "\" title=\"" + esc(item.error || item.trace_id || "") + "\">" +
           "<td>" + esc(labelAction(item.action)) + "</td>" +
           "<td><span class=\"status " + esc(item.result) + "\">" + esc(labelResult(item.result)) + "</span></td>" +
           "<td class=\"trace-id\">" + esc(shortTraceID(item.trace_id)) + "</td>" +
@@ -1309,9 +1318,28 @@ const consoleHTML = `<!doctype html>
       if (!allAuditEvents.length) {
         auditRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + t("noAuditEvents") + "</td></tr>";
       }
-      auditRows.querySelectorAll("tr[data-trace]").forEach(row => {
-        if (row.dataset.trace) row.addEventListener("click", () => loadDetail(row.dataset.trace));
+      auditRows.querySelectorAll("tr[data-audit]").forEach(row => {
+        row.addEventListener("click", () => showAuditDetail(row.dataset.audit, row.dataset.trace));
       });
+    }
+    function showAuditDetail(auditID, traceID) {
+      const event = allAuditEvents.find(item => item.id === auditID);
+      if (!event) {
+        auditDetail.innerHTML = "<p class=\"muted\">" + t("selectAudit") + "</p>";
+        return;
+      }
+      auditDetail.innerHTML =
+        "<div class=\"kv\">" +
+          "<div class=\"k\">" + t("action") + "</div><div>" + esc(labelAction(event.action)) + "</div>" +
+          "<div class=\"k\">" + t("result") + "</div><div><span class=\"status " + esc(event.result) + "\">" + esc(labelResult(event.result)) + "</span></div>" +
+          "<div class=\"k\">" + t("traceId") + "</div><div class=\"trace-id\">" + esc(event.trace_id || "-") + "</div>" +
+          "<div class=\"k\">" + t("appTarget") + "</div><div>" + esc(event.app_id || "-") + " / " + esc(event.target || "-") + "</div>" +
+          "<div class=\"k\">" + t("time") + "</div><div>" + esc(time(event.created_at)) + "</div>" +
+        "</div>" +
+        "<pre>" + esc(JSON.stringify(event, null, 2)) + "</pre>";
+      if (traceID) {
+        loadDetail(traceID);
+      }
     }
     async function sendQuick(mode) {
       const body = {
