@@ -73,12 +73,16 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /gateway/v1/traces/export", h.traceExport)
 	mux.HandleFunc("GET /gateway/v1/traces/", h.traceByID)
 	mux.HandleFunc("GET /gateway/v1/providers", h.providers)
+	mux.HandleFunc("GET /gateway/v1/providers/export", h.providersExport)
 	mux.HandleFunc("GET /gateway/v1/models", h.models)
+	mux.HandleFunc("GET /gateway/v1/models/export", h.modelsExport)
 	mux.HandleFunc("GET /gateway/v1/runtime/health", h.runtimeHealth)
 	mux.HandleFunc("GET /gateway/v1/apps", h.appsList)
 	mux.HandleFunc("GET /gateway/v1/apps/export", h.appsExport)
 	mux.HandleFunc("GET /gateway/v1/grants", h.grantsList)
 	mux.HandleFunc("GET /gateway/v1/grants/export", h.grantsExport)
+	mux.HandleFunc("GET /gateway/v1/policies", h.policiesList)
+	mux.HandleFunc("GET /gateway/v1/policies/export", h.policiesExport)
 	mux.HandleFunc("GET /gateway/v1/tools", h.toolsList)
 	mux.HandleFunc("GET /gateway/v1/tools/export", h.toolsExport)
 	mux.HandleFunc("POST /gateway/v1/tools/", h.toolInvoke)
@@ -199,13 +203,75 @@ func (h *Handler) traceExport(w http.ResponseWriter, r *http.Request) {
 	writeJSONL(w, "traces.jsonl", page.Items)
 }
 
-func (h *Handler) providers(w http.ResponseWriter, _ *http.Request) {
-	snapshot := h.snapshot()
-	if snapshot.Health != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"providers": snapshot.Health.Views(snapshot.Config.Providers)})
+func (h *Handler) providers(w http.ResponseWriter, r *http.Request) {
+	limit, ok := intQuery(w, r, "limit", 100)
+	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"providers": snapshot.Config.Providers})
+	offset, ok := intQuery(w, r, "offset", 0)
+	if !ok {
+		return
+	}
+	views := h.providerViews(r)
+	total := len(views)
+	offset, limit = normalizePage(offset, limit)
+	pagedProviders := []providerhealth.View{}
+	if offset < total {
+		end := offset + limit
+		if end > total {
+			end = total
+		}
+		pagedProviders = views[offset:end]
+	}
+	query := r.URL.Query()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"providers": pagedProviders,
+		"total":     total,
+		"offset":    offset,
+		"limit":     limit,
+		"filters": map[string]string{
+			"provider_id":    query.Get("provider_id"),
+			"class":          query.Get("class"),
+			"enabled":        query.Get("enabled"),
+			"runtime_status": query.Get("runtime_status"),
+		},
+	})
+}
+
+func (h *Handler) providerViews(r *http.Request) []providerhealth.View {
+	snapshot := h.snapshot()
+	var views []providerhealth.View
+	if snapshot.Health != nil {
+		views = snapshot.Health.Views(snapshot.Config.Providers)
+	} else {
+		views = providerhealth.NewStore(snapshot.Config.Providers).Views(snapshot.Config.Providers)
+	}
+	query := r.URL.Query()
+	providerFilter := query.Get("provider_id")
+	classFilter := query.Get("class")
+	enabledFilter := query.Get("enabled")
+	statusFilter := query.Get("runtime_status")
+	filtered := make([]providerhealth.View, 0, len(views))
+	for _, view := range views {
+		if providerFilter != "" && view.ID != providerFilter {
+			continue
+		}
+		if classFilter != "" && view.Class != classFilter {
+			continue
+		}
+		if enabledFilter != "" && strconv.FormatBool(view.Enabled) != enabledFilter {
+			continue
+		}
+		if statusFilter != "" && view.RuntimeStatus != statusFilter {
+			continue
+		}
+		filtered = append(filtered, view)
+	}
+	return filtered
+}
+
+func (h *Handler) providersExport(w http.ResponseWriter, r *http.Request) {
+	writeJSONL(w, "providers.jsonl", h.providerViews(r))
 }
 
 type providerEnabledRequest struct {
@@ -222,8 +288,51 @@ type modelView struct {
 }
 
 func (h *Handler) models(w http.ResponseWriter, r *http.Request) {
+	limit, ok := intQuery(w, r, "limit", 100)
+	if !ok {
+		return
+	}
+	offset, ok := intQuery(w, r, "offset", 0)
+	if !ok {
+		return
+	}
+	models := h.modelViews(r)
+	total := len(models)
+	offset, limit = normalizePage(offset, limit)
+	pagedModels := []modelView{}
+	if offset < total {
+		end := offset + limit
+		if end > total {
+			end = total
+		}
+		pagedModels = models[offset:end]
+	}
+	query := r.URL.Query()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"models": pagedModels,
+		"total":  total,
+		"offset": offset,
+		"limit":  limit,
+		"filters": map[string]string{
+			"model":          query.Get("model"),
+			"provider_id":    query.Get("provider_id"),
+			"provider_class": query.Get("provider_class"),
+			"enabled":        query.Get("enabled"),
+			"available":      query.Get("available"),
+			"all":            query.Get("all"),
+		},
+	})
+}
+
+func (h *Handler) modelViews(r *http.Request) []modelView {
 	snapshot := h.snapshot()
 	onlyAvailable := r.URL.Query().Get("all") != "true"
+	query := r.URL.Query()
+	modelFilter := query.Get("model")
+	providerFilter := query.Get("provider_id")
+	classFilter := query.Get("provider_class")
+	enabledFilter := query.Get("enabled")
+	availableFilter := query.Get("available")
 	healthByID := map[string]providerhealth.View{}
 	if snapshot.Health != nil {
 		for _, view := range snapshot.Health.Views(snapshot.Config.Providers) {
@@ -245,6 +354,21 @@ func (h *Handler) models(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		for _, model := range provider.Models {
+			if modelFilter != "" && model != modelFilter {
+				continue
+			}
+			if providerFilter != "" && provider.ID != providerFilter {
+				continue
+			}
+			if classFilter != "" && provider.Class != classFilter {
+				continue
+			}
+			if enabledFilter != "" && strconv.FormatBool(enabled) != enabledFilter {
+				continue
+			}
+			if availableFilter != "" && strconv.FormatBool(available) != availableFilter {
+				continue
+			}
 			models = append(models, modelView{
 				Model:         model,
 				ProviderID:    provider.ID,
@@ -255,7 +379,11 @@ func (h *Handler) models(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"models": models})
+	return models
+}
+
+func (h *Handler) modelsExport(w http.ResponseWriter, r *http.Request) {
+	writeJSONL(w, "models.jsonl", h.modelViews(r))
 }
 
 func (h *Handler) runtimeHealth(w http.ResponseWriter, _ *http.Request) {
@@ -313,6 +441,17 @@ type grantView struct {
 	Apps        []string `json:"apps,omitempty"`
 	Tools       []string `json:"tools,omitempty"`
 	Servers     []string `json:"servers,omitempty"`
+}
+
+type policyView struct {
+	ID              string   `json:"id"`
+	Effect          string   `json:"effect"`
+	Reason          string   `json:"reason"`
+	AppIDs          []string `json:"app_ids,omitempty"`
+	RequestTypes    []string `json:"request_types,omitempty"`
+	Models          []string `json:"models,omitempty"`
+	ProviderClasses []string `json:"provider_classes,omitempty"`
+	DataLabels      []string `json:"data_labels,omitempty"`
 }
 
 func (h *Handler) appsList(w http.ResponseWriter, r *http.Request) {
@@ -495,6 +634,101 @@ func (h *Handler) grantsExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSONL(w, "grants.jsonl", h.grantViews(r))
+}
+
+func (h *Handler) policiesList(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	limit, ok := intQuery(w, r, "limit", 100)
+	if !ok {
+		return
+	}
+	offset, ok := intQuery(w, r, "offset", 0)
+	if !ok {
+		return
+	}
+	views := h.policyViews(r)
+	total := len(views)
+	offset, limit = normalizePage(offset, limit)
+	pagedPolicies := []policyView{}
+	if offset < total {
+		end := offset + limit
+		if end > total {
+			end = total
+		}
+		pagedPolicies = views[offset:end]
+	}
+	query := r.URL.Query()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"policies": pagedPolicies,
+		"total":    total,
+		"offset":   offset,
+		"limit":    limit,
+		"filters": map[string]string{
+			"policy_id":      query.Get("policy_id"),
+			"effect":         query.Get("effect"),
+			"app_id":         query.Get("app_id"),
+			"request_type":   query.Get("request_type"),
+			"model":          query.Get("model"),
+			"provider_class": query.Get("provider_class"),
+			"data_label":     query.Get("data_label"),
+		},
+	})
+}
+
+func (h *Handler) policyViews(r *http.Request) []policyView {
+	snapshot := h.snapshot()
+	query := r.URL.Query()
+	policyFilter := query.Get("policy_id")
+	effectFilter := query.Get("effect")
+	appFilter := query.Get("app_id")
+	requestTypeFilter := query.Get("request_type")
+	modelFilter := query.Get("model")
+	providerClassFilter := query.Get("provider_class")
+	dataLabelFilter := query.Get("data_label")
+	views := make([]policyView, 0, len(snapshot.Config.Policies))
+	for _, rule := range snapshot.Config.Policies {
+		if policyFilter != "" && rule.ID != policyFilter {
+			continue
+		}
+		if effectFilter != "" && rule.Effect != effectFilter {
+			continue
+		}
+		if appFilter != "" && !containsString(rule.AppIDs, appFilter) {
+			continue
+		}
+		if requestTypeFilter != "" && !containsString(rule.RequestTypes, requestTypeFilter) {
+			continue
+		}
+		if modelFilter != "" && !containsString(rule.Models, modelFilter) {
+			continue
+		}
+		if providerClassFilter != "" && !containsString(rule.ProviderClasses, providerClassFilter) {
+			continue
+		}
+		if dataLabelFilter != "" && !containsString(rule.DataLabels, dataLabelFilter) {
+			continue
+		}
+		views = append(views, policyView{
+			ID:              rule.ID,
+			Effect:          rule.Effect,
+			Reason:          rule.Reason,
+			AppIDs:          append([]string(nil), rule.AppIDs...),
+			RequestTypes:    append([]string(nil), rule.RequestTypes...),
+			Models:          append([]string(nil), rule.Models...),
+			ProviderClasses: append([]string(nil), rule.ProviderClasses...),
+			DataLabels:      append([]string(nil), rule.DataLabels...),
+		})
+	}
+	return views
+}
+
+func (h *Handler) policiesExport(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	writeJSONL(w, "policies.jsonl", h.policyViews(r))
 }
 
 func (h *Handler) toolsList(w http.ResponseWriter, r *http.Request) {
@@ -925,6 +1159,14 @@ func (h *Handler) policyDryRun(w http.ResponseWriter, r *http.Request) {
 		Action: "policy.dry_run",
 		Target: req.Model,
 		Result: audit.ResultSuccess,
+		Metadata: map[string]any{
+			"request_type":   req.RequestType,
+			"data_labels":    strings.Join(req.DataLabels, ","),
+			"provider_class": req.ProviderClass,
+			"policy_rule_id": decision.RuleID,
+			"allow_cloud":    strconv.FormatBool(decision.AllowCloud),
+			"force_local":    strconv.FormatBool(decision.ForceLocal),
+		},
 	})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"decision": decision,
@@ -1055,6 +1297,20 @@ func (h *Handler) routingExplain(w http.ResponseWriter, r *http.Request) {
 		Model:      req.Model,
 		AllowCloud: decision.AllowCloud,
 	})
+	h.saveAudit(audit.Event{
+		AppID:  req.AppID,
+		Action: "routing.explain",
+		Target: req.Model,
+		Result: audit.ResultSuccess,
+		Metadata: map[string]any{
+			"request_type":    req.RequestType,
+			"data_labels":     req.DataLabels,
+			"policy_rule_id":  decision.RuleID,
+			"allow_cloud":     decision.AllowCloud,
+			"candidate_count": len(explanation.Candidates),
+			"skipped_count":   len(explanation.Skipped),
+		},
+	})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"input":      req,
 		"policy":     decision,
@@ -1178,12 +1434,15 @@ func (h *Handler) auditList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := h.audit.Page(audit.ListQuery{
-		Offset:  offset,
-		Limit:   limit,
-		Action:  r.URL.Query().Get("action"),
-		Result:  r.URL.Query().Get("result"),
-		AppID:   r.URL.Query().Get("app_id"),
-		TraceID: r.URL.Query().Get("trace_id"),
+		Offset:        offset,
+		Limit:         limit,
+		Action:        r.URL.Query().Get("action"),
+		Result:        r.URL.Query().Get("result"),
+		AppID:         r.URL.Query().Get("app_id"),
+		TraceID:       r.URL.Query().Get("trace_id"),
+		Target:        r.URL.Query().Get("target"),
+		MetadataKey:   r.URL.Query().Get("metadata_key"),
+		MetadataValue: r.URL.Query().Get("metadata_value"),
 	})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"events": page.Items,
@@ -1213,12 +1472,15 @@ func (h *Handler) auditExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := h.audit.Page(audit.ListQuery{
-		Offset:  offset,
-		Limit:   limit,
-		Action:  r.URL.Query().Get("action"),
-		Result:  r.URL.Query().Get("result"),
-		AppID:   r.URL.Query().Get("app_id"),
-		TraceID: r.URL.Query().Get("trace_id"),
+		Offset:        offset,
+		Limit:         limit,
+		Action:        r.URL.Query().Get("action"),
+		Result:        r.URL.Query().Get("result"),
+		AppID:         r.URL.Query().Get("app_id"),
+		TraceID:       r.URL.Query().Get("trace_id"),
+		Target:        r.URL.Query().Get("target"),
+		MetadataKey:   r.URL.Query().Get("metadata_key"),
+		MetadataValue: r.URL.Query().Get("metadata_value"),
 	})
 	writeJSONL(w, "audit-events.jsonl", page.Items)
 }
@@ -1234,6 +1496,16 @@ func intQuery(w http.ResponseWriter, r *http.Request, name string, defaultValue 
 		return 0, false
 	}
 	return parsed, true
+}
+
+func normalizePage(offset, limit int) (int, int) {
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	return offset, limit
 }
 
 func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) (config.App, bool) {
@@ -1564,6 +1836,14 @@ func writeJSONL(w http.ResponseWriter, filename string, items any) {
 		for _, item := range values {
 			_ = json.NewEncoder(w).Encode(item)
 		}
+	case []providerhealth.View:
+		for _, item := range values {
+			_ = json.NewEncoder(w).Encode(item)
+		}
+	case []modelView:
+		for _, item := range values {
+			_ = json.NewEncoder(w).Encode(item)
+		}
 	case []mcpServerView:
 		for _, item := range values {
 			_ = json.NewEncoder(w).Encode(item)
@@ -1577,6 +1857,10 @@ func writeJSONL(w http.ResponseWriter, filename string, items any) {
 			_ = json.NewEncoder(w).Encode(item)
 		}
 	case []grantView:
+		for _, item := range values {
+			_ = json.NewEncoder(w).Encode(item)
+		}
+	case []policyView:
 		for _, item := range values {
 			_ = json.NewEncoder(w).Encode(item)
 		}

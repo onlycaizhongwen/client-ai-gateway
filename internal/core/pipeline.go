@@ -50,9 +50,16 @@ func (p *Pipeline) Chat(ctx context.Context, token string, req ChatRequest) (Cha
 	}
 
 	record := trace.Record{
-		TraceID:   traceID,
-		AppID:     env.AppID,
-		Model:     req.Model,
+		TraceID:     traceID,
+		RequestType: "chat",
+		AppID:       env.AppID,
+		Model:       req.Model,
+		Request: trace.RequestSnapshot{
+			Model:      req.Model,
+			Messages:   toTraceMessages(req.Messages),
+			Metadata:   cloneStringMap(req.Metadata),
+			DataLabels: append([]string(nil), req.DataLabels...),
+		},
 		Status:    "started",
 		StartedAt: env.StartedAt,
 		Events:    []trace.Event{{Type: "request_started", Message: "request accepted by access layer", At: env.StartedAt}},
@@ -220,6 +227,25 @@ func toAdapterMessages(messages []Message) []adapters.Message {
 	out := make([]adapters.Message, 0, len(messages))
 	for _, message := range messages {
 		out = append(out, adapters.Message{Role: message.Role, Content: message.Content})
+	}
+	return out
+}
+
+func toTraceMessages(messages []Message) []trace.MessageSnapshot {
+	out := make([]trace.MessageSnapshot, 0, len(messages))
+	for _, message := range messages {
+		out = append(out, trace.MessageSnapshot{Role: message.Role, Content: message.Content})
+	}
+	return out
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = value
 	}
 	return out
 }

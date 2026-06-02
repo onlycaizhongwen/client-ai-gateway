@@ -220,7 +220,7 @@ func TestAccessLogIncludesTraceID(t *testing.T) {
 
 func TestProvidersHTTPIncludesRuntimeHealth(t *testing.T) {
 	handler, _ := newTestHandler()
-	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/providers", nil)
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/providers?class=cloud&limit=1&offset=0", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -228,19 +228,39 @@ func TestProvidersHTTPIncludesRuntimeHealth(t *testing.T) {
 	}
 	var body struct {
 		Providers []providerhealth.View `json:"providers"`
+		Total     int                   `json:"total"`
+		Offset    int                   `json:"offset"`
+		Limit     int                   `json:"limit"`
 	}
 	decodeBody(t, res, &body)
-	if len(body.Providers) != 2 {
-		t.Fatalf("expected two providers, got %+v", body.Providers)
+	if body.Total != 1 || body.Offset != 0 || body.Limit != 1 || len(body.Providers) != 1 {
+		t.Fatalf("expected one paged cloud provider, got %+v", body)
 	}
-	if body.Providers[0].RuntimeStatus == "" || body.Providers[0].Adapter == "" {
+	if body.Providers[0].ID != "cloud-mock" || body.Providers[0].RuntimeStatus == "" || body.Providers[0].Adapter == "" {
 		t.Fatalf("expected runtime health view, got %+v", body.Providers[0])
+	}
+}
+
+func TestProvidersExportHTTP(t *testing.T) {
+	handler, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/providers/export?provider_id=local-mock", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); got != "application/x-ndjson" {
+		t.Fatalf("unexpected content type %q", got)
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, `"id":"local-mock"`) || strings.Contains(body, `"id":"cloud-mock"`) {
+		t.Fatalf("unexpected provider export body: %s", body)
 	}
 }
 
 func TestModelsHTTP(t *testing.T) {
 	handler, _ := newTestHandler()
-	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/models", nil)
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/models?provider_id=cloud-mock&model=cloud-smart&limit=1", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -248,13 +268,32 @@ func TestModelsHTTP(t *testing.T) {
 	}
 	var body struct {
 		Models []modelView `json:"models"`
+		Total  int         `json:"total"`
+		Limit  int         `json:"limit"`
 	}
 	decodeBody(t, res, &body)
-	if len(body.Models) != 3 {
-		t.Fatalf("expected three available model entries, got %+v", body.Models)
+	if body.Total != 1 || body.Limit != 1 || len(body.Models) != 1 {
+		t.Fatalf("expected one filtered model entry, got %+v", body)
 	}
-	if body.Models[0].Model == "" || body.Models[0].ProviderID == "" {
+	if body.Models[0].Model != "cloud-smart" || body.Models[0].ProviderID != "cloud-mock" {
 		t.Fatalf("expected model catalog details, got %+v", body.Models[0])
+	}
+}
+
+func TestModelsExportHTTP(t *testing.T) {
+	handler, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/models/export?provider_class=local", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); got != "application/x-ndjson" {
+		t.Fatalf("unexpected content type %q", got)
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, `"provider_id":"local-mock"`) || strings.Contains(body, `"provider_id":"cloud-mock"`) {
+		t.Fatalf("unexpected model export body: %s", body)
 	}
 }
 
@@ -494,6 +533,66 @@ func TestGrantsListSummarizesScopesAndFilters(t *testing.T) {
 	decodeBody(t, res, &body)
 	if body.Total != 1 || len(body.Grants) != 1 || body.Grants[0].ID != "admin" {
 		t.Fatalf("unexpected app filtered grant body: %+v", body)
+	}
+}
+
+func TestPoliciesListRequiresAdmin(t *testing.T) {
+	handler, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/policies", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without admin token, got %d", res.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/policies", nil)
+	req.Header.Set("Authorization", "Bearer dev-token")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 with non-admin token, got %d", res.Code)
+	}
+}
+
+func TestPoliciesListFiltersAndPaginates(t *testing.T) {
+	handler, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/policies?effect=deny&app_id=dev-app&model=cloud-smart&limit=1", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Policies []policyView `json:"policies"`
+		Total    int          `json:"total"`
+		Offset   int          `json:"offset"`
+		Limit    int          `json:"limit"`
+	}
+	decodeBody(t, res, &body)
+	if body.Total != 1 || body.Offset != 0 || body.Limit != 1 || len(body.Policies) != 1 {
+		t.Fatalf("expected one paged policy, got %+v", body)
+	}
+	if body.Policies[0].ID != "deny-cloud-smart" || body.Policies[0].Effect != "deny" {
+		t.Fatalf("unexpected policy view: %+v", body.Policies[0])
+	}
+}
+
+func TestPoliciesExportHTTP(t *testing.T) {
+	handler, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/policies/export?data_label=sensitive", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	if got := res.Header().Get("Content-Type"); got != "application/x-ndjson" {
+		t.Fatalf("unexpected content type %q", got)
+	}
+	body := res.Body.String()
+	if !strings.Contains(body, `"id":"deny-sensitive-cloud"`) || strings.Contains(body, `"id":"deny-cloud-smart"`) {
+		t.Fatalf("unexpected policies export body: %s", body)
 	}
 }
 
@@ -1018,11 +1117,18 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"id=\"trace-app-filter\"",
 		"id=\"trace-provider-filter\"",
 		"id=\"trace-filter-apply\"",
+		"id=\"issue-refresh\"",
+		"id=\"issue-rows\"",
+		"id=\"issue-prev\"",
+		"id=\"issue-next\"",
 		"id=\"audit-export\"",
 		"id=\"audit-action-filter\"",
 		"id=\"audit-result-filter\"",
 		"id=\"audit-app-filter\"",
 		"id=\"audit-trace-filter\"",
+		"id=\"audit-target-filter\"",
+		"id=\"audit-metadata-key-filter\"",
+		"id=\"audit-metadata-value-filter\"",
 		"id=\"audit-filter-apply\"",
 		"id=\"audit-detail\"",
 		"id=\"access-app-id\"",
@@ -1049,6 +1155,53 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"id=\"grant-rows\"",
 		"id=\"grant-prev\"",
 		"id=\"grant-next\"",
+		"id=\"provider-id-filter\"",
+		"id=\"provider-class-filter\"",
+		"id=\"provider-enabled-filter\"",
+		"id=\"provider-runtime-filter\"",
+		"id=\"provider-filter-apply\"",
+		"id=\"provider-export\"",
+		"id=\"provider-refresh\"",
+		"id=\"provider-rows\"",
+		"id=\"provider-prev\"",
+		"id=\"provider-next\"",
+		"id=\"model-name-filter\"",
+		"id=\"model-provider-filter\"",
+		"id=\"model-class-filter\"",
+		"id=\"model-available-filter\"",
+		"id=\"model-filter-apply\"",
+		"id=\"model-export\"",
+		"id=\"model-refresh\"",
+		"id=\"model-rows\"",
+		"id=\"model-prev\"",
+		"id=\"model-next\"",
+		"id=\"policy-id-filter\"",
+		"id=\"policy-effect-filter\"",
+		"id=\"policy-app-filter\"",
+		"id=\"policy-model-filter\"",
+		"id=\"policy-request-type-filter\"",
+		"id=\"policy-provider-class-filter\"",
+		"id=\"policy-data-label-filter\"",
+		"id=\"policy-filter-apply\"",
+		"id=\"policy-export\"",
+		"id=\"policy-refresh\"",
+		"id=\"policy-rows\"",
+		"id=\"policy-prev\"",
+		"id=\"policy-next\"",
+		"id=\"policy-dry-app-id\"",
+		"id=\"policy-dry-request-type\"",
+		"id=\"policy-dry-model\"",
+		"id=\"policy-dry-provider-class\"",
+		"id=\"policy-dry-data-labels\"",
+		"id=\"policy-dry-run\"",
+		"id=\"policy-dry-result\"",
+		"id=\"routing-dry-app-id\"",
+		"id=\"routing-dry-request-type\"",
+		"id=\"routing-dry-model\"",
+		"id=\"routing-dry-data-labels\"",
+		"id=\"routing-dry-run\"",
+		"id=\"config-reload\"",
+		"id=\"config-reload-result\"",
 		"id=\"tool-select\"",
 		"id=\"tool-invoke\"",
 		"id=\"tool-export\"",
@@ -1071,6 +1224,18 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function exportAudit()",
 		"function auditQuery",
 		"function showAuditDetail",
+		"function buildIssues()",
+		"function renderIssues()",
+		"function labelSeverity",
+		"function fillQuickRequestFromTrace",
+		"function copyTraceRequestJSON",
+		"function copyTraceCurlDraft",
+		"function copyText",
+		"trace-fill-quick",
+		"trace-copy-request",
+		"trace-copy-curl",
+		"metadata_key",
+		"metadata_value",
 		"function accessDryRun",
 		"function loadApps()",
 		"function appCatalogQuery()",
@@ -1080,6 +1245,22 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function grantCatalogQuery()",
 		"function renderGrants()",
 		"function exportGrants()",
+		"function loadProviderCatalog()",
+		"function providerCatalogQuery()",
+		"function renderProviderCatalog()",
+		"function exportProviderCatalog()",
+		"function loadModelCatalog()",
+		"function modelCatalogQuery()",
+		"function renderModelCatalog()",
+		"function exportModelCatalog()",
+		"function loadPolicyCatalog()",
+		"function policyCatalogQuery()",
+		"function renderPolicyCatalog()",
+		"function exportPolicyCatalog()",
+		"function policyDryRun()",
+		"function routingDryRun()",
+		"function runRoutingExplain",
+		"function configReload()",
 		"function exportAdminJSONL",
 		"function loadTools()",
 		"function toolCatalogQuery()",
@@ -1125,6 +1306,25 @@ func TestRoutingExplainHTTP(t *testing.T) {
 	}
 	if len(body.Skipped) == 0 || !strings.Contains(body.Skipped[0].Reason, "cloud") {
 		t.Fatalf("expected skipped cloud reason, got %+v", body.Skipped)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/audit/events?action=routing.explain", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	auditRes := httptest.NewRecorder()
+	handler.ServeHTTP(auditRes, req)
+	if auditRes.Code != http.StatusOK {
+		t.Fatalf("expected audit 200, got %d: %s", auditRes.Code, auditRes.Body.String())
+	}
+	var auditBody struct {
+		Events []audit.Event `json:"events"`
+		Total  int           `json:"total"`
+	}
+	decodeBody(t, auditRes, &auditBody)
+	if auditBody.Total != 1 || len(auditBody.Events) != 1 || auditBody.Events[0].Action != "routing.explain" {
+		t.Fatalf("expected routing explain audit event, got %+v", auditBody)
+	}
+	if auditBody.Events[0].Metadata["policy_rule_id"] != "deny-sensitive-cloud" {
+		t.Fatalf("expected policy rule metadata, got %+v", auditBody.Events[0].Metadata)
 	}
 }
 
@@ -1434,6 +1634,40 @@ func TestAuditListPaginationHTTP(t *testing.T) {
 	decodeBody(t, res, &body)
 	if len(body.Events) != 1 || body.Total != 3 || body.Offset != 1 || body.Limit != 1 {
 		t.Fatalf("unexpected paged audit body: %+v", body)
+	}
+}
+
+func TestAuditListFiltersByTargetAndMetadataHTTP(t *testing.T) {
+	handler, _ := newTestHandlerWithLogger(slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)))
+	postJSON(handler, "/gateway/v1/policy/dry-run", "", map[string]any{
+		"app_id":       "dev-app",
+		"request_type": "chat",
+		"model":        "local-small",
+		"data_labels":  []string{"sensitive"},
+	})
+	postJSON(handler, "/gateway/v1/policy/dry-run", "", map[string]any{
+		"app_id":       "dev-app",
+		"request_type": "chat",
+		"model":        "cloud-smart",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/audit/events?action=policy.dry_run&target=local-small&metadata_key=policy_rule_id&metadata_value=deny-sensitive-cloud", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Events []audit.Event `json:"events"`
+		Total  int           `json:"total"`
+	}
+	decodeBody(t, res, &body)
+	if body.Total != 1 || len(body.Events) != 1 {
+		t.Fatalf("expected one filtered audit event, got %+v", body)
+	}
+	if body.Events[0].Target != "local-small" || body.Events[0].Metadata["policy_rule_id"] != "deny-sensitive-cloud" {
+		t.Fatalf("unexpected filtered audit event: %+v", body.Events[0])
 	}
 }
 

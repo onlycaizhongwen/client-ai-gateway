@@ -74,16 +74,7 @@ func (s *JSONLStore) Page(query ListQuery) Page {
 	out := make([]Event, 0, len(s.events))
 	for i := len(s.events) - 1; i >= 0; i-- {
 		event := s.events[i]
-		if query.Action != "" && event.Action != query.Action {
-			continue
-		}
-		if query.Result != "" && event.Result != query.Result {
-			continue
-		}
-		if query.AppID != "" && event.AppID != query.AppID {
-			continue
-		}
-		if query.TraceID != "" && event.TraceID != query.TraceID {
+		if !matchesQuery(event, query) {
 			continue
 		}
 		out = append(out, event)

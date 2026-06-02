@@ -17,6 +17,7 @@ type Record struct {
 	RequestType string            `json:"request_type,omitempty"`
 	AppID       string            `json:"app_id"`
 	Model       string            `json:"requested_model"`
+	Request     RequestSnapshot   `json:"request,omitempty"`
 	ToolID      string            `json:"tool_id,omitempty"`
 	ProviderID  string            `json:"provider_id,omitempty"`
 	FinalModel  string            `json:"final_model,omitempty"`
@@ -29,6 +30,18 @@ type Record struct {
 	DurationMS  int64             `json:"duration_ms,omitempty"`
 	StartedAt   time.Time         `json:"started_at"`
 	FinishedAt  time.Time         `json:"finished_at,omitempty"`
+}
+
+type RequestSnapshot struct {
+	Model      string            `json:"model,omitempty"`
+	Messages   []MessageSnapshot `json:"messages,omitempty"`
+	Metadata   map[string]string `json:"metadata,omitempty"`
+	DataLabels []string          `json:"data_labels,omitempty"`
+}
+
+type MessageSnapshot struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 type PolicyDecision struct {

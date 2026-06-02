@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -25,12 +26,15 @@ type Event struct {
 }
 
 type ListQuery struct {
-	Offset  int
-	Limit   int
-	Action  string
-	Result  string
-	AppID   string
-	TraceID string
+	Offset        int
+	Limit         int
+	Action        string
+	Result        string
+	AppID         string
+	TraceID       string
+	Target        string
+	MetadataKey   string
+	MetadataValue string
 }
 
 type Page struct {
@@ -86,16 +90,7 @@ func (s *MemoryStore) Page(query ListQuery) Page {
 	out := make([]Event, 0, len(s.events))
 	for i := len(s.events) - 1; i >= 0; i-- {
 		event := s.events[i]
-		if query.Action != "" && event.Action != query.Action {
-			continue
-		}
-		if query.Result != "" && event.Result != query.Result {
-			continue
-		}
-		if query.AppID != "" && event.AppID != query.AppID {
-			continue
-		}
-		if query.TraceID != "" && event.TraceID != query.TraceID {
+		if !matchesQuery(event, query) {
 			continue
 		}
 		out = append(out, event)
@@ -109,4 +104,33 @@ func (s *MemoryStore) Page(query ListQuery) Page {
 		end = total
 	}
 	return Page{Items: out[offset:end], Total: total, Offset: offset, Limit: limit}
+}
+
+func matchesQuery(event Event, query ListQuery) bool {
+	if query.Action != "" && event.Action != query.Action {
+		return false
+	}
+	if query.Result != "" && event.Result != query.Result {
+		return false
+	}
+	if query.AppID != "" && event.AppID != query.AppID {
+		return false
+	}
+	if query.TraceID != "" && event.TraceID != query.TraceID {
+		return false
+	}
+	if query.Target != "" && event.Target != query.Target {
+		return false
+	}
+	if query.MetadataKey == "" {
+		return true
+	}
+	value, ok := event.Metadata[query.MetadataKey]
+	if !ok {
+		return false
+	}
+	if query.MetadataValue == "" {
+		return true
+	}
+	return fmt.Sprint(value) == query.MetadataValue
 }

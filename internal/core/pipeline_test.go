@@ -53,6 +53,15 @@ func TestPipelineFallbackAllowed(t *testing.T) {
 	if record.ProviderID != "cloud-mock" {
 		t.Fatalf("expected cloud fallback, got %s", record.ProviderID)
 	}
+	if record.RequestType != "chat" || record.Request.Model != "local-small" {
+		t.Fatalf("expected chat request snapshot, got %+v", record)
+	}
+	if len(record.Request.Messages) != 1 || record.Request.Messages[0].Content != "hello" {
+		t.Fatalf("expected request messages in trace snapshot, got %+v", record.Request.Messages)
+	}
+	if record.Request.Metadata["fail_provider"] != "local-mock" {
+		t.Fatalf("expected request metadata in trace snapshot, got %+v", record.Request.Metadata)
+	}
 }
 
 func TestPipelineSensitiveBlocksCloudFallback(t *testing.T) {

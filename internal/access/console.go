@@ -46,6 +46,7 @@ const consoleHTML = `<!doctype html>
     .trace-table { min-width: 1280px; }
     .audit-table { min-width: 760px; font-size: 13px; }
     .tool-table, .mcp-table { min-width: 980px; }
+    .issue-table { min-width: 980px; }
     .app-table { min-width: 860px; }
     .grant-table { min-width: 1040px; }
     th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; }
@@ -80,6 +81,11 @@ const consoleHTML = `<!doctype html>
     .mcp-table th:nth-child(3), .mcp-table td:nth-child(3) { width: 130px; }
     .mcp-table th:nth-child(4), .mcp-table td:nth-child(4) { width: 260px; }
     .mcp-table th:nth-child(5), .mcp-table td:nth-child(5) { width: 220px; }
+    .issue-table th:nth-child(1), .issue-table td:nth-child(1) { width: 110px; }
+    .issue-table th:nth-child(2), .issue-table td:nth-child(2) { width: 150px; }
+    .issue-table th:nth-child(3), .issue-table td:nth-child(3) { width: 220px; }
+    .issue-table th:nth-child(4), .issue-table td:nth-child(4) { width: 420px; }
+    .issue-table th:nth-child(5), .issue-table td:nth-child(5) { width: 130px; }
     .app-table th:nth-child(1), .app-table td:nth-child(1) { width: 240px; }
     .app-table th:nth-child(2), .app-table td:nth-child(2) { width: 180px; }
     .app-table th:nth-child(3), .app-table td:nth-child(3) { width: 360px; }
@@ -93,6 +99,8 @@ const consoleHTML = `<!doctype html>
     .completed, .success, .healthy, .available, .running, .loaded { color: var(--green); background: #e9f7ef; }
     .failed, .denied, .unhealthy { color: var(--red); background: #fdecec; }
     .started, .degraded, .disabled, .not_configured, .unavailable { color: var(--amber); background: #fff4df; }
+    .warning { color: var(--amber); background: #fff4df; }
+    .info { color: var(--blue); background: #eaf4fb; }
     .provider, .route-item { border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-bottom: 9px; }
     .provider strong, .route-item strong { display: block; margin-bottom: 3px; }
     .route-item.skipped { background: #fff7ed; }
@@ -146,6 +154,41 @@ const consoleHTML = `<!doctype html>
         <section class="panel">
           <div class="panel-head">
             <div>
+              <h2 data-i18n="issueSummary">运行问题汇总</h2>
+              <div class="muted" id="issue-page-summary">第 1 页</div>
+            </div>
+            <div class="actions">
+              <button class="secondary" id="issue-refresh" data-i18n="refresh">刷新</button>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="muted" id="issue-message" data-i18n="loadingIssues">正在汇总运行问题...</div>
+          </div>
+          <div class="table-wrap" style="height: 260px;">
+            <table class="issue-table">
+              <thead>
+                <tr>
+                  <th data-i18n="severity">级别</th>
+                  <th data-i18n="source">来源</th>
+                  <th data-i18n="target">目标</th>
+                  <th data-i18n="issue">问题</th>
+                  <th data-i18n="time">时间</th>
+                </tr>
+              </thead>
+              <tbody id="issue-rows"></tbody>
+            </table>
+          </div>
+          <div class="pager">
+            <div class="muted" id="issue-range-summary">0 / 0</div>
+            <div class="pager-actions">
+              <button class="secondary" id="issue-prev" data-i18n="prev">上一页</button>
+              <button class="secondary" id="issue-next" data-i18n="next">下一页</button>
+            </div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
               <h2 data-i18n="appCatalog">\u5e94\u7528\u4e0e\u6388\u6743</h2>
               <div class="muted" id="app-page-summary">\u7b2c 1 \u9875</div>
             </div>
@@ -179,6 +222,212 @@ const consoleHTML = `<!doctype html>
             <div class="pager-actions">
               <button class="secondary" id="app-prev" data-i18n="prev">上一页</button>
               <button class="secondary" id="app-next" data-i18n="next">下一页</button>
+            </div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2 data-i18n="configReload">Config Reload</h2></div>
+          <div class="panel-body form-grid">
+            <button id="config-reload" data-i18n="reloadConfig">Reload Config</button>
+            <pre id="config-reload-result" data-i18n="configReloadPlaceholder">Config reload result will appear here.</pre>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2 data-i18n="routingDryRun">Routing Explain</h2></div>
+          <div class="panel-body form-grid">
+            <div class="filters">
+              <input id="routing-dry-app-id" value="dev-app" data-i18n-placeholder="appFilter" placeholder="App ID" />
+              <select id="routing-dry-request-type">
+                <option value="chat" data-i18n="chatAction">Chat</option>
+                <option value="tool.invoke" data-i18n="toolInvokeAction">Tool Invoke</option>
+              </select>
+              <input id="routing-dry-model" value="local-small" data-i18n-placeholder="modelFilter" placeholder="Model" />
+              <input id="routing-dry-data-labels" data-i18n-placeholder="dataLabelFilter" placeholder="Data Label" />
+              <button id="routing-dry-run" data-i18n="explain">Explain</button>
+            </div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2 data-i18n="policyDryRun">Policy Dry-run</h2></div>
+          <div class="panel-body form-grid">
+            <div class="filters">
+              <input id="policy-dry-app-id" value="dev-app" data-i18n-placeholder="appFilter" placeholder="App ID" />
+              <select id="policy-dry-request-type">
+                <option value="chat" data-i18n="chatAction">Chat</option>
+                <option value="tool.invoke" data-i18n="toolInvokeAction">Tool Invoke</option>
+              </select>
+              <input id="policy-dry-model" value="local-small" data-i18n-placeholder="modelFilter" placeholder="Model" />
+              <select id="policy-dry-provider-class">
+                <option value="" data-i18n="allClasses">All classes</option>
+                <option value="local" data-i18n="localClass">Local</option>
+                <option value="cloud" data-i18n="cloudClass">Cloud</option>
+              </select>
+              <input id="policy-dry-data-labels" data-i18n-placeholder="dataLabelFilter" placeholder="Data Label" />
+              <button id="policy-dry-run" data-i18n="dryRun">Dry-run</button>
+            </div>
+            <pre id="policy-dry-result" data-i18n="policyDryRunPlaceholder">Policy dry-run result will appear here.</pre>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 data-i18n="providerCatalog">Provider Catalog</h2>
+              <div class="muted" id="provider-page-summary">Page 1</div>
+            </div>
+            <div class="actions">
+              <button class="secondary" id="provider-export" data-i18n="export">Export</button>
+              <button class="secondary" id="provider-refresh" data-i18n="refresh">Refresh</button>
+            </div>
+          </div>
+          <div class="panel-body form-grid">
+            <div class="filters">
+              <input id="provider-id-filter" data-i18n-placeholder="providerFilter" placeholder="Provider ID" />
+              <select id="provider-class-filter">
+                <option value="" data-i18n="allClasses">All classes</option>
+                <option value="local" data-i18n="localClass">Local</option>
+                <option value="cloud" data-i18n="cloudClass">Cloud</option>
+              </select>
+              <select id="provider-enabled-filter">
+                <option value="" data-i18n="allEnabled">All enabled</option>
+                <option value="true" data-i18n="enabled">Enabled</option>
+                <option value="false" data-i18n="disabled">Disabled</option>
+              </select>
+              <select id="provider-runtime-filter">
+                <option value="" data-i18n="allRuntimeStatus">All runtime</option>
+                <option value="healthy" data-i18n="runtimeHealthy">Healthy</option>
+                <option value="degraded" data-i18n="runtimeDegraded">Degraded</option>
+                <option value="unhealthy" data-i18n="runtimeUnhealthy">Unhealthy</option>
+                <option value="disabled" data-i18n="runtimeDisabled">Disabled</option>
+              </select>
+              <button class="secondary" id="provider-filter-apply" data-i18n="applyFilter">Apply</button>
+            </div>
+            <div class="muted" id="provider-message" data-i18n="loadingProviders">Loading providers...</div>
+          </div>
+          <div class="table-wrap" style="height: 320px;">
+            <table class="provider-table">
+              <thead>
+                <tr>
+                  <th data-i18n="provider">Provider</th>
+                  <th data-i18n="type">Type</th>
+                  <th data-i18n="adapter">Adapter</th>
+                  <th data-i18n="models">Models</th>
+                  <th data-i18n="status">Status</th>
+                  <th data-i18n="action">Action</th>
+                </tr>
+              </thead>
+              <tbody id="provider-rows"></tbody>
+            </table>
+          </div>
+          <div class="pager">
+            <div class="muted" id="provider-range-summary">0 / 0</div>
+            <div class="pager-actions">
+              <button class="secondary" id="provider-prev" data-i18n="prev">Prev</button>
+              <button class="secondary" id="provider-next" data-i18n="next">Next</button>
+            </div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 data-i18n="modelCatalog">Model Catalog</h2>
+              <div class="muted" id="model-page-summary">Page 1</div>
+            </div>
+            <div class="actions">
+              <button class="secondary" id="model-export" data-i18n="export">Export</button>
+              <button class="secondary" id="model-refresh" data-i18n="refresh">Refresh</button>
+            </div>
+          </div>
+          <div class="panel-body form-grid">
+            <div class="filters">
+              <input id="model-name-filter" data-i18n-placeholder="modelFilter" placeholder="Model" />
+              <input id="model-provider-filter" data-i18n-placeholder="providerFilter" placeholder="Provider ID" />
+              <select id="model-class-filter">
+                <option value="" data-i18n="allClasses">All classes</option>
+                <option value="local" data-i18n="localClass">Local</option>
+                <option value="cloud" data-i18n="cloudClass">Cloud</option>
+              </select>
+              <select id="model-available-filter">
+                <option value="" data-i18n="availableOnly">Available only</option>
+                <option value="true" data-i18n="available">Available</option>
+                <option value="false" data-i18n="unavailable">Unavailable</option>
+                <option value="all" data-i18n="allModels">All models</option>
+              </select>
+              <button class="secondary" id="model-filter-apply" data-i18n="applyFilter">Apply</button>
+            </div>
+            <div class="muted" id="model-message" data-i18n="loadingModels">Loading models...</div>
+          </div>
+          <div class="table-wrap" style="height: 320px;">
+            <table class="model-table">
+              <thead>
+                <tr>
+                  <th data-i18n="model">Model</th>
+                  <th data-i18n="provider">Provider</th>
+                  <th data-i18n="type">Type</th>
+                  <th data-i18n="status">Status</th>
+                  <th data-i18n="available">Available</th>
+                </tr>
+              </thead>
+              <tbody id="model-rows"></tbody>
+            </table>
+          </div>
+          <div class="pager">
+            <div class="muted" id="model-range-summary">0 / 0</div>
+            <div class="pager-actions">
+              <button class="secondary" id="model-prev" data-i18n="prev">Prev</button>
+              <button class="secondary" id="model-next" data-i18n="next">Next</button>
+            </div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 data-i18n="policyCatalog">Policy Catalog</h2>
+              <div class="muted" id="policy-page-summary">Page 1</div>
+            </div>
+            <div class="actions">
+              <button class="secondary" id="policy-export" data-i18n="export">Export</button>
+              <button class="secondary" id="policy-refresh" data-i18n="refresh">Refresh</button>
+            </div>
+          </div>
+          <div class="panel-body form-grid">
+            <div class="filters">
+              <input id="policy-id-filter" data-i18n-placeholder="policyFilter" placeholder="Policy ID" />
+              <select id="policy-effect-filter">
+                <option value="" data-i18n="allEffects">All effects</option>
+                <option value="allow" data-i18n="effectAllow">Allow</option>
+                <option value="deny" data-i18n="effectDeny">Deny</option>
+                <option value="force_local" data-i18n="effectForceLocal">Force local</option>
+                <option value="deny_cloud_for_sensitive" data-i18n="effectDenyCloudSensitive">Deny cloud sensitive</option>
+              </select>
+              <input id="policy-app-filter" data-i18n-placeholder="appFilter" placeholder="App ID" />
+              <input id="policy-model-filter" data-i18n-placeholder="modelFilter" placeholder="Model" />
+              <button class="secondary" id="policy-filter-apply" data-i18n="applyFilter">Apply</button>
+            </div>
+            <div class="filters">
+              <input id="policy-request-type-filter" data-i18n-placeholder="requestTypeFilter" placeholder="Request Type" />
+              <input id="policy-provider-class-filter" data-i18n-placeholder="providerClassFilter" placeholder="Provider Class" />
+              <input id="policy-data-label-filter" data-i18n-placeholder="dataLabelFilter" placeholder="Data Label" />
+            </div>
+            <div class="muted" id="policy-message" data-i18n="loadingPolicies">Loading policies...</div>
+          </div>
+          <div class="table-wrap" style="height: 320px;">
+            <table class="policy-table">
+              <thead>
+                <tr>
+                  <th data-i18n="policy">Policy</th>
+                  <th data-i18n="effect">Effect</th>
+                  <th data-i18n="scope">Scope</th>
+                  <th data-i18n="reason">Reason</th>
+                </tr>
+              </thead>
+              <tbody id="policy-rows"></tbody>
+            </table>
+          </div>
+          <div class="pager">
+            <div class="muted" id="policy-range-summary">0 / 0</div>
+            <div class="pager-actions">
+              <button class="secondary" id="policy-prev" data-i18n="prev">Prev</button>
+              <button class="secondary" id="policy-next" data-i18n="next">Next</button>
             </div>
           </div>
         </section>
@@ -291,6 +540,7 @@ const consoleHTML = `<!doctype html>
                 <option value="" data-i18n="allActions">全部动作</option>
                 <option value="tool.invoke" data-i18n="tools">工具调用</option>
                 <option value="policy.dry_run" data-i18n="actionPolicyDryRun">策略试算</option>
+                <option value="routing.explain" data-i18n="actionRoutingExplain">路由解释</option>
                 <option value="provider.enabled" data-i18n="actionProviderEnabled">Provider 启停</option>
                 <option value="provider.probe" data-i18n="actionProviderProbe">Provider 探测</option>
                 <option value="config.reload" data-i18n="actionConfigReload">配置重载</option>
@@ -303,6 +553,9 @@ const consoleHTML = `<!doctype html>
               </select>
               <input id="audit-app-filter" data-i18n-placeholder="appFilter" placeholder="App ID" />
               <input id="audit-trace-filter" data-i18n-placeholder="traceFilter" placeholder="Trace ID" />
+              <input id="audit-target-filter" data-i18n-placeholder="targetFilter" placeholder="Target" />
+              <input id="audit-metadata-key-filter" data-i18n-placeholder="metadataKeyFilter" placeholder="Metadata key" />
+              <input id="audit-metadata-value-filter" data-i18n-placeholder="metadataValueFilter" placeholder="Metadata value" />
               <button class="secondary" id="audit-filter-apply" data-i18n="applyFilter">筛选</button>
             </div>
             <div class="audit-table-wrap">
@@ -512,6 +765,9 @@ const consoleHTML = `<!doctype html>
     const auditResultFilter = document.querySelector("#audit-result-filter");
     const auditAppFilter = document.querySelector("#audit-app-filter");
     const auditTraceFilter = document.querySelector("#audit-trace-filter");
+    const auditTargetFilter = document.querySelector("#audit-target-filter");
+    const auditMetadataKeyFilter = document.querySelector("#audit-metadata-key-filter");
+    const auditMetadataValueFilter = document.querySelector("#audit-metadata-value-filter");
     const routeExplain = document.querySelector("#route-explain");
     const runtimeHealth = document.querySelector("#runtime-health");
     const accessResult = document.querySelector("#access-result");
@@ -533,6 +789,40 @@ const consoleHTML = `<!doctype html>
     const grantTypeFilter = document.querySelector("#grant-type-filter");
     const grantAppFilter = document.querySelector("#grant-app-filter");
     const grantToolFilter = document.querySelector("#grant-tool-filter");
+    const providerRows = document.querySelector("#provider-rows");
+    const providerMessage = document.querySelector("#provider-message");
+    const providerIDFilter = document.querySelector("#provider-id-filter");
+    const providerClassFilter = document.querySelector("#provider-class-filter");
+    const providerEnabledFilter = document.querySelector("#provider-enabled-filter");
+    const providerRuntimeFilter = document.querySelector("#provider-runtime-filter");
+    const modelRows = document.querySelector("#model-rows");
+    const modelMessage = document.querySelector("#model-message");
+    const modelNameFilter = document.querySelector("#model-name-filter");
+    const modelProviderFilter = document.querySelector("#model-provider-filter");
+    const modelClassFilter = document.querySelector("#model-class-filter");
+    const modelAvailableFilter = document.querySelector("#model-available-filter");
+    const policyRows = document.querySelector("#policy-rows");
+    const policyMessage = document.querySelector("#policy-message");
+    const policyIDFilter = document.querySelector("#policy-id-filter");
+    const policyEffectFilter = document.querySelector("#policy-effect-filter");
+    const policyAppFilter = document.querySelector("#policy-app-filter");
+    const policyModelFilter = document.querySelector("#policy-model-filter");
+    const policyRequestTypeFilter = document.querySelector("#policy-request-type-filter");
+    const policyProviderClassFilter = document.querySelector("#policy-provider-class-filter");
+    const policyDataLabelFilter = document.querySelector("#policy-data-label-filter");
+    const policyDryAppID = document.querySelector("#policy-dry-app-id");
+    const policyDryRequestType = document.querySelector("#policy-dry-request-type");
+    const policyDryModel = document.querySelector("#policy-dry-model");
+    const policyDryProviderClass = document.querySelector("#policy-dry-provider-class");
+    const policyDryDataLabels = document.querySelector("#policy-dry-data-labels");
+    const policyDryResult = document.querySelector("#policy-dry-result");
+    const routingDryAppID = document.querySelector("#routing-dry-app-id");
+    const routingDryRequestType = document.querySelector("#routing-dry-request-type");
+    const routingDryModel = document.querySelector("#routing-dry-model");
+    const routingDryDataLabels = document.querySelector("#routing-dry-data-labels");
+    const configReloadResult = document.querySelector("#config-reload-result");
+    const issueRows = document.querySelector("#issue-rows");
+    const issueMessage = document.querySelector("#issue-message");
     const mcpCatalog = document.querySelector("#mcp-catalog");
     const mcpRows = document.querySelector("#mcp-rows");
     const mcpServerFilter = document.querySelector("#mcp-server-filter");
@@ -548,6 +838,7 @@ const consoleHTML = `<!doctype html>
     let auditPage = 1;
     const auditPageSize = 8;
     let allTools = [];
+    let issueTools = [];
     let toolTotal = 0;
     let toolPage = 1;
     const toolPageSize = 8;
@@ -559,9 +850,30 @@ const consoleHTML = `<!doctype html>
     let grantTotal = 0;
     let grantPage = 1;
     const grantPageSize = 8;
+    let allProviders = [];
+    let issueProviders = [];
+    let providerTotal = 0;
+    let providerPage = 1;
+    const providerPageSize = 8;
+    let allModels = [];
+    let issueModels = [];
+    let modelTotal = 0;
+    let modelPage = 1;
+    const modelPageSize = 8;
+    let allPolicies = [];
+    let policyTotal = 0;
+    let policyPage = 1;
+    const policyPageSize = 8;
     let mcpTotal = 0;
     let mcpPage = 1;
     const mcpPageSize = 5;
+    let allMCPServers = [];
+    let issueMCPServers = [];
+    let runtimeData = null;
+    let allIssues = [];
+    let issuePage = 1;
+    const issuePageSize = 8;
+    let selectedTrace = null;
     let lang = localStorage.getItem("gatewayConsoleLang") || "zh";
 
     const i18n = {
@@ -580,6 +892,9 @@ const consoleHTML = `<!doctype html>
         appFilter: "App ID",
         providerFilter: "Provider ID",
         traceFilter: "Trace ID",
+        targetFilter: "Target",
+        metadataKeyFilter: "Metadata key",
+        metadataValueFilter: "Metadata value",
         allActions: "全部动作",
         allResults: "全部结果",
         status: "状态",
@@ -652,6 +967,68 @@ const consoleHTML = `<!doctype html>
         noGrants: "\u6682\u65e0 Grant\u3002",
         loadingApps: "\u6b63\u5728\u52a0\u8f7d\u5e94\u7528\u6388\u6743...",
         noApps: "\u6682\u65e0\u5e94\u7528\u3002",
+        issueSummary: "\u8fd0\u884c\u95ee\u9898\u6c47\u603b",
+        loadingIssues: "\u6b63\u5728\u6c47\u603b\u8fd0\u884c\u95ee\u9898...",
+        noIssues: "\u6682\u65e0\u8fd0\u884c\u95ee\u9898\u3002",
+        severity: "\u7ea7\u522b",
+        source: "\u6765\u6e90",
+        target: "\u76ee\u6807",
+        issue: "\u95ee\u9898",
+        critical: "\u4e25\u91cd",
+        warningLevel: "\u8b66\u544a",
+        infoLevel: "\u63d0\u793a",
+        issueProviderStatus: "Provider \u8fd0\u884c\u72b6\u6001\u4e3a {status}{reason}",
+        issueModelUnavailable: "\u6a21\u578b\u5f53\u524d\u4e0d\u53ef\u7528\uff0cProvider={provider}\uff0c\u72b6\u6001={status}",
+        issueToolDisabled: "\u5de5\u5177\u5df2\u7981\u7528\uff0cScope={scopes}",
+        issueMCPServerDisabled: "MCP Server \u5df2\u7981\u7528\uff0c\u5df2\u542f\u7528\u5de5\u5177 {enabled}/{total}",
+        issueMCPRuntime: "MCP \u8fd0\u884c\u65f6\u72b6\u6001\u4e3a {status}{reason}",
+        issueTraceFailed: "\u6700\u8fd1\u8bf7\u6c42\u5931\u8d25\uff1a{error}",
+        issueAuditProblem: "\u6700\u8fd1\u5ba1\u8ba1\u5f02\u5e38\uff1a{action} / {result}{error}",
+        issueRange: "{range} / {total} | \u7b2c {page} / {pages} \u9875",
+        replayTrace: "\u56de\u586b\u5230\u5feb\u6377\u8bf7\u6c42",
+        copyTraceRequest: "\u590d\u5236\u8bf7\u6c42 JSON",
+        copyTraceCurl: "\u590d\u5236 curl \u8349\u7a3f",
+        replayFilled: "\u5df2\u56de\u586b Trace \u8bf7\u6c42\u8349\u7a3f\uff0c\u672a\u53d1\u9001\u3002",
+        replayUnavailable: "\u8be5 Trace \u6ca1\u6709\u53ef\u56de\u586b\u7684\u8bf7\u6c42\u5feb\u7167\u3002",
+        copied: "\u5df2\u590d\u5236\u5230\u526a\u8d34\u677f\u3002",
+        copyFailed: "\u590d\u5236\u5931\u8d25\uff1a{error}",
+        providerCatalog: "Provider \u76ee\u5f55",
+        modelCatalog: "\u6a21\u578b\u76ee\u5f55",
+        models: "\u6a21\u578b",
+        model: "\u6a21\u578b",
+        modelFilter: "\u6a21\u578b",
+        allClasses: "\u5168\u90e8\u7c7b\u578b",
+        localClass: "\u672c\u5730",
+        cloudClass: "\u4e91\u7aef",
+        allRuntimeStatus: "\u5168\u90e8\u8fd0\u884c\u72b6\u6001",
+        loadingModels: "\u6b63\u5728\u52a0\u8f7d\u6a21\u578b...",
+        noProviders: "\u6682\u65e0 Provider\u3002",
+        noModels: "\u6682\u65e0\u6a21\u578b\u3002",
+        availableOnly: "\u4ec5\u53ef\u7528",
+        allModels: "\u5168\u90e8\u6a21\u578b",
+        policyCatalog: "\u7b56\u7565\u76ee\u5f55",
+        policy: "\u7b56\u7565",
+        policyFilter: "\u7b56\u7565 ID",
+        effect: "\u6548\u679c",
+        allEffects: "\u5168\u90e8\u6548\u679c",
+        effectAllow: "\u5141\u8bb8",
+        effectDeny: "\u62d2\u7edd",
+        effectForceLocal: "\u5f3a\u5236\u672c\u5730",
+        effectDenyCloudSensitive: "\u654f\u611f\u6570\u636e\u7981\u6b62\u4e91\u7aef",
+        requestTypeFilter: "\u8bf7\u6c42\u7c7b\u578b",
+        providerClassFilter: "Provider \u7c7b\u578b",
+        dataLabelFilter: "\u6570\u636e\u6807\u7b7e",
+        loadingPolicies: "\u6b63\u5728\u52a0\u8f7d\u7b56\u7565...",
+        noPolicies: "\u6682\u65e0\u7b56\u7565\u3002",
+        anyScope: "\u5168\u90e8",
+        policyDryRun: "\u7b56\u7565\u8bd5\u7b97",
+        policyDryRunPlaceholder: "\u7b56\u7565\u8bd5\u7b97\u7ed3\u679c\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\u3002",
+        policyDryRunning: "\u7b56\u7565\u8bd5\u7b97\u4e2d...",
+        routingDryRun: "\u8def\u7531\u89e3\u91ca\u8bd5\u7b97",
+        configReload: "\u914d\u7f6e\u91cd\u8f7d",
+        reloadConfig: "\u91cd\u8f7d\u914d\u7f6e",
+        configReloadPlaceholder: "\u914d\u7f6e\u91cd\u8f7d\u7ed3\u679c\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\u3002",
+        configReloading: "\u914d\u7f6e\u91cd\u8f7d\u4e2d...",
         chatAction: "聊天",
         toolInvokeAction: "工具调用",
         adminAction: "管理",
@@ -705,6 +1082,7 @@ const consoleHTML = `<!doctype html>
         resultFailed: "失败",
         actionConfigReload: "配置重载",
         actionPolicyDryRun: "策略试算",
+        actionRoutingExplain: "\u8def\u7531\u89e3\u91ca",
         actionProviderEnabled: "Provider 启停",
         actionProviderProbe: "Provider 探测",
         runtimeHealthy: "健康",
@@ -755,6 +1133,9 @@ const consoleHTML = `<!doctype html>
         appFilter: "App ID",
         providerFilter: "Provider ID",
         traceFilter: "Trace ID",
+        targetFilter: "Target",
+        metadataKeyFilter: "Metadata key",
+        metadataValueFilter: "Metadata value",
         allActions: "All actions",
         allResults: "All results",
         status: "Status",
@@ -827,6 +1208,68 @@ const consoleHTML = `<!doctype html>
         noGrants: "No grants.",
         loadingApps: "Loading apps and grants...",
         noApps: "No apps.",
+        issueSummary: "Runtime Issue Summary",
+        loadingIssues: "Summarizing runtime issues...",
+        noIssues: "No runtime issues.",
+        severity: "Severity",
+        source: "Source",
+        target: "Target",
+        issue: "Issue",
+        critical: "Critical",
+        warningLevel: "Warning",
+        infoLevel: "Info",
+        issueProviderStatus: "Provider runtime status is {status}{reason}",
+        issueModelUnavailable: "Model is unavailable, provider={provider}, status={status}",
+        issueToolDisabled: "Tool is disabled, scopes={scopes}",
+        issueMCPServerDisabled: "MCP server is disabled, enabled tools {enabled}/{total}",
+        issueMCPRuntime: "MCP runtime status is {status}{reason}",
+        issueTraceFailed: "Recent request failed: {error}",
+        issueAuditProblem: "Recent audit problem: {action} / {result}{error}",
+        issueRange: "{range} of {total} | Page {page} / {pages}",
+        replayTrace: "Fill Quick Request",
+        copyTraceRequest: "Copy Request JSON",
+        copyTraceCurl: "Copy curl Draft",
+        replayFilled: "Trace request draft filled, not sent.",
+        replayUnavailable: "This trace has no request snapshot to fill.",
+        copied: "Copied to clipboard.",
+        copyFailed: "Copy failed: {error}",
+        providerCatalog: "Provider Catalog",
+        modelCatalog: "Model Catalog",
+        models: "Models",
+        model: "Model",
+        modelFilter: "Model",
+        allClasses: "All classes",
+        localClass: "Local",
+        cloudClass: "Cloud",
+        allRuntimeStatus: "All runtime",
+        loadingModels: "Loading models...",
+        noProviders: "No providers.",
+        noModels: "No models.",
+        availableOnly: "Available only",
+        allModels: "All models",
+        policyCatalog: "Policy Catalog",
+        policy: "Policy",
+        policyFilter: "Policy ID",
+        effect: "Effect",
+        allEffects: "All effects",
+        effectAllow: "Allow",
+        effectDeny: "Deny",
+        effectForceLocal: "Force local",
+        effectDenyCloudSensitive: "Deny cloud sensitive",
+        requestTypeFilter: "Request Type",
+        providerClassFilter: "Provider Class",
+        dataLabelFilter: "Data Label",
+        loadingPolicies: "Loading policies...",
+        noPolicies: "No policies.",
+        anyScope: "Any",
+        policyDryRun: "Policy Dry-run",
+        policyDryRunPlaceholder: "Policy dry-run result will appear here.",
+        policyDryRunning: "Running policy dry-run...",
+        routingDryRun: "Routing Explain",
+        configReload: "Config Reload",
+        reloadConfig: "Reload Config",
+        configReloadPlaceholder: "Config reload result will appear here.",
+        configReloading: "Reloading config...",
         chatAction: "Chat",
         toolInvokeAction: "Tool Invoke",
         adminAction: "Admin",
@@ -880,6 +1323,7 @@ const consoleHTML = `<!doctype html>
         resultFailed: "failed",
         actionConfigReload: "config reload",
         actionPolicyDryRun: "policy dry-run",
+        actionRoutingExplain: "routing explain",
         actionProviderEnabled: "provider enabled",
         actionProviderProbe: "provider probe",
         runtimeHealthy: "healthy",
@@ -918,6 +1362,7 @@ const consoleHTML = `<!doctype html>
     };
 
     document.querySelector("#refresh").addEventListener("click", loadAll);
+    document.querySelector("#issue-refresh").addEventListener("click", loadAll);
     document.querySelector("#audit-refresh").addEventListener("click", loadAudit);
     document.querySelector("#trace-filter-apply").addEventListener("click", () => { tracePage = 1; loadTraces(); });
     document.querySelector("#audit-filter-apply").addEventListener("click", () => { auditPage = 1; loadAudit(); });
@@ -938,6 +1383,18 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#grant-export").addEventListener("click", exportGrants);
     document.querySelector("#grant-refresh").addEventListener("click", loadGrants);
     document.querySelector("#grant-filter-apply").addEventListener("click", () => { grantPage = 1; loadGrants(); });
+    document.querySelector("#provider-export").addEventListener("click", exportProviderCatalog);
+    document.querySelector("#provider-refresh").addEventListener("click", loadProviderCatalog);
+    document.querySelector("#provider-filter-apply").addEventListener("click", () => { providerPage = 1; loadProviderCatalog(); });
+    document.querySelector("#model-export").addEventListener("click", exportModelCatalog);
+    document.querySelector("#model-refresh").addEventListener("click", loadModelCatalog);
+    document.querySelector("#model-filter-apply").addEventListener("click", () => { modelPage = 1; loadModelCatalog(); });
+    document.querySelector("#policy-export").addEventListener("click", exportPolicyCatalog);
+    document.querySelector("#policy-refresh").addEventListener("click", loadPolicyCatalog);
+    document.querySelector("#policy-filter-apply").addEventListener("click", () => { policyPage = 1; loadPolicyCatalog(); });
+    document.querySelector("#policy-dry-run").addEventListener("click", policyDryRun);
+    document.querySelector("#routing-dry-run").addEventListener("click", routingDryRun);
+    document.querySelector("#config-reload").addEventListener("click", configReload);
     toolSelect.addEventListener("change", renderSelectedTool);
     document.querySelector("#mcp-filter-apply").addEventListener("click", () => { mcpPage = 1; loadMCPCatalog(); });
     document.querySelector("#mcp-export").addEventListener("click", exportMCPCatalog);
@@ -952,6 +1409,14 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#app-next").addEventListener("click", () => { appPage += 1; loadApps(); });
     document.querySelector("#grant-prev").addEventListener("click", () => { grantPage = Math.max(1, grantPage - 1); loadGrants(); });
     document.querySelector("#grant-next").addEventListener("click", () => { grantPage += 1; loadGrants(); });
+    document.querySelector("#provider-prev").addEventListener("click", () => { providerPage = Math.max(1, providerPage - 1); loadProviderCatalog(); });
+    document.querySelector("#provider-next").addEventListener("click", () => { providerPage += 1; loadProviderCatalog(); });
+    document.querySelector("#model-prev").addEventListener("click", () => { modelPage = Math.max(1, modelPage - 1); loadModelCatalog(); });
+    document.querySelector("#model-next").addEventListener("click", () => { modelPage += 1; loadModelCatalog(); });
+    document.querySelector("#policy-prev").addEventListener("click", () => { policyPage = Math.max(1, policyPage - 1); loadPolicyCatalog(); });
+    document.querySelector("#policy-next").addEventListener("click", () => { policyPage += 1; loadPolicyCatalog(); });
+    document.querySelector("#issue-prev").addEventListener("click", () => { issuePage = Math.max(1, issuePage - 1); renderIssues(); });
+    document.querySelector("#issue-next").addEventListener("click", () => { issuePage += 1; renderIssues(); });
     document.querySelector("#mcp-prev").addEventListener("click", () => { mcpPage = Math.max(1, mcpPage - 1); loadMCPCatalog(); });
     document.querySelector("#mcp-next").addEventListener("click", () => { mcpPage += 1; loadMCPCatalog(); });
     statusFilter.addEventListener("change", () => { tracePage = 1; loadTraces(); });
@@ -979,6 +1444,10 @@ const consoleHTML = `<!doctype html>
       renderTraces();
       renderAudit();
       renderTools();
+      renderProviderCatalog();
+      renderModelCatalog();
+      renderPolicyCatalog();
+      renderIssues();
     }
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]));
@@ -1001,6 +1470,7 @@ const consoleHTML = `<!doctype html>
       return ({
         "config.reload": t("actionConfigReload"),
         "policy.dry_run": t("actionPolicyDryRun"),
+        "routing.explain": t("actionRoutingExplain"),
         "provider.enabled": t("actionProviderEnabled"),
         "provider.probe": t("actionProviderProbe"),
         "tool.invoke": t("tools")
@@ -1021,7 +1491,7 @@ const consoleHTML = `<!doctype html>
       })[value] || value || "";
     }
     async function loadAll() {
-      await Promise.all([loadTraces(), loadRuntimeHealth(), loadProviders(), loadModels(), loadAudit(), loadApps(), loadGrants(), loadTools(), loadMCPCatalog()]);
+      await Promise.all([loadTraces(), loadRuntimeHealth(), loadProviders(), loadModels(), loadProviderCatalog(), loadModelCatalog(), loadPolicyCatalog(), loadAudit(), loadApps(), loadGrants(), loadTools(), loadMCPCatalog()]);
     }
     function traceQuery(limit = tracePageSize, offset = (tracePage - 1) * tracePageSize) {
       const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
@@ -1051,6 +1521,7 @@ const consoleHTML = `<!doctype html>
       document.querySelector("#m-failed").textContent = traceStats.failed;
       document.querySelector("#m-fallbacks").textContent = traceStats.fallbacks;
       renderTraces();
+      syncIssues();
     }
     function downloadURL(url, filename = "") {
       const link = document.createElement("a");
@@ -1099,15 +1570,114 @@ const consoleHTML = `<!doctype html>
       const end = Math.min(total, start + size - 1);
       return { start, end, label: start + "-" + end };
     }
+    function syncIssues(resetPage = false) {
+      allIssues = buildIssues();
+      if (resetPage) issuePage = 1;
+      renderIssues();
+    }
+    function buildIssues() {
+      const issues = [];
+      const now = new Date().toISOString();
+      const addIssue = (severity, source, target, message, createdAt = "") => {
+        issues.push({ severity, source, target, message, created_at: createdAt || now });
+      };
+      if (runtimeData && runtimeData.mcp_runtime) {
+        const mcp = runtimeData.mcp_runtime;
+        if (["degraded", "unavailable", "not_configured"].includes(mcp.status)) {
+          addIssue(mcp.status === "unavailable" ? "critical" : "warning", "mcp_runtime", mcp.mode || "-", t("issueMCPRuntime", {
+            status: labelRuntime(mcp.status),
+            reason: mcp.reason ? " / " + mcp.reason : ""
+          }));
+        }
+      }
+      issueProviders.forEach(item => {
+        const status = item.runtime_status || (item.configured_healthy ? "healthy" : "unhealthy");
+        if (["unhealthy", "degraded", "disabled"].includes(status) || item.enabled === false) {
+          addIssue(status === "unhealthy" ? "critical" : "warning", "provider", item.id, t("issueProviderStatus", {
+            status: labelRuntime(status || "disabled"),
+            reason: item.degraded_reason ? " / " + item.degraded_reason : ""
+          }), item.updated_at);
+        }
+      });
+      issueModels.forEach(item => {
+        if (!item.available) {
+          addIssue("warning", "model", item.model, t("issueModelUnavailable", {
+            provider: item.provider_id || "-",
+            status: labelRuntime(item.runtime_status || "unavailable")
+          }));
+        }
+      });
+      issueTools.forEach(item => {
+        if (!item.enabled) {
+          addIssue("info", "tool", item.id, t("issueToolDisabled", {
+            scopes: (item.scopes || []).join(", ") || "-"
+          }));
+        }
+      });
+      issueMCPServers.forEach(server => {
+        if (!server.enabled) {
+          addIssue("info", "mcp_server", server.id, t("issueMCPServerDisabled", {
+            enabled: server.enabled_tools || 0,
+            total: server.tool_count || 0
+          }));
+        }
+      });
+      allTraces.filter(item => item.status === "failed").forEach(item => {
+        addIssue("critical", "trace", item.trace_id, t("issueTraceFailed", { error: item.error || "-" }), item.started_at);
+      });
+      allAuditEvents.filter(item => item.result === "denied" || item.result === "failed").forEach(item => {
+        addIssue(item.result === "failed" ? "critical" : "warning", "audit", item.target || item.trace_id || "-", t("issueAuditProblem", {
+          action: labelAction(item.action),
+          result: labelResult(item.result),
+          error: item.error ? " / " + item.error : ""
+        }), item.created_at);
+      });
+      const severityRank = { critical: 0, warning: 1, info: 2 };
+      return issues.sort((a, b) => {
+        const severityDiff = (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9);
+        if (severityDiff !== 0) return severityDiff;
+        return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+      });
+    }
+    function labelSeverity(value) {
+      return ({ critical: t("critical"), warning: t("warningLevel"), info: t("infoLevel") })[value] || value || "";
+    }
+    function renderIssues() {
+      const total = allIssues.length;
+      const totalPages = pageCount(total, issuePageSize);
+      issuePage = clampPage(issuePage, totalPages);
+      const range = pageRange(total, issuePage, issuePageSize);
+      document.querySelector("#issue-page-summary").textContent = t("page", { page: issuePage, total: totalPages });
+      document.querySelector("#issue-range-summary").textContent = t("issueRange", { range: range.label, total, page: issuePage, pages: totalPages });
+      document.querySelector("#issue-prev").disabled = issuePage <= 1;
+      document.querySelector("#issue-next").disabled = issuePage >= totalPages;
+      issueMessage.textContent = total ? "" : t("noIssues");
+      const pageItems = allIssues.slice((issuePage - 1) * issuePageSize, issuePage * issuePageSize);
+      issueRows.innerHTML = pageItems.map(item =>
+        "<tr>" +
+          "<td><span class=\"status " + esc(item.severity === "critical" ? "failed" : item.severity) + "\">" + esc(labelSeverity(item.severity)) + "</span></td>" +
+          "<td>" + esc(item.source) + "</td>" +
+          "<td title=\"" + esc(item.target || "-") + "\">" + esc(item.target || "-") + "</td>" +
+          "<td title=\"" + esc(item.message) + "\">" + esc(item.message) + "</td>" +
+          "<td>" + esc(time(item.created_at)) + "</td>" +
+        "</tr>"
+      ).join("");
+      if (!pageItems.length) {
+        issueRows.innerHTML = "<tr><td colspan=\"5\" class=\"muted\">" + t("noIssues") + "</td></tr>";
+      }
+    }
     async function loadRuntimeHealth() {
       runtimeHealth.textContent = t("loadingRuntime");
       try {
         const res = await fetch("/gateway/v1/runtime/health");
         const data = await res.json();
         if (!res.ok) {
+          runtimeData = null;
           runtimeHealth.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
+          syncIssues();
           return;
         }
+        runtimeData = data;
         runtimeHealth.innerHTML =
           "<div class=\"kv\">" +
             "<div class=\"k\">" + t("status") + "</div><div><span class=\"status " + esc(data.status) + "\">" + esc(labelRuntime(data.status)) + "</span></div>" +
@@ -1125,8 +1695,10 @@ const consoleHTML = `<!doctype html>
             "<div class=\"k\">" + t("mcpRuntime") + "</div><div>" + renderComponentHealth(data.mcp_runtime || {}) + "</div>" +
           "</div>";
       } catch (err) {
+        runtimeData = null;
         runtimeHealth.textContent = t("failedPrefix") + err.message;
       }
+      syncIssues();
     }
     function renderComponentHealth(component) {
       const countText = component.server_count !== undefined
@@ -1178,24 +1750,45 @@ const consoleHTML = `<!doctype html>
         query.set("limit", String(mcpPageSize));
         query.set("offset", String((mcpPage - 1) * mcpPageSize));
         const suffix = query.toString() ? "?" + query.toString() : "";
-        const res = await fetch("/gateway/v1/mcp/servers" + suffix);
+        const issueQuery = mcpCatalogQuery();
+        issueQuery.set("limit", "500");
+        issueQuery.set("offset", "0");
+        const issueSuffix = issueQuery.toString() ? "?" + issueQuery.toString() : "";
+        const [res, issueRes] = await Promise.all([
+          fetch("/gateway/v1/mcp/servers" + suffix),
+          fetch("/gateway/v1/mcp/servers" + issueSuffix)
+        ]);
         const data = await res.json();
+        const issueData = await issueRes.json();
         if (!res.ok) {
+          allMCPServers = [];
+          issueMCPServers = [];
+          mcpTotal = 0;
           mcpCatalog.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
+          renderMCPServers([]);
+          syncIssues();
           return;
         }
+        issueMCPServers = issueRes.ok ? (issueData.servers || []) : [];
         const servers = data.servers || [];
+        allMCPServers = servers;
         mcpTotal = data.total || servers.length;
         if (!servers.length) {
           mcpCatalog.textContent = t("mcpMode") + ": " + (data.mode || "-") + " / " + t("noMCPServers");
           renderMCPServers([]);
+          syncIssues();
           return;
         }
         mcpCatalog.textContent = t("mcpMode") + ": " + (data.mode || "-") + " / " + (data.enabled ? t("enabled") : t("disabled"));
         renderMCPServers(servers);
+        syncIssues();
       } catch (err) {
+        allMCPServers = [];
+        issueMCPServers = [];
+        mcpTotal = 0;
         mcpCatalog.textContent = t("failedPrefix") + err.message;
         renderMCPServers([]);
+        syncIssues();
       }
     }
     function mcpCatalogQuery() {
@@ -1240,25 +1833,37 @@ const consoleHTML = `<!doctype html>
         const query = toolCatalogQuery();
         query.set("limit", String(toolPageSize));
         query.set("offset", String((toolPage - 1) * toolPageSize));
-        const res = await fetch("/gateway/v1/tools?" + query.toString());
+        const issueQuery = toolCatalogQuery();
+        issueQuery.set("limit", "500");
+        issueQuery.set("offset", "0");
+        const [res, issueRes] = await Promise.all([
+          fetch("/gateway/v1/tools?" + query.toString()),
+          fetch("/gateway/v1/tools?" + issueQuery.toString())
+        ]);
         const data = await res.json();
+        const issueData = await issueRes.json();
         if (!res.ok) {
           allTools = [];
+          issueTools = [];
           toolTotal = 0;
           toolSelect.innerHTML = "";
           toolMeta.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
           renderTools();
+          syncIssues();
           return;
         }
         allTools = data.tools || [];
+        issueTools = issueRes.ok ? (issueData.tools || []) : [];
         toolTotal = data.total || allTools.length;
         renderTools();
       } catch (err) {
         allTools = [];
+        issueTools = [];
         toolTotal = 0;
         toolSelect.innerHTML = "";
         toolMeta.textContent = t("failedPrefix") + err.message;
         renderTools();
+        syncIssues();
       }
     }
     function toolCatalogQuery() {
@@ -1296,6 +1901,7 @@ const consoleHTML = `<!doctype html>
         toolSelect.innerHTML = "";
         toolMeta.textContent = t("noTools");
         document.querySelector("#tool-invoke").disabled = true;
+        syncIssues();
         return;
       }
       const selected = toolSelect.value || allTools[0].id;
@@ -1304,6 +1910,7 @@ const consoleHTML = `<!doctype html>
       ).join("");
       document.querySelector("#tool-invoke").disabled = false;
       renderSelectedTool();
+      syncIssues();
     }
     function renderSelectedTool() {
       const tool = allTools.find(item => item.id === toolSelect.value);
@@ -1329,6 +1936,7 @@ const consoleHTML = `<!doctype html>
         appTotal = 0;
         appMessage.textContent = t("adminTokenRequired");
         renderApps();
+        syncIssues();
         return;
       }
       appMessage.textContent = t("loadingApps");
@@ -1345,17 +1953,20 @@ const consoleHTML = `<!doctype html>
           appTotal = 0;
           appMessage.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
           renderApps();
+          syncIssues();
           return;
         }
         allApps = data.apps || [];
         appTotal = data.total || allApps.length;
         appMessage.textContent = appTotal ? "" : t("noApps");
         renderApps();
+        syncIssues();
       } catch (err) {
         allApps = [];
         appTotal = 0;
         appMessage.textContent = t("failedPrefix") + err.message;
         renderApps();
+        syncIssues();
       }
     }
     function appCatalogQuery() {
@@ -1386,6 +1997,279 @@ const consoleHTML = `<!doctype html>
     function exportGrants() {
       const query = grantCatalogQuery();
       exportAdminJSONL("/gateway/v1/grants/export", query, "grants.jsonl", grantMessage);
+    }
+    async function loadProviderCatalog() {
+      providerMessage.textContent = t("loadingProviders");
+      try {
+        const query = providerCatalogQuery();
+        query.set("limit", String(providerPageSize));
+        query.set("offset", String((providerPage - 1) * providerPageSize));
+        const issueQuery = new URLSearchParams({ limit: "500", offset: "0" });
+        const [res, issueRes] = await Promise.all([
+          fetch("/gateway/v1/providers?" + query.toString()),
+          fetch("/gateway/v1/providers?" + issueQuery.toString())
+        ]);
+        const data = await res.json();
+        const issueData = await issueRes.json();
+        if (!res.ok) {
+          allProviders = [];
+          issueProviders = [];
+          providerTotal = 0;
+          providerMessage.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
+          renderProviderCatalog();
+          syncIssues();
+          return;
+        }
+        allProviders = data.providers || [];
+        issueProviders = issueRes.ok ? (issueData.providers || []) : [];
+        providerTotal = data.total || allProviders.length;
+        providerMessage.textContent = providerTotal ? "" : t("noProviders");
+        renderProviderCatalog();
+        syncIssues();
+      } catch (err) {
+        allProviders = [];
+        issueProviders = [];
+        providerTotal = 0;
+        providerMessage.textContent = t("failedPrefix") + err.message;
+        renderProviderCatalog();
+        syncIssues();
+      }
+    }
+    function providerCatalogQuery() {
+      const query = new URLSearchParams();
+      if (providerIDFilter.value.trim()) query.set("provider_id", providerIDFilter.value.trim());
+      if (providerClassFilter.value) query.set("class", providerClassFilter.value);
+      if (providerEnabledFilter.value) query.set("enabled", providerEnabledFilter.value);
+      if (providerRuntimeFilter.value) query.set("runtime_status", providerRuntimeFilter.value);
+      return query;
+    }
+    function renderProviderCatalog() {
+      const totalPages = pageCount(providerTotal, providerPageSize);
+      providerPage = clampPage(providerPage, totalPages);
+      const range = pageRange(providerTotal, providerPage, providerPageSize);
+      document.querySelector("#provider-page-summary").textContent = t("page", { page: providerPage, total: totalPages });
+      document.querySelector("#provider-range-summary").textContent = t("catalogRange", { range: range.label, total: providerTotal });
+      document.querySelector("#provider-prev").disabled = providerPage <= 1;
+      document.querySelector("#provider-next").disabled = providerPage >= totalPages;
+      providerRows.innerHTML = allProviders.map(item => {
+        const runtimeStatus = item.runtime_status || (item.configured_healthy ? "healthy" : "unhealthy");
+        return "<tr>" +
+          "<td><strong>" + esc(item.name || item.id) + "</strong><div class=\"muted\">" + esc(item.id) + "</div></td>" +
+          "<td>" + esc(item.class || "-") + "</td>" +
+          "<td>" + esc(item.adapter || "mock") + "</td>" +
+          "<td title=\"" + esc((item.models || []).join(", ")) + "\">" + esc((item.models || []).join(", ") || "-") + "</td>" +
+          "<td><span class=\"status " + esc(runtimeStatus) + "\">" + esc(labelRuntime(runtimeStatus)) + "</span><div class=\"muted\">" + (item.enabled === false ? t("disabled") : t("enabled")) + "</div></td>" +
+          "<td><div class=\"provider-actions\">" +
+            "<button class=\"secondary\" data-provider=\"" + esc(item.id) + "\" data-action=\"probe\">" + t("probe") + "</button>" +
+            "<button class=\"secondary\" data-provider=\"" + esc(item.id) + "\" data-action=\"toggle\" data-enabled=\"" + (item.enabled === false ? "true" : "false") + "\">" + (item.enabled === false ? t("enable") : t("disable")) + "</button>" +
+          "</div></td>" +
+        "</tr>";
+      }).join("");
+      providerRows.querySelectorAll("[data-action='probe']").forEach(button => button.addEventListener("click", () => probeProvider(button.dataset.provider)));
+      providerRows.querySelectorAll("[data-action='toggle']").forEach(button => button.addEventListener("click", () => setProviderEnabled(button.dataset.provider, button.dataset.enabled === "true")));
+      if (!allProviders.length) {
+        providerRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + t("noProviders") + "</td></tr>";
+      }
+    }
+    function exportProviderCatalog() {
+      const query = providerCatalogQuery();
+      const suffix = query.toString() ? "?" + query.toString() : "";
+      downloadURL("/gateway/v1/providers/export" + suffix, "providers.jsonl");
+    }
+    async function loadModelCatalog() {
+      modelMessage.textContent = t("loadingModels");
+      try {
+        const query = modelCatalogQuery();
+        query.set("limit", String(modelPageSize));
+        query.set("offset", String((modelPage - 1) * modelPageSize));
+        const issueQuery = new URLSearchParams({ limit: "500", offset: "0", all: "true" });
+        const [res, issueRes] = await Promise.all([
+          fetch("/gateway/v1/models?" + query.toString()),
+          fetch("/gateway/v1/models?" + issueQuery.toString())
+        ]);
+        const data = await res.json();
+        const issueData = await issueRes.json();
+        if (!res.ok) {
+          allModels = [];
+          issueModels = [];
+          modelTotal = 0;
+          modelMessage.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
+          renderModelCatalog();
+          syncIssues();
+          return;
+        }
+        allModels = data.models || [];
+        issueModels = issueRes.ok ? (issueData.models || []) : [];
+        modelTotal = data.total || allModels.length;
+        modelMessage.textContent = modelTotal ? "" : t("noModels");
+        renderModelCatalog();
+        syncIssues();
+      } catch (err) {
+        allModels = [];
+        issueModels = [];
+        modelTotal = 0;
+        modelMessage.textContent = t("failedPrefix") + err.message;
+        renderModelCatalog();
+        syncIssues();
+      }
+    }
+    function modelCatalogQuery() {
+      const query = new URLSearchParams();
+      if (modelNameFilter.value.trim()) query.set("model", modelNameFilter.value.trim());
+      if (modelProviderFilter.value.trim()) query.set("provider_id", modelProviderFilter.value.trim());
+      if (modelClassFilter.value) query.set("provider_class", modelClassFilter.value);
+      if (modelAvailableFilter.value === "all") query.set("all", "true");
+      if (modelAvailableFilter.value === "true" || modelAvailableFilter.value === "false") {
+        query.set("all", "true");
+        query.set("available", modelAvailableFilter.value);
+      }
+      return query;
+    }
+    function renderModelCatalog() {
+      const totalPages = pageCount(modelTotal, modelPageSize);
+      modelPage = clampPage(modelPage, totalPages);
+      const range = pageRange(modelTotal, modelPage, modelPageSize);
+      document.querySelector("#model-page-summary").textContent = t("page", { page: modelPage, total: totalPages });
+      document.querySelector("#model-range-summary").textContent = t("catalogRange", { range: range.label, total: modelTotal });
+      document.querySelector("#model-prev").disabled = modelPage <= 1;
+      document.querySelector("#model-next").disabled = modelPage >= totalPages;
+      modelRows.innerHTML = allModels.map(item =>
+        "<tr>" +
+          "<td class=\"trace-id\">" + esc(item.model) + "</td>" +
+          "<td>" + esc(item.provider_id) + "</td>" +
+          "<td>" + esc(item.provider_class || "-") + "</td>" +
+          "<td><span class=\"status " + esc(item.runtime_status || (item.available ? "healthy" : "unhealthy")) + "\">" + esc(labelRuntime(item.runtime_status) || "-") + "</span><div class=\"muted\">" + (item.enabled ? t("enabled") : t("disabled")) + "</div></td>" +
+          "<td><span class=\"status " + (item.available ? "healthy" : "unhealthy") + "\">" + (item.available ? t("available") : t("unavailable")) + "</span></td>" +
+        "</tr>"
+      ).join("");
+      if (!allModels.length) {
+        modelRows.innerHTML = "<tr><td colspan=\"5\" class=\"muted\">" + t("noModels") + "</td></tr>";
+      }
+    }
+    function exportModelCatalog() {
+      const query = modelCatalogQuery();
+      const suffix = query.toString() ? "?" + query.toString() : "";
+      downloadURL("/gateway/v1/models/export" + suffix, "models.jsonl");
+    }
+    async function loadPolicyCatalog() {
+      const token = adminToken();
+      if (!token) {
+        allPolicies = [];
+        policyTotal = 0;
+        policyMessage.textContent = t("adminTokenRequired");
+        renderPolicyCatalog();
+        syncIssues();
+        return;
+      }
+      policyMessage.textContent = t("loadingPolicies");
+      try {
+        const query = policyCatalogQuery();
+        query.set("limit", String(policyPageSize));
+        query.set("offset", String((policyPage - 1) * policyPageSize));
+        const res = await fetch("/gateway/v1/policies?" + query.toString(), {
+          headers: { "Authorization": "Bearer " + token }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          allPolicies = [];
+          policyTotal = 0;
+          policyMessage.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
+          renderPolicyCatalog();
+          syncIssues();
+          return;
+        }
+        allPolicies = data.policies || [];
+        policyTotal = data.total || allPolicies.length;
+        policyMessage.textContent = policyTotal ? "" : t("noPolicies");
+        renderPolicyCatalog();
+        syncIssues();
+      } catch (err) {
+        allPolicies = [];
+        policyTotal = 0;
+        policyMessage.textContent = t("failedPrefix") + err.message;
+        renderPolicyCatalog();
+        syncIssues();
+      }
+    }
+    function policyCatalogQuery() {
+      const query = new URLSearchParams();
+      if (policyIDFilter.value.trim()) query.set("policy_id", policyIDFilter.value.trim());
+      if (policyEffectFilter.value) query.set("effect", policyEffectFilter.value);
+      if (policyAppFilter.value.trim()) query.set("app_id", policyAppFilter.value.trim());
+      if (policyModelFilter.value.trim()) query.set("model", policyModelFilter.value.trim());
+      if (policyRequestTypeFilter.value.trim()) query.set("request_type", policyRequestTypeFilter.value.trim());
+      if (policyProviderClassFilter.value.trim()) query.set("provider_class", policyProviderClassFilter.value.trim());
+      if (policyDataLabelFilter.value.trim()) query.set("data_label", policyDataLabelFilter.value.trim());
+      return query;
+    }
+    function renderPolicyCatalog() {
+      const totalPages = pageCount(policyTotal, policyPageSize);
+      policyPage = clampPage(policyPage, totalPages);
+      const range = pageRange(policyTotal, policyPage, policyPageSize);
+      document.querySelector("#policy-page-summary").textContent = t("page", { page: policyPage, total: totalPages });
+      document.querySelector("#policy-range-summary").textContent = t("catalogRange", { range: range.label, total: policyTotal });
+      document.querySelector("#policy-prev").disabled = policyPage <= 1;
+      document.querySelector("#policy-next").disabled = policyPage >= totalPages;
+      policyRows.innerHTML = allPolicies.map(item => {
+        const scope = [
+          "app: " + labelList(item.app_ids),
+          "request: " + labelList(item.request_types),
+          "model: " + labelList(item.models),
+          "provider: " + labelList(item.provider_classes),
+          "label: " + labelList(item.data_labels)
+        ].join(" / ");
+        return "<tr>" +
+          "<td class=\"trace-id\">" + esc(item.id) + "</td>" +
+          "<td><span class=\"status " + esc(item.effect || "healthy") + "\">" + esc(labelPolicyEffect(item.effect)) + "</span></td>" +
+          "<td title=\"" + esc(scope) + "\">" + esc(scope) + "</td>" +
+          "<td title=\"" + esc(item.reason || "") + "\">" + esc(item.reason || "") + "</td>" +
+        "</tr>";
+      }).join("");
+      if (!allPolicies.length) {
+        policyRows.innerHTML = "<tr><td colspan=\"4\" class=\"muted\">" + t("noPolicies") + "</td></tr>";
+      }
+    }
+    function labelList(values) {
+      return (values && values.length) ? values.join(", ") : t("anyScope");
+    }
+    function labelPolicyEffect(value) {
+      return ({
+        allow: t("effectAllow"),
+        deny: t("effectDeny"),
+        force_local: t("effectForceLocal"),
+        deny_cloud_for_sensitive: t("effectDenyCloudSensitive")
+      })[value] || value || "";
+    }
+    function exportPolicyCatalog() {
+      const query = policyCatalogQuery();
+      exportAdminJSONL("/gateway/v1/policies/export", query, "policies.jsonl", policyMessage);
+    }
+    async function policyDryRun() {
+      policyDryResult.textContent = t("policyDryRunning");
+      const labels = policyDryDataLabels.value.split(",").map(item => item.trim()).filter(Boolean);
+      const body = {
+        app_id: policyDryAppID.value.trim(),
+        request_type: policyDryRequestType.value,
+        model: policyDryModel.value.trim(),
+        provider_class: policyDryProviderClass.value,
+        data_labels: labels
+      };
+      try {
+        const res = await fetch("/gateway/v1/policy/dry-run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          policyDryResult.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
+          return;
+        }
+        policyDryResult.textContent = JSON.stringify(data, null, 2);
+        loadAudit();
+      } catch (err) {
+        policyDryResult.textContent = t("failedPrefix") + err.message;
+      }
     }
     async function loadGrants() {
       const token = adminToken();
@@ -1502,7 +2386,7 @@ const consoleHTML = `<!doctype html>
       auditMessage.textContent = t("probingPrefix") + providerId + "...";
       try {
         await providerRequest("/gateway/v1/providers/" + encodeURIComponent(providerId) + "/probe", { method: "POST" });
-        await Promise.all([loadProviders(), loadModels(), loadAudit()]);
+        await Promise.all([loadProviders(), loadModels(), loadProviderCatalog(), loadModelCatalog(), loadAudit()]);
       } catch (err) {
         auditMessage.textContent = t("failedPrefix") + err.message;
       }
@@ -1515,14 +2399,25 @@ const consoleHTML = `<!doctype html>
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ enabled })
         });
-        await Promise.all([loadProviders(), loadModels(), loadAudit()]);
+        await Promise.all([loadProviders(), loadModels(), loadProviderCatalog(), loadModelCatalog(), loadAudit()]);
       } catch (err) {
         auditMessage.textContent = t("failedPrefix") + err.message;
+      }
+    }
+    async function configReload() {
+      configReloadResult.textContent = t("configReloading");
+      try {
+        const data = await providerRequest("/gateway/v1/config/reload", { method: "POST" });
+        configReloadResult.textContent = JSON.stringify(data, null, 2);
+        await loadAll();
+      } catch (err) {
+        configReloadResult.textContent = t("failedPrefix") + err.message;
       }
     }
     async function loadDetail(traceId) {
       const res = await fetch("/gateway/v1/traces/" + encodeURIComponent(traceId));
       const trace = await res.json();
+      selectedTrace = trace;
       detail.innerHTML =
         "<div class=\"kv\">" +
           "<div class=\"k\">" + t("traceId") + "</div><div class=\"trace-id\">" + esc(trace.trace_id) + "</div>" +
@@ -1531,14 +2426,97 @@ const consoleHTML = `<!doctype html>
           "<div class=\"k\">" + t("policyRule") + "</div><div>" + esc(trace.policy && trace.policy.rule_id) + " / " + esc(trace.policy && trace.policy.explanation) + "</div>" +
           "<div class=\"k\">" + t("fallbacks") + "</div><div>" + ((trace.fallbacks || []).length) + "</div>" +
         "</div>" +
+        "<div class=\"actions\" style=\"margin-bottom: 12px;\">" +
+          "<button class=\"secondary\" id=\"trace-fill-quick\" data-i18n=\"replayTrace\">" + t("replayTrace") + "</button>" +
+          "<button class=\"secondary\" id=\"trace-copy-request\" data-i18n=\"copyTraceRequest\">" + t("copyTraceRequest") + "</button>" +
+          "<button class=\"secondary\" id=\"trace-copy-curl\" data-i18n=\"copyTraceCurl\">" + t("copyTraceCurl") + "</button>" +
+        "</div>" +
         "<pre>" + esc(JSON.stringify(trace, null, 2)) + "</pre>";
+      document.querySelector("#trace-fill-quick").addEventListener("click", fillQuickRequestFromTrace);
+      document.querySelector("#trace-copy-request").addEventListener("click", copyTraceRequestJSON);
+      document.querySelector("#trace-copy-curl").addEventListener("click", copyTraceCurlDraft);
+    }
+    function traceRequestBody() {
+      const request = selectedTrace && selectedTrace.request;
+      if (!request || !request.model) return null;
+      const body = {
+        model: request.model,
+        messages: request.messages || []
+      };
+      if (request.metadata && Object.keys(request.metadata).length) body.metadata = request.metadata;
+      if (request.data_labels && request.data_labels.length) body.data_labels = request.data_labels;
+      return body;
+    }
+    function fillQuickRequestFromTrace() {
+      const request = selectedTrace && selectedTrace.request;
+      if (!request || !request.model) {
+        sendResult.textContent = t("replayUnavailable");
+        return;
+      }
+      document.querySelector("#model").value = request.model || selectedTrace.requested_model || "";
+      const userMessage = (request.messages || []).find(item => item.role === "user") || (request.messages || [])[0];
+      if (userMessage) {
+        document.querySelector("#prompt").value = userMessage.content || "";
+      }
+      const metadata = request.metadata || {};
+      const labels = request.data_labels || [];
+      let mode = "success";
+      if (metadata.fail_provider) mode = "fallback";
+      if (labels.includes("sensitive")) mode = "blocked";
+      document.querySelector("#mode").value = mode;
+      routingDryModel.value = request.model || "";
+      routingDryDataLabels.value = labels.join(",");
+      routingDryRequestType.value = selectedTrace.request_type || "chat";
+      sendResult.textContent = t("replayFilled");
+    }
+    async function copyTraceRequestJSON() {
+      const body = traceRequestBody();
+      if (!body) {
+        sendResult.textContent = t("replayUnavailable");
+        return;
+      }
+      await copyText(JSON.stringify(body, null, 2));
+    }
+    async function copyTraceCurlDraft() {
+      const body = traceRequestBody();
+      if (!body) {
+        sendResult.textContent = t("replayUnavailable");
+        return;
+      }
+      const json = JSON.stringify(body, null, 2);
+      const curl = "curl -X POST http://127.0.0.1:8080/v1/chat/completions \\\n" +
+        "  -H \"Authorization: Bearer $GATEWAY_TOKEN\" \\\n" +
+        "  -H \"Content-Type: application/json\" \\\n" +
+        "  --data '" + json.replaceAll("'", "'\\''") + "'";
+      await copyText(curl);
+    }
+    async function copyText(value) {
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(value);
+        } else {
+          const area = document.createElement("textarea");
+          area.value = value;
+          area.style.position = "fixed";
+          area.style.left = "-9999px";
+          document.body.appendChild(area);
+          area.focus();
+          area.select();
+          document.execCommand("copy");
+          area.remove();
+        }
+        sendResult.textContent = t("copied");
+      } catch (err) {
+        sendResult.textContent = t("copyFailed", { error: err.message });
+      }
     }
     async function loadAudit() {
       const token = adminToken();
       if (!token) {
-        auditRows.innerHTML = "";
-        auditMessage.textContent = t("adminTokenRequired");
-        return;
+          auditRows.innerHTML = "";
+          auditMessage.textContent = t("adminTokenRequired");
+          syncIssues();
+          return;
       }
       try {
         auditMessage.textContent = t("loadingAudit");
@@ -1550,15 +2528,18 @@ const consoleHTML = `<!doctype html>
         if (!res.ok) {
           auditRows.innerHTML = "";
           auditMessage.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
+          syncIssues();
           return;
         }
         allAuditEvents = data.events || [];
         auditTotal = data.total || allAuditEvents.length;
         auditMessage.textContent = auditTotal ? "" : t("noAuditEvents");
         renderAudit();
+        syncIssues();
       } catch (err) {
         auditRows.innerHTML = "";
         auditMessage.textContent = t("failedPrefix") + err.message;
+        syncIssues();
       }
     }
     function auditQuery(limit = auditPageSize, offset = (auditPage - 1) * auditPageSize) {
@@ -1567,6 +2548,9 @@ const consoleHTML = `<!doctype html>
       if (auditResultFilter.value) query.set("result", auditResultFilter.value);
       if (auditAppFilter.value.trim()) query.set("app_id", auditAppFilter.value.trim());
       if (auditTraceFilter.value.trim()) query.set("trace_id", auditTraceFilter.value.trim());
+      if (auditTargetFilter.value.trim()) query.set("target", auditTargetFilter.value.trim());
+      if (auditMetadataKeyFilter.value.trim()) query.set("metadata_key", auditMetadataKeyFilter.value.trim());
+      if (auditMetadataValueFilter.value.trim()) query.set("metadata_value", auditMetadataValueFilter.value.trim());
       return query;
     }
     function exportAudit() {
@@ -1690,13 +2674,24 @@ const consoleHTML = `<!doctype html>
       return mode === "blocked" ? ["sensitive"] : [];
     }
     async function explainRouting(mode) {
-      routeExplain.innerHTML = "<p class=\"muted\">" + t("explainLoading") + "</p>";
-      const body = {
+      await runRoutingExplain({
         app_id: "dev-app",
         request_type: "chat",
         model: document.querySelector("#model").value,
         data_labels: requestLabelsForMode(mode)
-      };
+      });
+    }
+    async function routingDryRun() {
+      const labels = routingDryDataLabels.value.split(",").map(item => item.trim()).filter(Boolean);
+      await runRoutingExplain({
+        app_id: routingDryAppID.value.trim(),
+        request_type: routingDryRequestType.value,
+        model: routingDryModel.value.trim(),
+        data_labels: labels
+      });
+    }
+    async function runRoutingExplain(body) {
+      routeExplain.innerHTML = "<p class=\"muted\">" + t("explainLoading") + "</p>";
       try {
         const res = await fetch("/gateway/v1/routing/explain", {
           method: "POST",
@@ -1718,6 +2713,7 @@ const consoleHTML = `<!doctype html>
           renderRouteItems(data.candidates || [], false) +
           "<h2 style=\"margin-top:12px;\">" + t("skipped") + "</h2>" +
           renderRouteItems(data.skipped || [], true);
+        loadAudit();
       } catch (err) {
         routeExplain.textContent = t("failedPrefix") + err.message;
       }
