@@ -530,3 +530,21 @@ curl "http://127.0.0.1:18765/gateway/v1/apps?limit=20&offset=0&grant=tool" `
 - `grant`：只看具备指定 grant 的应用，例如 `chat`、`tool`、`tool:runtime.read` 或 `admin`。
 
 响应包含 `apps`、`total`、`offset`、`limit` 和当前 `filters`。控制台“应用与授权”面板复用同一接口，列表展示 App、Token 提示和 Grants。
+
+## Grant 目录
+
+Grant 目录用于解释每个授权字符串的语义、使用它的应用，以及它关联的工具或 MCP Server。它同样要求 `admin` grant，适合在权限试算之前先确认“这个 grant 到底代表什么能力”。
+
+```powershell
+curl "http://127.0.0.1:18765/gateway/v1/grants?type=tool_scope&limit=20&offset=0" `
+  -H "Authorization: Bearer admin-token"
+```
+
+支持查询参数：
+- `limit` / `offset`：分页查看 Grant 目录。
+- `grant`：只看指定 grant，例如 `tool:runtime.read`。
+- `type`：按类型筛选，支持 `core`、`tool_broad`、`tool_scope`、`admin`。
+- `app_id`：只看某个应用持有的 grant。
+- `tool_id`：只看某个工具需要的 grant。
+
+响应包含 `grants`、`total`、`offset`、`limit` 和当前 `filters`。控制台“Grant 目录”面板会展示授权、类型、使用应用、关联工具和说明。

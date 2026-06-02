@@ -360,6 +360,94 @@ func TestAppsListMasksTokensAndFilters(t *testing.T) {
 	}
 }
 
+func TestGrantsListRequiresAdmin(t *testing.T) {
+	handler, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/grants", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without admin token, got %d", res.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/grants", nil)
+	req.Header.Set("Authorization", "Bearer dev-token")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 with non-admin token, got %d", res.Code)
+	}
+}
+
+func TestGrantsListSummarizesScopesAndFilters(t *testing.T) {
+	path := writeHandlerConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "audit_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [
+	    {"id":"dev-app","token":"dev-token","grants":["chat","tool:runtime.read"]},
+	    {"id":"admin-app","token":"admin-token","grants":["admin"]}
+	  ],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "tools": [{"id":"gateway.runtime_health","name":"Runtime Health","adapter":"runtime-health","read_only":true,"risk_level":"low","scopes":["runtime.read"],"enabled":true}],
+	  "mcp_runtime": {"enabled":true,"mode":"manifest_only","servers":[{"id":"desktop-context","tools":[{"id":"mcp.desktop.list_context","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":true}]}]}
+	}`)
+	store := trace.NewMemoryStore()
+	manager, err := gatewayruntime.NewManager(path, store)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+	handler := NewRuntimeHandler(manager, store).Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/grants?type=tool_scope&limit=10", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Grants []grantView `json:"grants"`
+		Total  int         `json:"total"`
+	}
+	decodeBody(t, res, &body)
+	if body.Total != 2 || len(body.Grants) != 2 {
+		t.Fatalf("expected two tool scope grants, got %+v", body)
+	}
+	runtimeGrant := body.Grants[1]
+	if runtimeGrant.ID != "tool:runtime.read" || runtimeGrant.Type != "tool_scope" || len(runtimeGrant.Tools) != 1 || runtimeGrant.Tools[0] != "gateway.runtime_health" {
+		t.Fatalf("unexpected runtime grant view: %+v", runtimeGrant)
+	}
+	if len(runtimeGrant.Apps) != 1 || runtimeGrant.Apps[0] != "dev-app" {
+		t.Fatalf("expected dev-app to use runtime grant, got %+v", runtimeGrant.Apps)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/grants?tool_id=mcp.desktop.list_context", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	decodeBody(t, res, &body)
+	if body.Total != 1 || len(body.Grants) != 1 || body.Grants[0].ID != "tool:desktop.read" || body.Grants[0].Servers[0] != "desktop-context" {
+		t.Fatalf("unexpected mcp filtered grant body: %+v", body)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/grants?app_id=admin-app", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	decodeBody(t, res, &body)
+	if body.Total != 1 || len(body.Grants) != 1 || body.Grants[0].ID != "admin" {
+		t.Fatalf("unexpected app filtered grant body: %+v", body)
+	}
+}
+
 func TestToolsListHTTP(t *testing.T) {
 	handler, _ := newTestHandler()
 	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/tools", nil)

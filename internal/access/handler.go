@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -75,6 +76,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /gateway/v1/models", h.models)
 	mux.HandleFunc("GET /gateway/v1/runtime/health", h.runtimeHealth)
 	mux.HandleFunc("GET /gateway/v1/apps", h.appsList)
+	mux.HandleFunc("GET /gateway/v1/grants", h.grantsList)
 	mux.HandleFunc("GET /gateway/v1/tools", h.toolsList)
 	mux.HandleFunc("GET /gateway/v1/tools/export", h.toolsExport)
 	mux.HandleFunc("POST /gateway/v1/tools/", h.toolInvoke)
@@ -302,6 +304,15 @@ type appView struct {
 	Grants    []string `json:"grants"`
 }
 
+type grantView struct {
+	ID          string   `json:"id"`
+	Type        string   `json:"type"`
+	Description string   `json:"description"`
+	Apps        []string `json:"apps,omitempty"`
+	Tools       []string `json:"tools,omitempty"`
+	Servers     []string `json:"servers,omitempty"`
+}
+
 func (h *Handler) appsList(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireAdmin(w, r); !ok {
 		return
@@ -363,6 +374,110 @@ func (h *Handler) appViews(r *http.Request) []appView {
 			Grants:    append([]string(nil), app.Grants...),
 		})
 	}
+	return views
+}
+
+func (h *Handler) grantsList(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	limit, ok := intQuery(w, r, "limit", 100)
+	if !ok {
+		return
+	}
+	offset, ok := intQuery(w, r, "offset", 0)
+	if !ok {
+		return
+	}
+	views := h.grantViews(r)
+	total := len(views)
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	pagedGrants := []grantView{}
+	if offset < total {
+		end := offset + limit
+		if end > total {
+			end = total
+		}
+		pagedGrants = views[offset:end]
+	}
+	query := r.URL.Query()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"grants": pagedGrants,
+		"total":  total,
+		"offset": offset,
+		"limit":  limit,
+		"filters": map[string]string{
+			"grant":   query.Get("grant"),
+			"type":    query.Get("type"),
+			"app_id":  query.Get("app_id"),
+			"tool_id": query.Get("tool_id"),
+		},
+	})
+}
+
+func (h *Handler) grantViews(r *http.Request) []grantView {
+	snapshot := h.snapshot()
+	grants := map[string]*grantView{}
+	for _, grant := range []grantView{
+		{ID: "chat", Type: "core", Description: "Allow OpenAI-compatible chat completions."},
+		{ID: "embedding", Type: "core", Description: "Reserved grant for embedding requests."},
+		{ID: "tool", Type: "tool_broad", Description: "Allow invoking any enabled read-only tool."},
+		{ID: "admin", Type: "admin", Description: "Allow management APIs such as audit, config reload, providers, apps and grants."},
+	} {
+		item := grant
+		grants[item.ID] = &item
+	}
+	for _, tool := range snapshot.Config.Tools {
+		for _, scope := range tool.Scopes {
+			view := ensureGrantView(grants, "tool:"+scope, "tool_scope", "Allow invoking tools that require scope "+scope+".")
+			view.Tools = appendUnique(view.Tools, tool.ID)
+		}
+	}
+	if snapshot.Config.MCPRuntime.Enabled {
+		for _, server := range snapshot.Config.MCPRuntime.Servers {
+			for _, tool := range server.Tools {
+				for _, scope := range tool.Scopes {
+					view := ensureGrantView(grants, "tool:"+scope, "tool_scope", "Allow invoking tools that require scope "+scope+".")
+					view.Tools = appendUnique(view.Tools, tool.ID)
+					view.Servers = appendUnique(view.Servers, server.ID)
+				}
+			}
+		}
+	}
+	for _, app := range snapshot.Config.Apps {
+		for _, grant := range app.Grants {
+			view := ensureGrantView(grants, grant, grantType(grant), grantDescription(grant))
+			view.Apps = appendUnique(view.Apps, app.ID)
+		}
+	}
+
+	query := r.URL.Query()
+	grantFilter := query.Get("grant")
+	typeFilter := query.Get("type")
+	appFilter := query.Get("app_id")
+	toolFilter := query.Get("tool_id")
+	views := make([]grantView, 0, len(grants))
+	for _, view := range grants {
+		if grantFilter != "" && view.ID != grantFilter {
+			continue
+		}
+		if typeFilter != "" && view.Type != typeFilter {
+			continue
+		}
+		if appFilter != "" && !containsString(view.Apps, appFilter) {
+			continue
+		}
+		if toolFilter != "" && !containsString(view.Tools, toolFilter) {
+			continue
+		}
+		views = append(views, *view)
+	}
+	sortGrantViews(views)
 	return views
 }
 
@@ -1326,6 +1441,92 @@ func tokenHint(token string) string {
 		return strings.Repeat("*", len(token))
 	}
 	return token[:4] + "..." + token[len(token)-4:]
+}
+
+func ensureGrantView(grants map[string]*grantView, id, grantType, description string) *grantView {
+	if view, ok := grants[id]; ok {
+		return view
+	}
+	view := &grantView{ID: id, Type: grantType, Description: description}
+	grants[id] = view
+	return view
+}
+
+func grantType(grant string) string {
+	if strings.HasPrefix(grant, "tool:") {
+		return "tool_scope"
+	}
+	switch grant {
+	case "tool":
+		return "tool_broad"
+	case "admin":
+		return "admin"
+	default:
+		return "core"
+	}
+}
+
+func grantDescription(grant string) string {
+	switch {
+	case grant == "chat":
+		return "Allow OpenAI-compatible chat completions."
+	case grant == "embedding":
+		return "Reserved grant for embedding requests."
+	case grant == "tool":
+		return "Allow invoking any enabled read-only tool."
+	case grant == "admin":
+		return "Allow management APIs such as audit, config reload, providers, apps and grants."
+	case strings.HasPrefix(grant, "tool:"):
+		scope := strings.TrimPrefix(grant, "tool:")
+		return "Allow invoking tools that require scope " + scope + "."
+	default:
+		return "Configured application grant."
+	}
+}
+
+func appendUnique(values []string, value string) []string {
+	if containsString(values, value) {
+		return values
+	}
+	return append(values, value)
+}
+
+func containsString(values []string, value string) bool {
+	for _, item := range values {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
+func sortGrantViews(views []grantView) {
+	sort.Slice(views, func(i, j int) bool {
+		if views[i].Type != views[j].Type {
+			return grantTypeRank(views[i].Type) < grantTypeRank(views[j].Type)
+		}
+		return views[i].ID < views[j].ID
+	})
+	for i := range views {
+		sort.Strings(views[i].Apps)
+		sort.Strings(views[i].Tools)
+		sort.Strings(views[i].Servers)
+	}
+}
+
+func grantTypeRank(value string) int {
+	switch value {
+	case "core":
+		return 0
+	case "tool_broad":
+		return 1
+	case "tool_scope":
+		return 2
+	case "admin":
+		return 3
+	default:
+		return 4
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
