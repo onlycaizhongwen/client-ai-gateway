@@ -140,11 +140,14 @@ const consoleHTML = `<!doctype html>
               <div class="muted" id="summary">正在加载追踪...</div>
             </div>
             <div class="actions">
+              <input id="trace-app-filter" data-i18n-placeholder="appFilter" placeholder="App ID" style="max-width: 150px;" />
+              <input id="trace-provider-filter" data-i18n-placeholder="providerFilter" placeholder="Provider ID" style="max-width: 170px;" />
               <select id="status-filter" style="max-width: 160px;">
                 <option value="" data-i18n="allStatus">全部状态</option>
                 <option value="completed" data-i18n="statusCompleted">已完成</option>
                 <option value="failed" data-i18n="statusFailed">失败</option>
               </select>
+              <button class="secondary" id="trace-filter-apply" data-i18n="applyFilter">筛选</button>
               <button class="secondary" id="trace-export" data-i18n="export">导出</button>
             </div>
           </div>
@@ -185,6 +188,25 @@ const consoleHTML = `<!doctype html>
           </div>
           <div class="panel-body form-grid">
             <input id="admin-token" value="admin-token" />
+            <div class="filters">
+              <select id="audit-action-filter">
+                <option value="" data-i18n="allActions">全部动作</option>
+                <option value="tool.invoke" data-i18n="tools">工具调用</option>
+                <option value="policy.dry_run" data-i18n="actionPolicyDryRun">策略试算</option>
+                <option value="provider.enabled" data-i18n="actionProviderEnabled">Provider 启停</option>
+                <option value="provider.probe" data-i18n="actionProviderProbe">Provider 探测</option>
+                <option value="config.reload" data-i18n="actionConfigReload">配置重载</option>
+              </select>
+              <select id="audit-result-filter">
+                <option value="" data-i18n="allResults">全部结果</option>
+                <option value="success" data-i18n="resultSuccess">成功</option>
+                <option value="denied" data-i18n="resultDenied">拒绝</option>
+                <option value="failed" data-i18n="resultFailed">失败</option>
+              </select>
+              <input id="audit-app-filter" data-i18n-placeholder="appFilter" placeholder="App ID" />
+              <input id="audit-trace-filter" data-i18n-placeholder="traceFilter" placeholder="Trace ID" />
+              <button class="secondary" id="audit-filter-apply" data-i18n="applyFilter">筛选</button>
+            </div>
             <div class="audit-table-wrap">
               <table class="audit-table">
                 <thead>
@@ -363,9 +385,15 @@ const consoleHTML = `<!doctype html>
     const detail = document.querySelector("#detail");
     const summary = document.querySelector("#summary");
     const statusFilter = document.querySelector("#status-filter");
+    const traceAppFilter = document.querySelector("#trace-app-filter");
+    const traceProviderFilter = document.querySelector("#trace-provider-filter");
     const sendResult = document.querySelector("#send-result");
     const auditRows = document.querySelector("#audit-rows");
     const auditMessage = document.querySelector("#audit-message");
+    const auditActionFilter = document.querySelector("#audit-action-filter");
+    const auditResultFilter = document.querySelector("#audit-result-filter");
+    const auditAppFilter = document.querySelector("#audit-app-filter");
+    const auditTraceFilter = document.querySelector("#audit-trace-filter");
     const routeExplain = document.querySelector("#route-explain");
     const runtimeHealth = document.querySelector("#runtime-health");
     const toolSelect = document.querySelector("#tool-select");
@@ -412,6 +440,11 @@ const consoleHTML = `<!doctype html>
         fallbackAttempts: "降级次数",
         requestTraces: "请求追踪",
         allStatus: "全部状态",
+        appFilter: "App ID",
+        providerFilter: "Provider ID",
+        traceFilter: "Trace ID",
+        allActions: "全部动作",
+        allResults: "全部结果",
         status: "状态",
         traceId: "追踪 ID",
         app: "应用",
@@ -555,6 +588,11 @@ const consoleHTML = `<!doctype html>
         fallbackAttempts: "Fallback Attempts",
         requestTraces: "Request Traces",
         allStatus: "All status",
+        appFilter: "App ID",
+        providerFilter: "Provider ID",
+        traceFilter: "Trace ID",
+        allActions: "All actions",
+        allResults: "All results",
         status: "Status",
         traceId: "Trace ID",
         app: "App",
@@ -690,6 +728,8 @@ const consoleHTML = `<!doctype html>
 
     document.querySelector("#refresh").addEventListener("click", loadAll);
     document.querySelector("#audit-refresh").addEventListener("click", loadAudit);
+    document.querySelector("#trace-filter-apply").addEventListener("click", () => { tracePage = 1; loadTraces(); });
+    document.querySelector("#audit-filter-apply").addEventListener("click", () => { auditPage = 1; loadAudit(); });
     document.querySelector("#trace-export").addEventListener("click", exportTraces);
     document.querySelector("#audit-export").addEventListener("click", exportAudit);
     document.querySelector("#lang-toggle").addEventListener("click", () => setLang(lang === "zh" ? "en" : "zh"));
@@ -784,6 +824,8 @@ const consoleHTML = `<!doctype html>
     function traceQuery(limit = tracePageSize, offset = (tracePage - 1) * tracePageSize) {
       const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
       if (statusFilter.value) query.set("status", statusFilter.value);
+      if (traceAppFilter.value.trim()) query.set("app_id", traceAppFilter.value.trim());
+      if (traceProviderFilter.value.trim()) query.set("provider_id", traceProviderFilter.value.trim());
       return query;
     }
     async function loadTraces() {
@@ -1160,8 +1202,7 @@ const consoleHTML = `<!doctype html>
       }
       try {
         auditMessage.textContent = t("loadingAudit");
-        const offset = (auditPage - 1) * auditPageSize;
-        const query = new URLSearchParams({ limit: String(auditPageSize), offset: String(offset) });
+        const query = auditQuery(auditPageSize, (auditPage - 1) * auditPageSize);
         const res = await fetch("/gateway/v1/audit/events?" + query.toString(), {
           headers: { "Authorization": "Bearer " + token }
         });
@@ -1180,13 +1221,21 @@ const consoleHTML = `<!doctype html>
         auditMessage.textContent = t("failedPrefix") + err.message;
       }
     }
+    function auditQuery(limit = auditPageSize, offset = (auditPage - 1) * auditPageSize) {
+      const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+      if (auditActionFilter.value) query.set("action", auditActionFilter.value);
+      if (auditResultFilter.value) query.set("result", auditResultFilter.value);
+      if (auditAppFilter.value.trim()) query.set("app_id", auditAppFilter.value.trim());
+      if (auditTraceFilter.value.trim()) query.set("trace_id", auditTraceFilter.value.trim());
+      return query;
+    }
     function exportAudit() {
       const token = adminToken();
       if (!token) {
         auditMessage.textContent = t("adminTokenRequired");
         return;
       }
-      fetch("/gateway/v1/audit/events/export?limit=500", {
+      fetch("/gateway/v1/audit/events/export?" + auditQuery(500, 0).toString(), {
         headers: { "Authorization": "Bearer " + token }
       })
         .then(async res => {
@@ -1222,6 +1271,9 @@ const consoleHTML = `<!doctype html>
           "<td>" + esc(item.duration_ms == null ? "-" : item.duration_ms + "ms") + "</td>" +
         "</tr>"
       ).join("");
+      if (!allAuditEvents.length) {
+        auditRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + t("noAuditEvents") + "</td></tr>";
+      }
       auditRows.querySelectorAll("tr[data-trace]").forEach(row => {
         if (row.dataset.trace) row.addEventListener("click", () => loadDetail(row.dataset.trace));
       });

@@ -815,7 +815,15 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 	body := res.Body.String()
 	for _, want := range []string{
 		"id=\"trace-export\"",
+		"id=\"trace-app-filter\"",
+		"id=\"trace-provider-filter\"",
+		"id=\"trace-filter-apply\"",
 		"id=\"audit-export\"",
+		"id=\"audit-action-filter\"",
+		"id=\"audit-result-filter\"",
+		"id=\"audit-app-filter\"",
+		"id=\"audit-trace-filter\"",
+		"id=\"audit-filter-apply\"",
 		"id=\"tool-select\"",
 		"id=\"tool-invoke\"",
 		"id=\"tool-export\"",
@@ -836,6 +844,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function exportMCPCatalog()",
 		"function exportTraces()",
 		"function exportAudit()",
+		"function auditQuery",
 		"function loadTools()",
 		"function toolCatalogQuery()",
 		"function invokeTool()",

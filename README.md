@@ -125,7 +125,7 @@ curl http://127.0.0.1:18765/gateway/v1/traces/{trace_id}
 curl "http://127.0.0.1:18765/gateway/v1/traces/export?limit=500&status=failed" -o traces.jsonl
 ```
 
-Trace 列表返回 `traces`、`total`、`offset`、`limit`。支持按 `status`、`app_id`、`provider_id` 过滤。
+Trace 列表返回 `traces`、`total`、`offset`、`limit`。支持按 `status`、`app_id`、`provider_id` 过滤。控制台的 Trace 列表筛选和导出会复用同一组条件。
 
 默认 Trace 存储为 `data/traces.jsonl`。可通过配置项 `trace_retention_max` 控制最多保留条数；`0` 或不配置表示不裁剪。
 
@@ -143,7 +143,7 @@ curl "http://127.0.0.1:18765/gateway/v1/audit/events/export?limit=500&action=too
   -o audit-events.jsonl
 ```
 
-Audit 支持 `action`、`result`、`app_id`、`trace_id`、`limit`、`offset` 查询。默认持久化到 `data/audit.jsonl`，可通过 `audit_store_path` 调整路径，通过 `audit_retention_max` 控制保留条数。
+Audit 支持 `action`、`result`、`app_id`、`trace_id`、`limit`、`offset` 查询。控制台可按动作、结果、应用和 Trace ID 筛选，导出会带上当前筛选条件。默认持久化到 `data/audit.jsonl`，可通过 `audit_store_path` 调整路径，通过 `audit_retention_max` 控制保留条数。
 
 ## Provider 与模型目录
 
