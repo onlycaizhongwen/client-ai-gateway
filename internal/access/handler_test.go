@@ -303,6 +303,63 @@ func TestRuntimeHealthHTTP(t *testing.T) {
 	}
 }
 
+func TestAppsListRequiresAdmin(t *testing.T) {
+	handler, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/apps", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without admin token, got %d", res.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/apps", nil)
+	req.Header.Set("Authorization", "Bearer dev-token")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 with non-admin token, got %d", res.Code)
+	}
+}
+
+func TestAppsListMasksTokensAndFilters(t *testing.T) {
+	handler, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/apps?grant=tool&limit=1&offset=0", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	if strings.Contains(res.Body.String(), "dev-token") || strings.Contains(res.Body.String(), "admin-token") {
+		t.Fatalf("apps list leaked raw token: %s", res.Body.String())
+	}
+	var body struct {
+		Apps   []appView `json:"apps"`
+		Total  int       `json:"total"`
+		Offset int       `json:"offset"`
+		Limit  int       `json:"limit"`
+	}
+	decodeBody(t, res, &body)
+	if body.Total != 1 || body.Offset != 0 || body.Limit != 1 || len(body.Apps) != 1 {
+		t.Fatalf("unexpected app page body: %+v", body)
+	}
+	if body.Apps[0].ID != "dev-app" || body.Apps[0].TokenHint != "dev-...oken" || !hasGrant(body.Apps[0].Grants, "tool") {
+		t.Fatalf("unexpected app view: %+v", body.Apps[0])
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/apps?app_id=admin-app", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	decodeBody(t, res, &body)
+	if body.Total != 1 || len(body.Apps) != 1 || body.Apps[0].ID != "admin-app" || body.Apps[0].TokenHint != "admi...oken" {
+		t.Fatalf("unexpected filtered admin app body: %+v", body)
+	}
+}
+
 func TestToolsListHTTP(t *testing.T) {
 	handler, _ := newTestHandler()
 	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/tools", nil)
@@ -837,6 +894,13 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"id=\"access-tool-id\"",
 		"id=\"access-dry-run\"",
 		"id=\"access-result\"",
+		"id=\"app-id-filter\"",
+		"id=\"app-grant-filter\"",
+		"id=\"app-filter-apply\"",
+		"id=\"app-refresh\"",
+		"id=\"app-rows\"",
+		"id=\"app-prev\"",
+		"id=\"app-next\"",
 		"id=\"tool-select\"",
 		"id=\"tool-invoke\"",
 		"id=\"tool-export\"",
@@ -860,6 +924,9 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function auditQuery",
 		"function showAuditDetail",
 		"function accessDryRun",
+		"function loadApps()",
+		"function appCatalogQuery()",
+		"function renderApps()",
 		"function loadTools()",
 		"function toolCatalogQuery()",
 		"function invokeTool()",

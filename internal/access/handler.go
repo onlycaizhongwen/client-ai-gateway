@@ -74,6 +74,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /gateway/v1/providers", h.providers)
 	mux.HandleFunc("GET /gateway/v1/models", h.models)
 	mux.HandleFunc("GET /gateway/v1/runtime/health", h.runtimeHealth)
+	mux.HandleFunc("GET /gateway/v1/apps", h.appsList)
 	mux.HandleFunc("GET /gateway/v1/tools", h.toolsList)
 	mux.HandleFunc("GET /gateway/v1/tools/export", h.toolsExport)
 	mux.HandleFunc("POST /gateway/v1/tools/", h.toolInvoke)
@@ -292,6 +293,77 @@ type mcpServerView struct {
 	ToolCount    int        `json:"tool_count"`
 	EnabledTools int        `json:"enabled_tools"`
 	Tools        []toolView `json:"tools,omitempty"`
+}
+
+type appView struct {
+	ID        string   `json:"id"`
+	Name      string   `json:"name,omitempty"`
+	TokenHint string   `json:"token_hint"`
+	Grants    []string `json:"grants"`
+}
+
+func (h *Handler) appsList(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	limit, ok := intQuery(w, r, "limit", 100)
+	if !ok {
+		return
+	}
+	offset, ok := intQuery(w, r, "offset", 0)
+	if !ok {
+		return
+	}
+	views := h.appViews(r)
+	total := len(views)
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	pagedApps := []appView{}
+	if offset < total {
+		end := offset + limit
+		if end > total {
+			end = total
+		}
+		pagedApps = views[offset:end]
+	}
+	query := r.URL.Query()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"apps":   pagedApps,
+		"total":  total,
+		"offset": offset,
+		"limit":  limit,
+		"filters": map[string]string{
+			"app_id": query.Get("app_id"),
+			"grant":  query.Get("grant"),
+		},
+	})
+}
+
+func (h *Handler) appViews(r *http.Request) []appView {
+	snapshot := h.snapshot()
+	query := r.URL.Query()
+	appFilter := query.Get("app_id")
+	grantFilter := query.Get("grant")
+	views := make([]appView, 0, len(snapshot.Config.Apps))
+	for _, app := range snapshot.Config.Apps {
+		if appFilter != "" && app.ID != appFilter {
+			continue
+		}
+		if grantFilter != "" && !hasGrant(app.Grants, grantFilter) {
+			continue
+		}
+		views = append(views, appView{
+			ID:        app.ID,
+			Name:      app.Name,
+			TokenHint: tokenHint(app.Token),
+			Grants:    append([]string(nil), app.Grants...),
+		})
+	}
+	return views
 }
 
 func (h *Handler) toolsList(w http.ResponseWriter, r *http.Request) {
@@ -1244,6 +1316,16 @@ func bearerToken(header string) string {
 		return strings.TrimSpace(strings.TrimPrefix(header, prefix))
 	}
 	return ""
+}
+
+func tokenHint(token string) string {
+	if token == "" {
+		return ""
+	}
+	if len(token) <= 8 {
+		return strings.Repeat("*", len(token))
+	}
+	return token[:4] + "..." + token[len(token)-4:]
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

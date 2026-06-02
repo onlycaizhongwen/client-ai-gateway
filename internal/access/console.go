@@ -46,6 +46,7 @@ const consoleHTML = `<!doctype html>
     .trace-table { min-width: 1280px; }
     .audit-table { min-width: 760px; font-size: 13px; }
     .tool-table, .mcp-table { min-width: 980px; }
+    .app-table { min-width: 860px; }
     th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; }
     th { position: sticky; top: 0; background: var(--head); z-index: 1; font-weight: 700; }
     td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -78,6 +79,9 @@ const consoleHTML = `<!doctype html>
     .mcp-table th:nth-child(3), .mcp-table td:nth-child(3) { width: 130px; }
     .mcp-table th:nth-child(4), .mcp-table td:nth-child(4) { width: 260px; }
     .mcp-table th:nth-child(5), .mcp-table td:nth-child(5) { width: 220px; }
+    .app-table th:nth-child(1), .app-table td:nth-child(1) { width: 240px; }
+    .app-table th:nth-child(2), .app-table td:nth-child(2) { width: 180px; }
+    .app-table th:nth-child(3), .app-table td:nth-child(3) { width: 360px; }
     .trace-id { font-family: Consolas, "Courier New", monospace; color: var(--blue); }
     .status { display: inline-block; border-radius: 999px; padding: 2px 8px; font-weight: 700; font-size: 12px; }
     .completed, .success, .healthy, .available, .running, .loaded { color: var(--green); background: #e9f7ef; }
@@ -133,6 +137,44 @@ const consoleHTML = `<!doctype html>
     </section>
     <div class="layout">
       <div class="main-stack">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 data-i18n="appCatalog">\u5e94\u7528\u4e0e\u6388\u6743</h2>
+              <div class="muted" id="app-page-summary">\u7b2c 1 \u9875</div>
+            </div>
+            <div class="actions">
+              <button class="secondary" id="app-refresh" data-i18n="refresh">刷新</button>
+            </div>
+          </div>
+          <div class="panel-body form-grid">
+            <div class="filters">
+              <input id="app-id-filter" data-i18n-placeholder="appFilter" placeholder="App ID" />
+              <input id="app-grant-filter" data-i18n-placeholder="grantFilter" placeholder="Grant" />
+              <button class="secondary" id="app-filter-apply" data-i18n="applyFilter">筛选</button>
+            </div>
+            <div class="muted" id="app-message">\u6b63\u5728\u52a0\u8f7d\u5e94\u7528\u6388\u6743...</div>
+          </div>
+          <div class="table-wrap" style="height: 260px;">
+            <table class="app-table">
+              <thead>
+                <tr>
+                  <th data-i18n="app">应用</th>
+                  <th data-i18n="tokenHint">Token</th>
+                  <th data-i18n="grants">授权</th>
+                </tr>
+              </thead>
+              <tbody id="app-rows"></tbody>
+            </table>
+          </div>
+          <div class="pager">
+            <div class="muted" id="app-range-summary">0 / 0</div>
+            <div class="pager-actions">
+              <button class="secondary" id="app-prev" data-i18n="prev">上一页</button>
+              <button class="secondary" id="app-next" data-i18n="next">下一页</button>
+            </div>
+          </div>
+        </section>
         <section class="panel">
           <div class="panel-head">
             <div>
@@ -425,6 +467,10 @@ const consoleHTML = `<!doctype html>
     const toolServerFilter = document.querySelector("#tool-server-filter");
     const toolScopeFilter = document.querySelector("#tool-scope-filter");
     const toolEnabledFilter = document.querySelector("#tool-enabled-filter");
+    const appRows = document.querySelector("#app-rows");
+    const appMessage = document.querySelector("#app-message");
+    const appIDFilter = document.querySelector("#app-id-filter");
+    const appGrantFilter = document.querySelector("#app-grant-filter");
     const mcpCatalog = document.querySelector("#mcp-catalog");
     const mcpRows = document.querySelector("#mcp-rows");
     const mcpServerFilter = document.querySelector("#mcp-server-filter");
@@ -443,6 +489,10 @@ const consoleHTML = `<!doctype html>
     let toolTotal = 0;
     let toolPage = 1;
     const toolPageSize = 8;
+    let allApps = [];
+    let appTotal = 0;
+    let appPage = 1;
+    const appPageSize = 8;
     let mcpTotal = 0;
     let mcpPage = 1;
     const mcpPageSize = 5;
@@ -520,6 +570,12 @@ const consoleHTML = `<!doctype html>
         accessDryRun: "权限试算",
         tokenPlaceholder: "Token",
         toolIdPlaceholder: "Tool ID",
+        grantFilter: "Grant",
+        appCatalog: "\u5e94\u7528\u4e0e\u6388\u6743",
+        tokenHint: "Token \u63d0\u793a",
+        grants: "\u6388\u6743",
+        loadingApps: "\u6b63\u5728\u52a0\u8f7d\u5e94\u7528\u6388\u6743...",
+        noApps: "\u6682\u65e0\u5e94\u7528\u3002",
         chatAction: "聊天",
         toolInvokeAction: "工具调用",
         adminAction: "管理",
@@ -679,6 +735,12 @@ const consoleHTML = `<!doctype html>
         accessDryRun: "Access Dry-run",
         tokenPlaceholder: "Token",
         toolIdPlaceholder: "Tool ID",
+        grantFilter: "Grant",
+        appCatalog: "Apps / Grants",
+        tokenHint: "Token Hint",
+        grants: "Grants",
+        loadingApps: "Loading apps and grants...",
+        noApps: "No apps.",
         chatAction: "Chat",
         toolInvokeAction: "Tool Invoke",
         adminAction: "Admin",
@@ -784,6 +846,8 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#tool-export").addEventListener("click", exportTools);
     document.querySelector("#tool-refresh").addEventListener("click", loadTools);
     document.querySelector("#tool-filter-apply").addEventListener("click", () => { toolPage = 1; loadTools(); });
+    document.querySelector("#app-refresh").addEventListener("click", loadApps);
+    document.querySelector("#app-filter-apply").addEventListener("click", () => { appPage = 1; loadApps(); });
     toolSelect.addEventListener("change", renderSelectedTool);
     document.querySelector("#mcp-filter-apply").addEventListener("click", () => { mcpPage = 1; loadMCPCatalog(); });
     document.querySelector("#mcp-export").addEventListener("click", exportMCPCatalog);
@@ -794,6 +858,8 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#audit-next").addEventListener("click", () => { auditPage += 1; loadAudit(); });
     document.querySelector("#tool-prev").addEventListener("click", () => { toolPage = Math.max(1, toolPage - 1); loadTools(); });
     document.querySelector("#tool-next").addEventListener("click", () => { toolPage += 1; loadTools(); });
+    document.querySelector("#app-prev").addEventListener("click", () => { appPage = Math.max(1, appPage - 1); loadApps(); });
+    document.querySelector("#app-next").addEventListener("click", () => { appPage += 1; loadApps(); });
     document.querySelector("#mcp-prev").addEventListener("click", () => { mcpPage = Math.max(1, mcpPage - 1); loadMCPCatalog(); });
     document.querySelector("#mcp-next").addEventListener("click", () => { mcpPage += 1; loadMCPCatalog(); });
     statusFilter.addEventListener("change", () => { tracePage = 1; loadTraces(); });
@@ -863,7 +929,7 @@ const consoleHTML = `<!doctype html>
       })[value] || value || "";
     }
     async function loadAll() {
-      await Promise.all([loadTraces(), loadRuntimeHealth(), loadProviders(), loadModels(), loadAudit(), loadTools(), loadMCPCatalog()]);
+      await Promise.all([loadTraces(), loadRuntimeHealth(), loadProviders(), loadModels(), loadAudit(), loadApps(), loadTools(), loadMCPCatalog()]);
     }
     function traceQuery(limit = tracePageSize, offset = (tracePage - 1) * tracePageSize) {
       const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
@@ -1159,6 +1225,67 @@ const consoleHTML = `<!doctype html>
       const query = toolCatalogQuery();
       const suffix = query.toString() ? "?" + query.toString() : "";
       downloadURL("/gateway/v1/tools/export" + suffix, "tools.jsonl");
+    }
+    async function loadApps() {
+      const token = adminToken();
+      if (!token) {
+        allApps = [];
+        appTotal = 0;
+        appMessage.textContent = t("adminTokenRequired");
+        renderApps();
+        return;
+      }
+      appMessage.textContent = t("loadingApps");
+      try {
+        const query = appCatalogQuery();
+        query.set("limit", String(appPageSize));
+        query.set("offset", String((appPage - 1) * appPageSize));
+        const res = await fetch("/gateway/v1/apps?" + query.toString(), {
+          headers: { "Authorization": "Bearer " + token }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          allApps = [];
+          appTotal = 0;
+          appMessage.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
+          renderApps();
+          return;
+        }
+        allApps = data.apps || [];
+        appTotal = data.total || allApps.length;
+        appMessage.textContent = appTotal ? "" : t("noApps");
+        renderApps();
+      } catch (err) {
+        allApps = [];
+        appTotal = 0;
+        appMessage.textContent = t("failedPrefix") + err.message;
+        renderApps();
+      }
+    }
+    function appCatalogQuery() {
+      const query = new URLSearchParams();
+      if (appIDFilter.value.trim()) query.set("app_id", appIDFilter.value.trim());
+      if (appGrantFilter.value.trim()) query.set("grant", appGrantFilter.value.trim());
+      return query;
+    }
+    function renderApps() {
+      const totalPages = pageCount(appTotal, appPageSize);
+      appPage = clampPage(appPage, totalPages);
+      const range = pageRange(appTotal, appPage, appPageSize);
+      document.querySelector("#app-page-summary").textContent = t("page", { page: appPage, total: totalPages });
+      document.querySelector("#app-range-summary").textContent = t("catalogRange", { range: range.label, total: appTotal });
+      document.querySelector("#app-prev").disabled = appPage <= 1;
+      document.querySelector("#app-next").disabled = appPage >= totalPages;
+      appRows.innerHTML = allApps.map(item =>
+        "<tr>" +
+          "<td><strong>" + esc(item.name || item.id) + "</strong><div class=\"muted\">" + esc(item.id) + "</div></td>" +
+          "<td class=\"trace-id\">" + esc(item.token_hint || "-") + "</td>" +
+          "<td title=\"" + esc((item.grants || []).join(", ")) + "\">" + esc((item.grants || []).join(", ") || "-") + "</td>" +
+        "</tr>"
+      ).join("");
+      if (!allApps.length) {
+        appRows.innerHTML = "<tr><td colspan=\"3\" class=\"muted\">" + t("noApps") + "</td></tr>";
+      }
     }
     async function invokeTool() {
       const toolID = toolSelect.value;

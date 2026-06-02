@@ -514,3 +514,19 @@ docs/error-codes.md
 ```powershell
 go test ./...
 ```
+
+## 应用与授权目录
+
+管理员可以通过 App/Grant 目录查看当前配置中的应用、授权和脱敏 token，便于排查“某个应用为什么能/不能调用模型、工具或管理接口”。该接口只返回 `token_hint`，不会暴露完整 token。
+
+```powershell
+curl "http://127.0.0.1:18765/gateway/v1/apps?limit=20&offset=0&grant=tool" `
+  -H "Authorization: Bearer admin-token"
+```
+
+支持查询参数：
+- `limit` / `offset`：分页查看应用目录。
+- `app_id`：只看指定应用。
+- `grant`：只看具备指定 grant 的应用，例如 `chat`、`tool`、`tool:runtime.read` 或 `admin`。
+
+响应包含 `apps`、`total`、`offset`、`limit` 和当前 `filters`。控制台“应用与授权”面板复用同一接口，列表展示 App、Token 提示和 Grants。
