@@ -743,6 +743,12 @@ func TestToolInvokeRuntimeHealthHTTP(t *testing.T) {
 	if events[0].DurationMS < 0 || events[0].Metadata["adapter"] != "runtime-health" || events[0].Metadata["read_only"] != true {
 		t.Fatalf("expected tool invoke audit metadata, got %+v", events[0])
 	}
+	if events[0].Metadata["matched_grant"] != "tool" || events[0].Metadata["sandbox_required"] != false {
+		t.Fatalf("expected tool grant and sandbox audit metadata, got %+v", events[0].Metadata)
+	}
+	if scopes, ok := events[0].Metadata["required_scopes"].([]any); !ok || len(scopes) != 1 || scopes[0] != "runtime.read" {
+		t.Fatalf("expected required scopes audit metadata, got %+v", events[0].Metadata["required_scopes"])
+	}
 }
 
 func TestAuditListFiltersByTraceID(t *testing.T) {
@@ -944,7 +950,27 @@ func TestAccessDryRunAllowsChatByAppID(t *testing.T) {
 }
 
 func TestAccessDryRunExplainsMissingToolScope(t *testing.T) {
-	handler, _ := newTestHandler()
+	path := writeHandlerConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "audit_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [
+	    {"id":"dev-app","token":"dev-token","grants":["chat","tool"]},
+	    {"id":"admin-app","token":"admin-token","grants":["admin"]}
+	  ],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "tools": [{"id":"gateway.runtime_health","name":"Runtime Health","adapter":"runtime-health","read_only":true,"risk_level":"low","scopes":["runtime.read"],"enabled":true}]
+	}`)
+	store := trace.NewMemoryStore()
+	manager, err := gatewayruntime.NewManager(path, store)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+	auditStore := audit.NewMemoryStore()
+	handler := NewRuntimeHandler(manager, store).WithAudit(auditStore).Routes()
+
 	res := postJSON(handler, "/gateway/v1/access/dry-run", "", map[string]any{
 		"token":   "admin-token",
 		"action":  "tool.invoke",
@@ -968,6 +994,16 @@ func TestAccessDryRunExplainsMissingToolScope(t *testing.T) {
 	}
 	if len(body.MissingGrants) != 1 || body.MissingGrants[0] != "tool:runtime.read" {
 		t.Fatalf("expected missing runtime scope, got %+v", body.MissingGrants)
+	}
+	events := auditStore.List(audit.ListQuery{Action: "access.dry_run"})
+	if len(events) != 1 || events[0].Metadata["allowed"] != false || events[0].Metadata["reason"] != "required grant is missing" {
+		t.Fatalf("expected access dry-run audit metadata, got %+v", events)
+	}
+	if events[0].Metadata["tool_id"] != "gateway.runtime_health" || events[0].Metadata["adapter"] != "runtime-health" {
+		t.Fatalf("expected tool audit metadata on dry-run, got %+v", events[0].Metadata)
+	}
+	if missing, ok := events[0].Metadata["missing_grants"].([]string); !ok || len(missing) != 1 || missing[0] != "tool:runtime.read" {
+		t.Fatalf("expected missing grants audit metadata, got %+v", events[0].Metadata["missing_grants"])
 	}
 }
 

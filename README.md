@@ -146,6 +146,8 @@ curl "http://127.0.0.1:18765/gateway/v1/audit/events/export?limit=500&action=too
 
 Audit 支持 `action`、`result`、`app_id`、`trace_id`、`limit`、`offset` 查询。控制台可按动作、结果、应用和 Trace ID 筛选，导出会带上当前筛选条件；点击审计行可查看完整事件 JSON，并在存在 `trace_id` 时联动打开 Trace 详情。默认持久化到 `data/audit.jsonl`，可通过 `audit_store_path` 调整路径，通过 `audit_retention_max` 控制保留条数。
 
+工具调用和权限试算的 Audit `metadata` 会包含 `required_scopes`、`matched_grant`、`missing_grants`、`sandbox_required`、`origin` 等字段，用于解释为什么允许或拒绝。
+
 ## Provider 与模型目录
 
 ```powershell
@@ -249,7 +251,7 @@ curl -X POST http://127.0.0.1:18765/gateway/v1/access/dry-run `
 - `admin`：要求 `admin` grant。
 - `tool.invoke`：要求 `tool` 宽权限，或工具 manifest 中所有 scope 对应的 `tool:<scope>` 细粒度权限。
 
-响应会说明 `allowed`、`reason`、`matched_grant`、`missing_grants`，工具试算还会返回工具来源、scope、只读状态和 sandbox 要求。控制台提供“权限试算”面板，并会把试算事件写入 Audit。
+响应会说明 `allowed`、`reason`、`matched_grant`、`missing_grants`，工具试算还会返回工具来源、scope、只读状态和 sandbox 要求。控制台提供“权限试算”面板，并会把试算事件写入 Audit，Audit metadata 同步记录试算结论和缺失权限。
 
 ## 工具调用
 

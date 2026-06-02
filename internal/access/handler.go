@@ -583,22 +583,20 @@ func (h *Handler) toolInvoke(w http.ResponseWriter, r *http.Request) {
 	if !hasToolScope(app.Grants, toolCfg.Scopes) {
 		h.finishToolTrace(record, app.ID, "failed", "tool scope is required", startedAt)
 		h.saveAudit(audit.Event{
-			TraceID: traceID,
-			AppID:   app.ID,
-			Action:  "tool.invoke",
-			Target:  toolID,
-			Result:  audit.ResultDenied,
-			Error:   "tool scope is required",
-			Metadata: map[string]any{
-				"required_scopes": toolCfg.Scopes,
-			},
+			TraceID:  traceID,
+			AppID:    app.ID,
+			Action:   "tool.invoke",
+			Target:   toolID,
+			Result:   audit.ResultDenied,
+			Error:    "tool scope is required",
+			Metadata: toolAuditMetadata(toolCfg, "", missingToolGrants(toolCfg.Scopes)),
 		})
 		writeError(w, http.StatusForbidden, traceID, "tool_scope_denied", "tool scope is required")
 		return
 	}
 	if !toolCfg.ReadOnly {
 		h.finishToolTrace(record, app.ID, "failed", "only read-only tools are allowed", startedAt)
-		h.saveAudit(audit.Event{TraceID: traceID, AppID: app.ID, Action: "tool.invoke", Target: toolID, Result: audit.ResultDenied, Error: "only read-only tools are allowed"})
+		h.saveAudit(audit.Event{TraceID: traceID, AppID: app.ID, Action: "tool.invoke", Target: toolID, Result: audit.ResultDenied, Error: "only read-only tools are allowed", Metadata: toolAuditMetadata(toolCfg, matchedToolGrant(app.Grants, toolCfg.Scopes), nil)})
 		writeError(w, http.StatusForbidden, traceID, "tool_denied", "only read-only tools are allowed")
 		return
 	}
@@ -611,18 +609,13 @@ func (h *Handler) toolInvoke(w http.ResponseWriter, r *http.Request) {
 		message := "MCP tool execution is unavailable in manifest-only mode"
 		h.finishToolTrace(record, app.ID, "failed", message, startedAt)
 		h.saveAudit(audit.Event{
-			TraceID: traceID,
-			AppID:   app.ID,
-			Action:  "tool.invoke",
-			Target:  toolID,
-			Result:  audit.ResultFailed,
-			Error:   message,
-			Metadata: map[string]any{
-				"adapter":   toolCfg.Adapter,
-				"origin":    toolCfg.Origin,
-				"server_id": toolCfg.ServerID,
-				"read_only": toolCfg.ReadOnly,
-			},
+			TraceID:  traceID,
+			AppID:    app.ID,
+			Action:   "tool.invoke",
+			Target:   toolID,
+			Result:   audit.ResultFailed,
+			Error:    message,
+			Metadata: toolAuditMetadata(toolCfg, matchedToolGrant(app.Grants, toolCfg.Scopes), nil),
 		})
 		writeError(w, http.StatusServiceUnavailable, traceID, tools.ErrCodeUnavailable, message)
 		return
@@ -652,12 +645,7 @@ func (h *Handler) toolInvoke(w http.ResponseWriter, r *http.Request) {
 			Result:     audit.ResultFailed,
 			Error:      err.Error(),
 			DurationMS: durationMS,
-			Metadata: map[string]any{
-				"adapter":   toolCfg.Adapter,
-				"origin":    toolCfg.Origin,
-				"server_id": toolCfg.ServerID,
-				"read_only": toolCfg.ReadOnly,
-			},
+			Metadata:   toolAuditMetadata(toolCfg, matchedToolGrant(app.Grants, toolCfg.Scopes), nil),
 		})
 		code, status := toolErrorResponse(err)
 		writeError(w, status, traceID, code, err.Error())
@@ -678,12 +666,7 @@ func (h *Handler) toolInvoke(w http.ResponseWriter, r *http.Request) {
 		Target:     toolID,
 		Result:     audit.ResultSuccess,
 		DurationMS: durationMS,
-		Metadata: map[string]any{
-			"adapter":   toolCfg.Adapter,
-			"origin":    toolCfg.Origin,
-			"server_id": toolCfg.ServerID,
-			"read_only": toolCfg.ReadOnly,
-		},
+		Metadata:   toolAuditMetadata(toolCfg, matchedToolGrant(app.Grants, toolCfg.Scopes), nil),
 	})
 	writeJSON(w, http.StatusOK, result)
 }
@@ -800,15 +783,9 @@ func (h *Handler) accessDryRun(w http.ResponseWriter, r *http.Request) {
 		}
 		allowed = hasToolScope(app.Grants, toolCfg.Scopes)
 		if allowed {
-			if hasGrant(app.Grants, "tool") {
-				matchedGrant = "tool"
-			} else if len(toolCfg.Scopes) > 0 {
-				matchedGrant = "tool:" + toolCfg.Scopes[0]
-			}
+			matchedGrant = matchedToolGrant(app.Grants, toolCfg.Scopes)
 		} else {
-			for _, scope := range toolCfg.Scopes {
-				missingGrants = append(missingGrants, "tool:"+scope)
-			}
+			missingGrants = missingToolGrants(toolCfg.Scopes)
 		}
 	default:
 		writeError(w, http.StatusBadRequest, "", "invalid_request", "action must be chat, admin, or tool.invoke")
@@ -845,14 +822,11 @@ func (h *Handler) accessDryRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.saveAudit(audit.Event{
-		AppID:  app.ID,
-		Action: "access.dry_run",
-		Target: req.Action,
-		Result: audit.ResultSuccess,
-		Metadata: map[string]any{
-			"allowed": allowed,
-			"tool_id": req.ToolID,
-		},
+		AppID:    app.ID,
+		Action:   "access.dry_run",
+		Target:   req.Action,
+		Result:   audit.ResultSuccess,
+		Metadata: accessDryRunAuditMetadata(allowed, reason, matchedGrant, missingGrants, toolRef),
 	})
 	writeJSON(w, http.StatusOK, response)
 }
@@ -1191,6 +1165,55 @@ func grantsIfDenied(allowed bool, grant string) []string {
 		return []string{}
 	}
 	return []string{grant}
+}
+
+func matchedToolGrant(grants []string, scopes []string) string {
+	if hasGrant(grants, "tool") {
+		return "tool"
+	}
+	for _, scope := range scopes {
+		if hasGrant(grants, "tool:"+scope) {
+			return "tool:" + scope
+		}
+	}
+	return ""
+}
+
+func missingToolGrants(scopes []string) []string {
+	missing := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		missing = append(missing, "tool:"+scope)
+	}
+	return missing
+}
+
+func toolAuditMetadata(toolCfg toolConfigRef, matchedGrant string, missingGrants []string) map[string]any {
+	return map[string]any{
+		"adapter":          toolCfg.Adapter,
+		"origin":           toolCfg.Origin,
+		"server_id":        toolCfg.ServerID,
+		"read_only":        toolCfg.ReadOnly,
+		"required_scopes":  toolCfg.Scopes,
+		"sandbox_required": toolCfg.SandboxRequired,
+		"matched_grant":    matchedGrant,
+		"missing_grants":   missingGrants,
+	}
+}
+
+func accessDryRunAuditMetadata(allowed bool, reason, matchedGrant string, missingGrants []string, toolRef *toolConfigRef) map[string]any {
+	metadata := map[string]any{
+		"allowed":        allowed,
+		"reason":         reason,
+		"matched_grant":  matchedGrant,
+		"missing_grants": missingGrants,
+	}
+	if toolRef != nil {
+		for key, value := range toolAuditMetadata(*toolRef, matchedGrant, missingGrants) {
+			metadata[key] = value
+		}
+		metadata["tool_id"] = toolRef.ID
+	}
+	return metadata
 }
 
 func hasScope(scopes []string, want string) bool {
