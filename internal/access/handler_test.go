@@ -573,6 +573,49 @@ func TestMCPServersHTTPFilters(t *testing.T) {
 	}
 }
 
+func TestMCPServersHTTPPagination(t *testing.T) {
+	path := writeHandlerConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "audit_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat"]}],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "mcp_runtime": {"enabled":true,"mode":"manifest_only","servers":[
+	    {"id":"desktop-context","tools":[{"id":"mcp.desktop.list_context","read_only":true,"risk_level":"low","scopes":["desktop.read"],"enabled":true}]},
+	    {"id":"repo-context","tools":[{"id":"mcp.repo.list","read_only":true,"risk_level":"low","scopes":["repo.read"],"enabled":true}]},
+	    {"id":"browser-context","tools":[{"id":"mcp.browser.list","read_only":true,"risk_level":"low","scopes":["browser.read"],"enabled":true}]}
+	  ]}
+	}`)
+	store := trace.NewMemoryStore()
+	manager, err := gatewayruntime.NewManager(path, store)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+	handler := NewRuntimeHandler(manager, store).Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/mcp/servers?limit=1&offset=1", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Servers []mcpServerView `json:"servers"`
+		Total   int             `json:"total"`
+		Offset  int             `json:"offset"`
+		Limit   int             `json:"limit"`
+	}
+	decodeBody(t, res, &body)
+	if body.Total != 3 || body.Offset != 1 || body.Limit != 1 || len(body.Servers) != 1 {
+		t.Fatalf("unexpected paged mcp body: %+v", body)
+	}
+	if body.Servers[0].ID != "repo-context" {
+		t.Fatalf("unexpected paged mcp server: %+v", body.Servers[0])
+	}
+}
+
 func TestMCPServersExportHTTP(t *testing.T) {
 	path := writeHandlerConfig(t, `{
 	  "listen_addr": "127.0.0.1:0",
@@ -776,15 +819,25 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"id=\"tool-select\"",
 		"id=\"tool-invoke\"",
 		"id=\"tool-export\"",
+		"id=\"tool-rows\"",
+		"id=\"tool-prev\"",
+		"id=\"tool-next\"",
+		"id=\"tool-origin-filter\"",
+		"id=\"tool-scope-filter\"",
 		"id=\"mcp-server-filter\"",
 		"id=\"mcp-scope-filter\"",
 		"id=\"mcp-enabled-filter\"",
 		"id=\"mcp-export\"",
+		"id=\"mcp-rows\"",
+		"id=\"mcp-prev\"",
+		"id=\"mcp-next\"",
 		"function loadMCPCatalog()",
+		"function renderMCPServers",
 		"function exportMCPCatalog()",
 		"function exportTraces()",
 		"function exportAudit()",
 		"function loadTools()",
+		"function toolCatalogQuery()",
 		"function invokeTool()",
 		"function exportTools()",
 		"function shortTraceID",

@@ -407,7 +407,30 @@ func includeToolView(view toolView, originFilter, serverFilter, scopeFilter, ena
 }
 
 func (h *Handler) mcpServers(w http.ResponseWriter, r *http.Request) {
+	limit, ok := intQuery(w, r, "limit", 100)
+	if !ok {
+		return
+	}
+	offset, ok := intQuery(w, r, "offset", 0)
+	if !ok {
+		return
+	}
 	runtime, servers := h.mcpServerViews(r)
+	total := len(servers)
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	pagedServers := []mcpServerView{}
+	if offset < total {
+		end := offset + limit
+		if end > total {
+			end = total
+		}
+		pagedServers = servers[offset:end]
+	}
 	mode := runtime.Mode
 	if mode == "" {
 		mode = "manifest_only"
@@ -416,7 +439,10 @@ func (h *Handler) mcpServers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"enabled": runtime.Enabled,
 		"mode":    mode,
-		"servers": servers,
+		"servers": pagedServers,
+		"total":   total,
+		"offset":  offset,
+		"limit":   limit,
 		"filters": map[string]string{
 			"server_id": query.Get("server_id"),
 			"scope":     query.Get("scope"),

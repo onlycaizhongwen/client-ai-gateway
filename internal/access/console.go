@@ -45,6 +45,7 @@ const consoleHTML = `<!doctype html>
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .trace-table { min-width: 1280px; }
     .audit-table { min-width: 760px; font-size: 13px; }
+    .tool-table, .mcp-table { min-width: 980px; }
     th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; }
     th { position: sticky; top: 0; background: var(--head); z-index: 1; font-weight: 700; }
     td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -66,6 +67,17 @@ const consoleHTML = `<!doctype html>
     .audit-table th:nth-child(4), .audit-table td:nth-child(4) { width: 190px; }
     .audit-table th:nth-child(5), .audit-table td:nth-child(5) { width: 150px; }
     .audit-table th:nth-child(6), .audit-table td:nth-child(6) { width: 80px; }
+    .tool-table th:nth-child(1), .tool-table td:nth-child(1) { width: 250px; }
+    .tool-table th:nth-child(2), .tool-table td:nth-child(2) { width: 100px; }
+    .tool-table th:nth-child(3), .tool-table td:nth-child(3) { width: 150px; }
+    .tool-table th:nth-child(4), .tool-table td:nth-child(4) { width: 120px; }
+    .tool-table th:nth-child(5), .tool-table td:nth-child(5) { width: 190px; }
+    .tool-table th:nth-child(6), .tool-table td:nth-child(6) { width: 90px; }
+    .mcp-table th:nth-child(1), .mcp-table td:nth-child(1) { width: 220px; }
+    .mcp-table th:nth-child(2), .mcp-table td:nth-child(2) { width: 120px; }
+    .mcp-table th:nth-child(3), .mcp-table td:nth-child(3) { width: 130px; }
+    .mcp-table th:nth-child(4), .mcp-table td:nth-child(4) { width: 260px; }
+    .mcp-table th:nth-child(5), .mcp-table td:nth-child(5) { width: 220px; }
     .trace-id { font-family: Consolas, "Courier New", monospace; color: var(--blue); }
     .status { display: inline-block; border-radius: 999px; padding: 2px 8px; font-weight: 700; font-size: 12px; }
     .completed, .success, .healthy, .available, .running, .loaded { color: var(--green); background: #e9f7ef; }
@@ -77,6 +89,7 @@ const consoleHTML = `<!doctype html>
     .mcp-tool { margin-top: 8px; padding: 8px; border-top: 1px solid var(--line); }
     .tool-meta { min-height: 20px; }
     .provider-actions button { padding: 5px 8px; font-size: 12px; }
+    .filters { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)) auto; gap: 8px; align-items: center; }
     .pager { border-top: 1px solid var(--line); padding: 9px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .pager button { padding: 5px 9px; font-size: 12px; }
     .kv { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 8px 10px; margin-bottom: 12px; }
@@ -92,6 +105,7 @@ const consoleHTML = `<!doctype html>
       header { align-items: flex-start; flex-direction: column; }
       .cards { grid-template-columns: 1fr; }
       .panel-head, .pager { align-items: flex-start; flex-direction: column; }
+      .filters { grid-template-columns: 1fr; }
       .actions, .pager-actions { width: 100%; }
       .actions button, .pager-actions button { flex: 1; }
       .kv { grid-template-columns: 1fr; }
@@ -196,6 +210,103 @@ const consoleHTML = `<!doctype html>
             <div id="audit-message" class="muted"></div>
           </div>
         </section>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 data-i18n="toolCatalog">工具目录</h2>
+              <div class="muted" id="tool-page-summary">第 1 页</div>
+            </div>
+            <div class="actions">
+              <button class="secondary" id="tool-export" data-i18n="export">导出</button>
+              <button class="secondary" id="tool-refresh" data-i18n="refresh">刷新</button>
+            </div>
+          </div>
+          <div class="panel-body form-grid">
+            <div class="filters">
+              <select id="tool-origin-filter">
+                <option value="" data-i18n="allOrigins">全部来源</option>
+                <option value="builtin" data-i18n="builtinTool">内置</option>
+                <option value="mcp" data-i18n="mcpTool">MCP</option>
+              </select>
+              <input id="tool-server-filter" data-i18n-placeholder="mcpServerFilter" placeholder="Server ID" />
+              <input id="tool-scope-filter" data-i18n-placeholder="mcpScopeFilter" placeholder="Scope" />
+              <select id="tool-enabled-filter">
+                <option value="" data-i18n="allEnabled">全部启用状态</option>
+                <option value="true" data-i18n="enabled">启用</option>
+                <option value="false" data-i18n="disabled">禁用</option>
+              </select>
+              <button class="secondary" id="tool-filter-apply" data-i18n="applyFilter">筛选</button>
+            </div>
+          </div>
+          <div class="table-wrap" style="height: 320px;">
+            <table class="tool-table">
+              <thead>
+                <tr>
+                  <th data-i18n="toolName">工具</th>
+                  <th data-i18n="origin">来源</th>
+                  <th data-i18n="adapter">适配器</th>
+                  <th data-i18n="risk">风险</th>
+                  <th data-i18n="scope">Scope</th>
+                  <th data-i18n="status">状态</th>
+                </tr>
+              </thead>
+              <tbody id="tool-rows"></tbody>
+            </table>
+          </div>
+          <div class="pager">
+            <div class="muted" id="tool-range-summary">0 / 0</div>
+            <div class="pager-actions">
+              <button class="secondary" id="tool-prev" data-i18n="prev">上一页</button>
+              <button class="secondary" id="tool-next" data-i18n="next">下一页</button>
+            </div>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 data-i18n="mcpCatalog">MCP 目录</h2>
+              <div class="muted" id="mcp-page-summary">第 1 页</div>
+            </div>
+            <div class="actions">
+              <button class="secondary" id="mcp-export" data-i18n="export">导出</button>
+              <button class="secondary" id="mcp-refresh" data-i18n="refresh">刷新</button>
+            </div>
+          </div>
+          <div class="panel-body form-grid">
+            <div class="filters">
+              <input id="mcp-server-filter" data-i18n-placeholder="mcpServerFilter" placeholder="Server ID" />
+              <input id="mcp-scope-filter" data-i18n-placeholder="mcpScopeFilter" placeholder="Scope" />
+              <select id="mcp-enabled-filter">
+                <option value="" data-i18n="allEnabled">全部启用状态</option>
+                <option value="true" data-i18n="enabled">启用</option>
+                <option value="false" data-i18n="disabled">禁用</option>
+              </select>
+              <button class="secondary" id="mcp-filter-apply" data-i18n="applyFilter">筛选</button>
+            </div>
+            <div class="muted" id="mcp-catalog">正在加载 MCP 目录...</div>
+          </div>
+          <div class="table-wrap" style="height: 320px;">
+            <table class="mcp-table">
+              <thead>
+                <tr>
+                  <th data-i18n="server">Server</th>
+                  <th data-i18n="status">状态</th>
+                  <th data-i18n="toolCount">工具数</th>
+                  <th data-i18n="tools">工具</th>
+                  <th data-i18n="scope">Scope</th>
+                </tr>
+              </thead>
+              <tbody id="mcp-rows"></tbody>
+            </table>
+          </div>
+          <div class="pager">
+            <div class="muted" id="mcp-range-summary">0 / 0</div>
+            <div class="pager-actions">
+              <button class="secondary" id="mcp-prev" data-i18n="prev">上一页</button>
+              <button class="secondary" id="mcp-next" data-i18n="next">下一页</button>
+            </div>
+          </div>
+        </section>
       </div>
       <aside class="side">
         <section class="panel">
@@ -231,7 +342,6 @@ const consoleHTML = `<!doctype html>
         <section class="panel">
           <div class="panel-head">
             <h2 data-i18n="tools">工具调用</h2>
-            <button class="secondary" id="tool-export" data-i18n="export">导出</button>
           </div>
           <div class="panel-body form-grid">
             <select id="tool-select"></select>
@@ -239,23 +349,6 @@ const consoleHTML = `<!doctype html>
             <input id="tool-token" value="dev-token" />
             <button id="tool-invoke" data-i18n="invokeTool">执行工具</button>
             <pre id="tool-result" data-i18n="toolResultPlaceholder">工具执行结果会显示在这里。</pre>
-          </div>
-        </section>
-        <section class="panel">
-          <div class="panel-head">
-            <h2 data-i18n="mcpCatalog">MCP 目录</h2>
-            <button class="secondary" id="mcp-export" data-i18n="export">导出</button>
-          </div>
-          <div class="panel-body form-grid">
-            <input id="mcp-server-filter" data-i18n-placeholder="mcpServerFilter" placeholder="Server ID" />
-            <input id="mcp-scope-filter" data-i18n-placeholder="mcpScopeFilter" placeholder="Scope" />
-            <select id="mcp-enabled-filter">
-              <option value="" data-i18n="allEnabled">全部启用状态</option>
-              <option value="true" data-i18n="enabled">启用</option>
-              <option value="false" data-i18n="disabled">禁用</option>
-            </select>
-            <button class="secondary" id="mcp-filter-apply" data-i18n="applyFilter">筛选</button>
-            <div id="mcp-catalog">正在加载 MCP 目录...</div>
           </div>
         </section>
         <section class="panel">
@@ -278,7 +371,13 @@ const consoleHTML = `<!doctype html>
     const toolSelect = document.querySelector("#tool-select");
     const toolMeta = document.querySelector("#tool-meta");
     const toolResult = document.querySelector("#tool-result");
+    const toolRows = document.querySelector("#tool-rows");
+    const toolOriginFilter = document.querySelector("#tool-origin-filter");
+    const toolServerFilter = document.querySelector("#tool-server-filter");
+    const toolScopeFilter = document.querySelector("#tool-scope-filter");
+    const toolEnabledFilter = document.querySelector("#tool-enabled-filter");
     const mcpCatalog = document.querySelector("#mcp-catalog");
+    const mcpRows = document.querySelector("#mcp-rows");
     const mcpServerFilter = document.querySelector("#mcp-server-filter");
     const mcpScopeFilter = document.querySelector("#mcp-scope-filter");
     const mcpEnabledFilter = document.querySelector("#mcp-enabled-filter");
@@ -292,6 +391,12 @@ const consoleHTML = `<!doctype html>
     let auditPage = 1;
     const auditPageSize = 8;
     let allTools = [];
+    let toolTotal = 0;
+    let toolPage = 1;
+    const toolPageSize = 8;
+    let mcpTotal = 0;
+    let mcpPage = 1;
+    const mcpPageSize = 5;
     let lang = localStorage.getItem("gatewayConsoleLang") || "zh";
 
     const i18n = {
@@ -357,6 +462,16 @@ const consoleHTML = `<!doctype html>
         routingExplain: "路由解释",
         routingExplainHint: "点击“解释路由”预览策略和 Provider 路由。",
         tools: "\u5de5\u5177\u8c03\u7528",
+        toolCatalog: "工具目录",
+        toolName: "工具",
+        origin: "来源",
+        adapter: "适配器",
+        risk: "风险",
+        scope: "Scope",
+        server: "Server",
+        allOrigins: "全部来源",
+        builtinTool: "内置",
+        mcpTool: "MCP",
         mcpCatalog: "MCP 目录",
         loadingMCP: "正在加载 MCP 目录...",
         noMCPServers: "暂无 MCP Server。",
@@ -425,6 +540,7 @@ const consoleHTML = `<!doctype html>
         page: "第 {page} / {total} 页",
         range: "{range} / {total}，最新优先",
         auditRange: "{range} / {total} | 第 {page} / {pages} 页",
+        catalogRange: "{range} / {total}",
         loadConsoleFailed: "控制台加载失败："
       },
       en: {
@@ -489,6 +605,16 @@ const consoleHTML = `<!doctype html>
         routingExplain: "Routing Explain",
         routingExplainHint: "Run Explain to preview policy and provider routing.",
         tools: "Tool Invocation",
+        toolCatalog: "Tool Catalog",
+        toolName: "Tool",
+        origin: "Origin",
+        adapter: "Adapter",
+        risk: "Risk",
+        scope: "Scope",
+        server: "Server",
+        allOrigins: "All origins",
+        builtinTool: "Built-in",
+        mcpTool: "MCP",
         mcpCatalog: "MCP Catalog",
         loadingMCP: "Loading MCP catalog...",
         noMCPServers: "No MCP servers.",
@@ -557,6 +683,7 @@ const consoleHTML = `<!doctype html>
         page: "Page {page} / {total}",
         range: "{range} of {total}, newest first",
         auditRange: "{range} of {total} | Page {page} / {pages}",
+        catalogRange: "{range} of {total}",
         loadConsoleFailed: "Failed to load console: "
       }
     };
@@ -571,13 +698,20 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#explain").addEventListener("click", () => explainRouting(document.querySelector("#mode").value));
     document.querySelector("#tool-invoke").addEventListener("click", invokeTool);
     document.querySelector("#tool-export").addEventListener("click", exportTools);
+    document.querySelector("#tool-refresh").addEventListener("click", loadTools);
+    document.querySelector("#tool-filter-apply").addEventListener("click", () => { toolPage = 1; loadTools(); });
     toolSelect.addEventListener("change", renderSelectedTool);
-    document.querySelector("#mcp-filter-apply").addEventListener("click", loadMCPCatalog);
+    document.querySelector("#mcp-filter-apply").addEventListener("click", () => { mcpPage = 1; loadMCPCatalog(); });
     document.querySelector("#mcp-export").addEventListener("click", exportMCPCatalog);
+    document.querySelector("#mcp-refresh").addEventListener("click", loadMCPCatalog);
     document.querySelector("#trace-prev").addEventListener("click", () => { tracePage = Math.max(1, tracePage - 1); loadTraces(); });
     document.querySelector("#trace-next").addEventListener("click", () => { tracePage += 1; loadTraces(); });
     document.querySelector("#audit-prev").addEventListener("click", () => { auditPage = Math.max(1, auditPage - 1); loadAudit(); });
     document.querySelector("#audit-next").addEventListener("click", () => { auditPage += 1; loadAudit(); });
+    document.querySelector("#tool-prev").addEventListener("click", () => { toolPage = Math.max(1, toolPage - 1); loadTools(); });
+    document.querySelector("#tool-next").addEventListener("click", () => { toolPage += 1; loadTools(); });
+    document.querySelector("#mcp-prev").addEventListener("click", () => { mcpPage = Math.max(1, mcpPage - 1); loadMCPCatalog(); });
+    document.querySelector("#mcp-next").addEventListener("click", () => { mcpPage += 1; loadMCPCatalog(); });
     statusFilter.addEventListener("change", () => { tracePage = 1; loadTraces(); });
 
     function t(key, vars = {}) {
@@ -797,6 +931,8 @@ const consoleHTML = `<!doctype html>
       mcpCatalog.textContent = t("loadingMCP");
       try {
         const query = mcpCatalogQuery();
+        query.set("limit", String(mcpPageSize));
+        query.set("offset", String((mcpPage - 1) * mcpPageSize));
         const suffix = query.toString() ? "?" + query.toString() : "";
         const res = await fetch("/gateway/v1/mcp/servers" + suffix);
         const data = await res.json();
@@ -805,27 +941,17 @@ const consoleHTML = `<!doctype html>
           return;
         }
         const servers = data.servers || [];
+        mcpTotal = data.total || servers.length;
         if (!servers.length) {
-          mcpCatalog.innerHTML = "<div class=\"muted\">" + t("mcpMode") + ": " + esc(data.mode || "-") + " / " + t("noMCPServers") + "</div>";
+          mcpCatalog.textContent = t("mcpMode") + ": " + (data.mode || "-") + " / " + t("noMCPServers");
+          renderMCPServers([]);
           return;
         }
-        mcpCatalog.innerHTML =
-          "<div class=\"muted\">" + t("mcpMode") + ": " + esc(data.mode || "-") + " / " + (data.enabled ? t("enabled") : t("disabled")) + "</div>" +
-          servers.map(server =>
-            "<div class=\"provider\">" +
-              "<strong>" + esc(server.name || server.id) + "</strong>" +
-              "<div class=\"muted\">" + esc(server.id) + " / " + (server.enabled ? t("enabled") : t("disabled")) + " / " + t("toolCount") + ": " + esc(server.enabled_tools || 0) + "/" + esc(server.tool_count || 0) + "</div>" +
-              (server.tools || []).map(tool =>
-                "<div class=\"mcp-tool\">" +
-                  "<strong>" + esc(tool.name || tool.id) + "</strong>" +
-                  "<div class=\"muted\">" + esc(tool.id) + " / " + esc(tool.risk_level || "-") + " / " + (tool.read_only ? t("readOnlyTool") : t("writeTool")) + " / " + ((tool.scopes || []).map(esc).join(", ") || "-") + "</div>" +
-                  (tool.description ? "<div class=\"muted\">" + esc(tool.description) + "</div>" : "") +
-                "</div>"
-              ).join("") +
-            "</div>"
-          ).join("");
+        mcpCatalog.textContent = t("mcpMode") + ": " + (data.mode || "-") + " / " + (data.enabled ? t("enabled") : t("disabled"));
+        renderMCPServers(servers);
       } catch (err) {
         mcpCatalog.textContent = t("failedPrefix") + err.message;
+        renderMCPServers([]);
       }
     }
     function mcpCatalogQuery() {
@@ -835,6 +961,30 @@ const consoleHTML = `<!doctype html>
       if (mcpEnabledFilter.value) query.set("enabled", mcpEnabledFilter.value);
       return query;
     }
+    function renderMCPServers(servers) {
+      const totalPages = pageCount(mcpTotal, mcpPageSize);
+      mcpPage = clampPage(mcpPage, totalPages);
+      const range = pageRange(mcpTotal, mcpPage, mcpPageSize);
+      document.querySelector("#mcp-page-summary").textContent = t("page", { page: mcpPage, total: totalPages });
+      document.querySelector("#mcp-range-summary").textContent = t("catalogRange", { range: range.label, total: mcpTotal });
+      document.querySelector("#mcp-prev").disabled = mcpPage <= 1;
+      document.querySelector("#mcp-next").disabled = mcpPage >= totalPages;
+      mcpRows.innerHTML = servers.map(server => {
+        const tools = server.tools || [];
+        const names = tools.map(tool => tool.name || tool.id).join(", ") || "-";
+        const scopes = [...new Set(tools.flatMap(tool => tool.scopes || []))].join(", ") || "-";
+        return "<tr>" +
+          "<td><strong>" + esc(server.name || server.id) + "</strong><div class=\"muted\">" + esc(server.id) + "</div></td>" +
+          "<td><span class=\"status " + (server.enabled ? "healthy" : "disabled") + "\">" + (server.enabled ? t("enabled") : t("disabled")) + "</span></td>" +
+          "<td>" + esc(server.enabled_tools || 0) + " / " + esc(server.tool_count || 0) + "</td>" +
+          "<td title=\"" + esc(names) + "\">" + esc(names) + "</td>" +
+          "<td title=\"" + esc(scopes) + "\">" + esc(scopes) + "</td>" +
+        "</tr>";
+      }).join("");
+      if (!servers.length) {
+        mcpRows.innerHTML = "<tr><td colspan=\"5\" class=\"muted\">" + t("noMCPServers") + "</td></tr>";
+      }
+    }
     function exportMCPCatalog() {
       const query = mcpCatalogQuery();
       const suffix = query.toString() ? "?" + query.toString() : "";
@@ -843,24 +993,62 @@ const consoleHTML = `<!doctype html>
     async function loadTools() {
       toolMeta.textContent = t("loadingTools");
       try {
-        const res = await fetch("/gateway/v1/tools?limit=100");
+        const query = toolCatalogQuery();
+        query.set("limit", String(toolPageSize));
+        query.set("offset", String((toolPage - 1) * toolPageSize));
+        const res = await fetch("/gateway/v1/tools?" + query.toString());
         const data = await res.json();
         if (!res.ok) {
           allTools = [];
+          toolTotal = 0;
           toolSelect.innerHTML = "";
           toolMeta.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
+          renderTools();
           return;
         }
         allTools = data.tools || [];
+        toolTotal = data.total || allTools.length;
         renderTools();
       } catch (err) {
         allTools = [];
+        toolTotal = 0;
         toolSelect.innerHTML = "";
         toolMeta.textContent = t("failedPrefix") + err.message;
+        renderTools();
       }
     }
+    function toolCatalogQuery() {
+      const query = new URLSearchParams();
+      if (toolOriginFilter.value) query.set("origin", toolOriginFilter.value);
+      if (toolServerFilter.value.trim()) query.set("server_id", toolServerFilter.value.trim());
+      if (toolScopeFilter.value.trim()) query.set("scope", toolScopeFilter.value.trim());
+      if (toolEnabledFilter.value) query.set("enabled", toolEnabledFilter.value);
+      return query;
+    }
     function renderTools() {
+      const totalPages = pageCount(toolTotal, toolPageSize);
+      toolPage = clampPage(toolPage, totalPages);
+      const range = pageRange(toolTotal, toolPage, toolPageSize);
+      document.querySelector("#tool-page-summary").textContent = t("page", { page: toolPage, total: totalPages });
+      document.querySelector("#tool-range-summary").textContent = t("catalogRange", { range: range.label, total: toolTotal });
+      document.querySelector("#tool-prev").disabled = toolPage <= 1;
+      document.querySelector("#tool-next").disabled = toolPage >= totalPages;
+      toolRows.innerHTML = allTools.map(item =>
+        "<tr data-tool=\"" + esc(item.id) + "\">" +
+          "<td><strong>" + esc(item.name || item.id) + "</strong><div class=\"muted\">" + esc(item.id) + "</div></td>" +
+          "<td>" + esc(item.origin || "builtin") + (item.server_id ? "<div class=\"muted\">" + esc(item.server_id) + "</div>" : "") + "</td>" +
+          "<td>" + esc(item.adapter) + "</td>" +
+          "<td>" + esc(item.risk_level || "-") + "<div class=\"muted\">" + (item.read_only ? t("readOnlyTool") : t("writeTool")) + "</div></td>" +
+          "<td>" + esc((item.scopes || []).join(", ") || "-") + "</td>" +
+          "<td><span class=\"status " + (item.enabled ? "healthy" : "disabled") + "\">" + (item.enabled ? t("enabled") : t("disabled")) + "</span></td>" +
+        "</tr>"
+      ).join("");
+      toolRows.querySelectorAll("tr[data-tool]").forEach(row => row.addEventListener("click", () => {
+        toolSelect.value = row.dataset.tool;
+        renderSelectedTool();
+      }));
       if (!allTools.length) {
+        toolRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + t("noTools") + "</td></tr>";
         toolSelect.innerHTML = "";
         toolMeta.textContent = t("noTools");
         document.querySelector("#tool-invoke").disabled = true;
@@ -882,7 +1070,9 @@ const consoleHTML = `<!doctype html>
       toolMeta.textContent = tool.id + " / " + (tool.origin || "builtin") + (tool.server_id ? ":" + tool.server_id : "") + " / " + tool.adapter + " / " + (tool.read_only ? t("readOnlyTool") : t("writeTool")) + " / " + (tool.risk_level || "-") + " / " + ((tool.scopes || []).join(", ") || "-");
     }
     function exportTools() {
-      downloadURL("/gateway/v1/tools/export", "tools.jsonl");
+      const query = toolCatalogQuery();
+      const suffix = query.toString() ? "?" + query.toString() : "";
+      downloadURL("/gateway/v1/tools/export" + suffix, "tools.jsonl");
     }
     async function invokeTool() {
       const toolID = toolSelect.value;

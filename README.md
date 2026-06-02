@@ -361,11 +361,15 @@ curl "http://127.0.0.1:18765/gateway/v1/mcp/servers/export?scope=desktop.read" `
 - `server_id`：只看指定 MCP server
 - `scope`：只看包含指定 scope 的工具
 - `enabled`：`true` 只看启用工具，`false` 只看禁用工具
+- `limit` / `offset`：分页查看 MCP server 目录
 
 响应包含：
 
 - `enabled`
 - `mode`
+- `total`
+- `offset`
+- `limit`
 - `servers[].enabled`
 - `servers[].tool_count`
 - `servers[].enabled_tools`
