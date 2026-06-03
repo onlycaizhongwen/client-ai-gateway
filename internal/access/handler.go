@@ -444,17 +444,18 @@ type grantView struct {
 }
 
 type policyView struct {
-	ID               string   `json:"id"`
-	EvaluationOrder  int      `json:"evaluation_order"`
-	Priority         int      `json:"priority"`
-	Effect           string   `json:"effect"`
-	Reason           string   `json:"reason"`
-	ConditionSummary string   `json:"condition_summary"`
-	AppIDs           []string `json:"app_ids,omitempty"`
-	RequestTypes     []string `json:"request_types,omitempty"`
-	Models           []string `json:"models,omitempty"`
-	ProviderClasses  []string `json:"provider_classes,omitempty"`
-	DataLabels       []string `json:"data_labels,omitempty"`
+	ID               string                 `json:"id"`
+	EvaluationOrder  int                    `json:"evaluation_order"`
+	Priority         int                    `json:"priority"`
+	Effect           string                 `json:"effect"`
+	EffectSemantics  policy.EffectSemantics `json:"effect_semantics"`
+	Reason           string                 `json:"reason"`
+	ConditionSummary string                 `json:"condition_summary"`
+	AppIDs           []string               `json:"app_ids,omitempty"`
+	RequestTypes     []string               `json:"request_types,omitempty"`
+	Models           []string               `json:"models,omitempty"`
+	ProviderClasses  []string               `json:"provider_classes,omitempty"`
+	DataLabels       []string               `json:"data_labels,omitempty"`
 }
 
 func (h *Handler) appsList(w http.ResponseWriter, r *http.Request) {
@@ -720,6 +721,7 @@ func (h *Handler) policyViews(r *http.Request) []policyView {
 			EvaluationOrder:  index + 1,
 			Priority:         rule.Priority,
 			Effect:           rule.Effect,
+			EffectSemantics:  policy.EffectSemanticsFor(rule.Effect),
 			Reason:           rule.Reason,
 			ConditionSummary: policy.ConditionSummary(rule),
 			AppIDs:           append([]string(nil), rule.AppIDs...),

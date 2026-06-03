@@ -35,6 +35,13 @@ type RuleEvaluation struct {
 	MismatchFields   []string `json:"mismatch_fields,omitempty"`
 }
 
+type EffectSemantics struct {
+	Allowed     bool   `json:"allowed"`
+	AllowCloud  bool   `json:"allow_cloud"`
+	ForceLocal  bool   `json:"force_local"`
+	Description string `json:"description"`
+}
+
 type Engine struct {
 	version string
 	rules   []config.Policy
@@ -70,23 +77,28 @@ func (e *Engine) Evaluate(input Input) Decision {
 		decision.RulePriority = rule.Priority
 		decision.ConditionSummary = ConditionSummary(rule)
 		decision.Explanation = rule.Reason
-		switch rule.Effect {
-		case "allow":
-			decision.Allowed = true
-			decision.AllowCloud = true
-			decision.ForceLocal = false
-		case "deny":
-			decision.Allowed = false
-			decision.AllowCloud = false
-			decision.ForceLocal = false
-		case "deny_cloud_for_sensitive", "force_local":
-			decision.Allowed = true
-			decision.AllowCloud = false
-			decision.ForceLocal = true
-		}
+		semantics := EffectSemanticsFor(rule.Effect)
+		decision.Allowed = semantics.Allowed
+		decision.AllowCloud = semantics.AllowCloud
+		decision.ForceLocal = semantics.ForceLocal
 		return decision
 	}
 	return decision
+}
+
+func EffectSemanticsFor(effect string) EffectSemantics {
+	switch effect {
+	case "allow":
+		return EffectSemantics{Allowed: true, AllowCloud: true, ForceLocal: false, Description: "allow request and permit cloud providers"}
+	case "deny":
+		return EffectSemantics{Allowed: false, AllowCloud: false, ForceLocal: false, Description: "deny request before routing"}
+	case "deny_cloud_for_sensitive":
+		return EffectSemantics{Allowed: true, AllowCloud: false, ForceLocal: true, Description: "allow request but block cloud providers for sensitive data"}
+	case "force_local":
+		return EffectSemantics{Allowed: true, AllowCloud: false, ForceLocal: true, Description: "allow request but force local providers"}
+	default:
+		return EffectSemantics{Allowed: true, AllowCloud: true, ForceLocal: false, Description: "unknown effect; default policy semantics are permissive"}
+	}
 }
 
 func ConditionSummary(rule config.Policy) string {

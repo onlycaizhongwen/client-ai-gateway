@@ -165,3 +165,15 @@ func TestEffectiveDataLabelsReturnsCopyAndLegacyDefault(t *testing.T) {
 		t.Fatalf("effective labels should not mutate source rule: %+v", rule.DataLabels)
 	}
 }
+
+func TestEffectSemanticsFor(t *testing.T) {
+	deny := EffectSemanticsFor("deny")
+	if deny.Allowed || deny.AllowCloud || deny.ForceLocal {
+		t.Fatalf("unexpected deny semantics %+v", deny)
+	}
+
+	forceLocal := EffectSemanticsFor("force_local")
+	if !forceLocal.Allowed || forceLocal.AllowCloud || !forceLocal.ForceLocal {
+		t.Fatalf("unexpected force local semantics %+v", forceLocal)
+	}
+}

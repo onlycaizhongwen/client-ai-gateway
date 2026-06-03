@@ -235,6 +235,8 @@ Policy 目录按实际评估顺序返回，并提供 `evaluation_order`，便于
 
 Policy 目录的 `data_label` 过滤使用有效标签；未显式配置 `data_labels` 的 `deny_cloud_for_sensitive` 兼容规则会按 `sensitive` 标签展示和过滤。
 
+Policy 目录还会返回 `effect_semantics`，结构化说明该效果是否允许请求、是否允许云端 Provider、是否强制本地以及可读描述。
+
 支持效果：
 
 - `allow`：允许请求，可走本地或云端。

@@ -603,6 +603,9 @@ func TestPoliciesListFiltersAndPaginates(t *testing.T) {
 	if body.Policies[0].EvaluationOrder != 2 || body.Policies[0].Priority != 0 || body.Policies[0].ConditionSummary != "app in [dev-app] && model in [cloud-smart]" {
 		t.Fatalf("expected policy DSL fields, got %+v", body.Policies[0])
 	}
+	if body.Policies[0].EffectSemantics.Allowed || body.Policies[0].EffectSemantics.AllowCloud || body.Policies[0].EffectSemantics.ForceLocal {
+		t.Fatalf("expected deny semantics, got %+v", body.Policies[0].EffectSemantics)
+	}
 }
 
 func TestPoliciesListUsesEvaluationOrder(t *testing.T) {
@@ -663,6 +666,9 @@ func TestPoliciesListFiltersLegacySensitivePolicyByEffectiveLabel(t *testing.T) 
 	}
 	if labels := body.Policies[0].DataLabels; len(labels) != 1 || labels[0] != "sensitive" {
 		t.Fatalf("expected effective sensitive label, got %+v", body.Policies[0])
+	}
+	if !body.Policies[0].EffectSemantics.Allowed || body.Policies[0].EffectSemantics.AllowCloud || !body.Policies[0].EffectSemantics.ForceLocal {
+		t.Fatalf("expected sensitive cloud blocking semantics, got %+v", body.Policies[0].EffectSemantics)
 	}
 }
 

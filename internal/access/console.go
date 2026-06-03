@@ -2294,7 +2294,7 @@ const consoleHTML = `<!doctype html>
           "<td>" + esc(item.evaluation_order || "") + "</td>" +
           "<td class=\"trace-id\">" + esc(item.id) + "</td>" +
           "<td>" + esc(item.priority == null ? 0 : item.priority) + "</td>" +
-          "<td><span class=\"status " + esc(item.effect || "healthy") + "\">" + esc(labelPolicyEffect(item.effect)) + "</span></td>" +
+          "<td title=\"" + esc(labelEffectSemantics(item.effect_semantics)) + "\"><span class=\"status " + esc(item.effect || "healthy") + "\">" + esc(labelPolicyEffect(item.effect)) + "</span></td>" +
           "<td title=\"" + esc(scope) + "\">" + esc(item.condition_summary || scope) + "</td>" +
           "<td title=\"" + esc(item.reason || "") + "\">" + esc(item.reason || "") + "</td>" +
         "</tr>";
@@ -2313,6 +2313,15 @@ const consoleHTML = `<!doctype html>
         force_local: t("effectForceLocal"),
         deny_cloud_for_sensitive: t("effectDenyCloudSensitive")
       })[value] || value || "";
+    }
+    function labelEffectSemantics(value) {
+      if (!value) return "";
+      return [
+        t("decision") + ": " + (value.allowed ? t("allowed") : t("blocked")),
+        t("cloud") + ": " + (value.allow_cloud ? t("allowed") : t("blocked")),
+        t("nextAction") + ": " + (value.force_local ? t("effectForceLocal") : t("continue")),
+        value.description || ""
+      ].filter(Boolean).join(" / ");
     }
     function renderExplainChain(chain) {
       if (!chain) return "";
