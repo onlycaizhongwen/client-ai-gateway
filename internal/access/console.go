@@ -104,6 +104,11 @@ const consoleHTML = `<!doctype html>
     .provider, .route-item { border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-bottom: 9px; }
     .provider strong, .route-item strong { display: block; margin-bottom: 3px; }
     .route-item.skipped { background: #fff7ed; }
+    .explain-chain { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; background: #fbfdff; }
+    .explain-chain .chain-title { font-weight: 700; margin-bottom: 8px; }
+    .chain-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; }
+    .chain-cell { min-width: 0; }
+    .chain-cell .k { display: block; margin-bottom: 2px; }
     .mcp-tool { margin-top: 8px; padding: 8px; border-top: 1px solid var(--line); }
     .tool-meta { min-height: 20px; }
     .provider-actions button { padding: 5px 8px; font-size: 12px; }
@@ -129,6 +134,7 @@ const consoleHTML = `<!doctype html>
       .actions, .pager-actions { width: 100%; }
       .actions button, .pager-actions button { flex: 1; }
       .kv { grid-template-columns: 1fr; }
+      .chain-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -776,7 +782,7 @@ const consoleHTML = `<!doctype html>
     const auditMetadataValueFilter = document.querySelector("#audit-metadata-value-filter");
     const routeExplain = document.querySelector("#route-explain");
     const runtimeHealth = document.querySelector("#runtime-health");
-    const accessResult = document.querySelector("#access-result");
+    let accessResult = document.querySelector("#access-result");
     const toolSelect = document.querySelector("#tool-select");
     const toolMeta = document.querySelector("#tool-meta");
     const toolResult = document.querySelector("#tool-result");
@@ -821,7 +827,7 @@ const consoleHTML = `<!doctype html>
     const policyDryModel = document.querySelector("#policy-dry-model");
     const policyDryProviderClass = document.querySelector("#policy-dry-provider-class");
     const policyDryDataLabels = document.querySelector("#policy-dry-data-labels");
-    const policyDryResult = document.querySelector("#policy-dry-result");
+    let policyDryResult = document.querySelector("#policy-dry-result");
     const routingDryAppID = document.querySelector("#routing-dry-app-id");
     const routingDryRequestType = document.querySelector("#routing-dry-request-type");
     const routingDryModel = document.querySelector("#routing-dry-model");
@@ -897,6 +903,15 @@ const consoleHTML = `<!doctype html>
         allStatus: "全部状态",
         traceExportSafety: "Trace \u5bfc\u51fa\u5df2\u6309\u5f53\u524d\u7b5b\u9009\u6761\u4ef6\u751f\u6210\uff0c\u8bf7\u6c42\u5feb\u7167\u590d\u7528\u5df2\u4fdd\u5b58\u7684\u8131\u654f/\u622a\u65ad\u7248\u672c\uff0c\u4e0d\u5305\u542b\u5e94\u7528 Token\u3002",
         auditExportSafety: "Audit \u5bfc\u51fa\u9700\u8981\u7ba1\u7406\u5458\u4ee4\u724c\uff0c\u5df2\u6309\u5f53\u524d\u7b5b\u9009\u6761\u4ef6\u751f\u6210\uff1b\u82e5\u901a\u8fc7 trace_id \u590d\u76d8\u8bf7\u6c42\uff0c\u4ecd\u4f7f\u7528 Trace \u5b89\u5168\u5feb\u7167\u3002",
+        explainChain: "\u89e3\u91ca\u94fe",
+        stage: "\u9636\u6bb5",
+        decision: "\u51b3\u7b56",
+        nextAction: "\u4e0b\u4e00\u6b65",
+        matchedGrant: "\u547d\u4e2d\u6388\u6743",
+        missingGrants: "\u7f3a\u5931\u6388\u6743",
+        policyVersion: "\u7b56\u7565\u7248\u672c",
+        candidateCount: "\u5019\u9009\u6570",
+        skippedCount: "\u8df3\u8fc7\u6570",
         appFilter: "App ID",
         providerFilter: "Provider ID",
         traceFilter: "Trace ID",
@@ -1145,6 +1160,15 @@ const consoleHTML = `<!doctype html>
         allStatus: "All status",
         traceExportSafety: "Trace export uses the current filters and the stored safe request snapshot. Redacted or truncated values stay redacted, and app tokens are not included.",
         auditExportSafety: "Audit export requires an admin token and uses the current filters. Request replay by trace_id still relies on the Trace safe snapshot.",
+        explainChain: "Explain Chain",
+        stage: "Stage",
+        decision: "Decision",
+        nextAction: "Next Action",
+        matchedGrant: "Matched Grant",
+        missingGrants: "Missing Grants",
+        policyVersion: "Policy Version",
+        candidateCount: "Candidates",
+        skippedCount: "Skipped",
         appFilter: "App ID",
         providerFilter: "Provider ID",
         traceFilter: "Trace ID",
@@ -2261,6 +2285,38 @@ const consoleHTML = `<!doctype html>
         deny_cloud_for_sensitive: t("effectDenyCloudSensitive")
       })[value] || value || "";
     }
+    function renderExplainChain(chain) {
+      if (!chain) return "";
+      const cells = [
+        [t("stage"), chain.stage],
+        [t("decision"), chain.decision],
+        [t("reason"), chain.reason],
+        [t("policyRule"), chain.policy_rule_id],
+        [t("policyVersion"), chain.policy_version],
+        [t("cloud"), chain.allow_cloud == null ? "" : (chain.allow_cloud ? t("allowed") : t("blocked"))],
+        [t("matchedGrant"), chain.matched_grant],
+        [t("missingGrants"), labelChainList(chain.missing_grants)],
+        [t("toolName"), chain.tool_id],
+        [t("candidateCount"), chain.candidate_count],
+        [t("skippedCount"), chain.skipped_count],
+        [t("nextAction"), chain.next_action]
+      ].filter(item => item[1] !== undefined && item[1] !== null && item[1] !== "");
+      if (!cells.length) return "";
+      return "<div class=\"explain-chain\">" +
+        "<div class=\"chain-title\">" + t("explainChain") + "</div>" +
+        "<div class=\"chain-grid\">" +
+          cells.map(item => "<div class=\"chain-cell\"><span class=\"k\">" + esc(item[0]) + "</span><div>" + esc(String(item[1])) + "</div></div>").join("") +
+        "</div>" +
+      "</div>";
+    }
+    function labelChainList(values) {
+      if (!values) return "";
+      return Array.isArray(values) ? values.join(", ") : String(values);
+    }
+    function renderJSONPanel(node, html) {
+      node.outerHTML = html;
+      return document.querySelector("#" + node.id);
+    }
     function exportPolicyCatalog() {
       const query = policyCatalogQuery();
       exportAdminJSONL("/gateway/v1/policies/export", query, "policies.jsonl", policyMessage);
@@ -2286,7 +2342,7 @@ const consoleHTML = `<!doctype html>
           policyDryResult.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
           return;
         }
-        policyDryResult.textContent = JSON.stringify(data, null, 2);
+        policyDryResult = renderJSONPanel(policyDryResult, "<div id=\"policy-dry-result\">" + renderExplainChain(data.explain_chain) + "<pre>" + esc(JSON.stringify(data, null, 2)) + "</pre></div>");
         loadAudit();
       } catch (err) {
         policyDryResult.textContent = t("failedPrefix") + err.message;
@@ -2669,6 +2725,7 @@ const consoleHTML = `<!doctype html>
           "<div class=\"k\">" + t("appTarget") + "</div><div>" + esc(event.app_id || "-") + " / " + esc(event.target || "-") + "</div>" +
           "<div class=\"k\">" + t("time") + "</div><div>" + esc(time(event.created_at)) + "</div>" +
         "</div>" +
+        renderExplainChain(event.metadata && event.metadata.explain_chain) +
         "<pre>" + esc(JSON.stringify(event, null, 2)) + "</pre>";
       if (traceID) {
         loadDetail(traceID);
@@ -2736,6 +2793,7 @@ const consoleHTML = `<!doctype html>
             "<div class=\"k\">" + t("cloud") + "</div><div>" + (data.policy && data.policy.allow_cloud ? t("allowed") : t("blocked")) + "</div>" +
             "<div class=\"k\">" + t("reason") + "</div><div>" + esc(data.policy && data.policy.explanation) + "</div>" +
           "</div>" +
+          renderExplainChain(data.explain_chain) +
           "<h2>" + t("candidates") + "</h2>" +
           renderRouteItems(data.candidates || [], false) +
           "<h2 style=\"margin-top:12px;\">" + t("skipped") + "</h2>" +
@@ -2760,7 +2818,7 @@ const consoleHTML = `<!doctype html>
           body: JSON.stringify(body)
         });
         const data = await res.json();
-        accessResult.textContent = JSON.stringify(data, null, 2);
+        accessResult = renderJSONPanel(accessResult, "<div id=\"access-result\">" + renderExplainChain(data.explain_chain) + "<pre>" + esc(JSON.stringify(data, null, 2)) + "</pre></div>");
         await loadAudit();
       } catch (err) {
         accessResult.textContent = t("failedPrefix") + err.message;
