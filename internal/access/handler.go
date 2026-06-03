@@ -1155,23 +1155,29 @@ func (h *Handler) policyDryRun(w http.ResponseWriter, r *http.Request) {
 		ProviderClass: req.ProviderClass,
 	})
 	h.saveAudit(audit.Event{
-		AppID:  req.AppID,
-		Action: "policy.dry_run",
-		Target: req.Model,
-		Result: audit.ResultSuccess,
-		Metadata: map[string]any{
-			"request_type":   req.RequestType,
-			"data_labels":    strings.Join(req.DataLabels, ","),
-			"provider_class": req.ProviderClass,
-			"policy_rule_id": decision.RuleID,
-			"allow_cloud":    strconv.FormatBool(decision.AllowCloud),
-			"force_local":    strconv.FormatBool(decision.ForceLocal),
-		},
+		AppID:    req.AppID,
+		Action:   "policy.dry_run",
+		Target:   req.Model,
+		Result:   audit.ResultSuccess,
+		Metadata: policyDryRunAuditMetadata(req, decision),
 	})
 	writeJSON(w, http.StatusOK, map[string]any{
-		"decision": decision,
-		"input":    req,
+		"decision":      decision,
+		"explain_chain": policyExplainChain(req, decision),
+		"input":         req,
 	})
+}
+
+func policyDryRunAuditMetadata(req policyDryRunRequest, decision policy.Decision) map[string]any {
+	return map[string]any{
+		"request_type":   req.RequestType,
+		"data_labels":    strings.Join(req.DataLabels, ","),
+		"provider_class": req.ProviderClass,
+		"policy_rule_id": decision.RuleID,
+		"allow_cloud":    strconv.FormatBool(decision.AllowCloud),
+		"force_local":    strconv.FormatBool(decision.ForceLocal),
+		"explain_chain":  policyExplainChain(req, decision),
+	}
 }
 
 func (h *Handler) accessDryRun(w http.ResponseWriter, r *http.Request) {
@@ -1243,6 +1249,7 @@ func (h *Handler) accessDryRun(w http.ResponseWriter, r *http.Request) {
 			reason = "required grant is missing"
 		}
 	}
+	explainChain := accessExplainChain(req.Action, allowed, reason, matchedGrant, missingGrants, toolRef)
 
 	response := map[string]any{
 		"allowed":        allowed,
@@ -1251,6 +1258,7 @@ func (h *Handler) accessDryRun(w http.ResponseWriter, r *http.Request) {
 		"action":         req.Action,
 		"matched_grant":  matchedGrant,
 		"missing_grants": missingGrants,
+		"explain_chain":  explainChain,
 		"grants":         app.Grants,
 		"input":          req,
 	}
@@ -1271,7 +1279,7 @@ func (h *Handler) accessDryRun(w http.ResponseWriter, r *http.Request) {
 		Action:   "access.dry_run",
 		Target:   req.Action,
 		Result:   audit.ResultSuccess,
-		Metadata: accessDryRunAuditMetadata(allowed, reason, matchedGrant, missingGrants, toolRef),
+		Metadata: accessDryRunAuditMetadata(req.Action, allowed, reason, matchedGrant, missingGrants, toolRef),
 	})
 	writeJSON(w, http.StatusOK, response)
 }
@@ -1297,6 +1305,7 @@ func (h *Handler) routingExplain(w http.ResponseWriter, r *http.Request) {
 		Model:      req.Model,
 		AllowCloud: decision.AllowCloud,
 	})
+	explainChain := routingExplainChain(req, decision, len(explanation.Candidates), len(explanation.Skipped))
 	h.saveAudit(audit.Event{
 		AppID:  req.AppID,
 		Action: "routing.explain",
@@ -1309,13 +1318,15 @@ func (h *Handler) routingExplain(w http.ResponseWriter, r *http.Request) {
 			"allow_cloud":     decision.AllowCloud,
 			"candidate_count": len(explanation.Candidates),
 			"skipped_count":   len(explanation.Skipped),
+			"explain_chain":   explainChain,
 		},
 	})
 	writeJSON(w, http.StatusOK, map[string]any{
-		"input":      req,
-		"policy":     decision,
-		"candidates": explanation.Candidates,
-		"skipped":    explanation.Skipped,
+		"input":         req,
+		"policy":        decision,
+		"explain_chain": explainChain,
+		"candidates":    explanation.Candidates,
+		"skipped":       explanation.Skipped,
 	})
 }
 
@@ -1675,12 +1686,96 @@ func toolAuditMetadata(toolCfg toolConfigRef, matchedGrant string, missingGrants
 	}
 }
 
-func accessDryRunAuditMetadata(allowed bool, reason, matchedGrant string, missingGrants []string, toolRef *toolConfigRef) map[string]any {
+type explainChain struct {
+	Stage         string   `json:"stage"`
+	Decision      string   `json:"decision"`
+	Reason        string   `json:"reason"`
+	PolicyRuleID  string   `json:"policy_rule_id,omitempty"`
+	PolicyVersion string   `json:"policy_version,omitempty"`
+	AllowCloud    bool     `json:"allow_cloud,omitempty"`
+	ForceLocal    bool     `json:"force_local,omitempty"`
+	MatchedGrant  string   `json:"matched_grant,omitempty"`
+	MissingGrants []string `json:"missing_grants,omitempty"`
+	ToolID        string   `json:"tool_id,omitempty"`
+	Candidates    int      `json:"candidate_count,omitempty"`
+	Skipped       int      `json:"skipped_count,omitempty"`
+	NextAction    string   `json:"next_action"`
+}
+
+func policyExplainChain(req policyDryRunRequest, decision policy.Decision) explainChain {
+	decisionLabel := "allow"
+	nextAction := "route"
+	if !decision.Allowed {
+		decisionLabel = "deny"
+		nextAction = "stop"
+	} else if decision.ForceLocal {
+		decisionLabel = "force_local"
+		nextAction = "route_local_only"
+	} else if !decision.AllowCloud {
+		decisionLabel = "deny_cloud"
+		nextAction = "route_without_cloud"
+	}
+	return explainChain{
+		Stage:         "policy",
+		Decision:      decisionLabel,
+		Reason:        decision.Explanation,
+		PolicyRuleID:  decision.RuleID,
+		PolicyVersion: decision.Version,
+		AllowCloud:    decision.AllowCloud,
+		ForceLocal:    decision.ForceLocal,
+		NextAction:    nextAction,
+	}
+}
+
+func routingExplainChain(req routingExplainRequest, decision policy.Decision, candidates, skipped int) explainChain {
+	chain := policyExplainChain(policyDryRunRequest{
+		AppID:       req.AppID,
+		RequestType: req.RequestType,
+		DataLabels:  req.DataLabels,
+		Model:       req.Model,
+	}, decision)
+	chain.Stage = "routing"
+	chain.Candidates = candidates
+	chain.Skipped = skipped
+	if !decision.Allowed {
+		chain.NextAction = "stop"
+	} else if candidates == 0 {
+		chain.Decision = "no_route"
+		chain.NextAction = "fix_provider_or_policy"
+	} else {
+		chain.NextAction = "invoke_provider"
+	}
+	return chain
+}
+
+func accessExplainChain(action string, allowed bool, reason, matchedGrant string, missingGrants []string, toolRef *toolConfigRef) explainChain {
+	decision := "deny"
+	nextAction := "fix_grants"
+	if allowed {
+		decision = "allow"
+		nextAction = "continue"
+	}
+	chain := explainChain{
+		Stage:         "access",
+		Decision:      decision,
+		Reason:        reason,
+		MatchedGrant:  matchedGrant,
+		MissingGrants: missingGrants,
+		NextAction:    nextAction,
+	}
+	if toolRef != nil {
+		chain.ToolID = toolRef.ID
+	}
+	return chain
+}
+
+func accessDryRunAuditMetadata(action string, allowed bool, reason, matchedGrant string, missingGrants []string, toolRef *toolConfigRef) map[string]any {
 	metadata := map[string]any{
 		"allowed":        allowed,
 		"reason":         reason,
 		"matched_grant":  matchedGrant,
 		"missing_grants": missingGrants,
+		"explain_chain":  accessExplainChain(action, allowed, reason, matchedGrant, missingGrants, toolRef),
 	}
 	if toolRef != nil {
 		for key, value := range toolAuditMetadata(*toolRef, matchedGrant, missingGrants) {

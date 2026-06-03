@@ -1358,6 +1358,10 @@ func TestRoutingExplainHTTP(t *testing.T) {
 	if auditBody.Events[0].Metadata["policy_rule_id"] != "deny-sensitive-cloud" {
 		t.Fatalf("expected policy rule metadata, got %+v", auditBody.Events[0].Metadata)
 	}
+	chain, ok := auditBody.Events[0].Metadata["explain_chain"].(map[string]any)
+	if !ok || chain["stage"] != "routing" || chain["policy_rule_id"] != "deny-sensitive-cloud" || chain["next_action"] != "invoke_provider" {
+		t.Fatalf("expected routing explain chain metadata, got %+v", auditBody.Events[0].Metadata["explain_chain"])
+	}
 }
 
 func TestPolicyDryRunMatchesModelRuleHTTP(t *testing.T) {
@@ -1375,10 +1379,19 @@ func TestPolicyDryRunMatchesModelRuleHTTP(t *testing.T) {
 			RuleID  string `json:"rule_id"`
 			Allowed bool   `json:"allowed"`
 		} `json:"decision"`
+		ExplainChain struct {
+			Stage        string `json:"stage"`
+			Decision     string `json:"decision"`
+			PolicyRuleID string `json:"policy_rule_id"`
+			NextAction   string `json:"next_action"`
+		} `json:"explain_chain"`
 	}
 	decodeBody(t, res, &body)
 	if body.Decision.Allowed || body.Decision.RuleID != "deny-cloud-smart" {
 		t.Fatalf("expected deny-cloud-smart decision, got %+v", body.Decision)
+	}
+	if body.ExplainChain.Stage != "policy" || body.ExplainChain.Decision != "deny" || body.ExplainChain.PolicyRuleID != "deny-cloud-smart" || body.ExplainChain.NextAction != "stop" {
+		t.Fatalf("unexpected policy explain chain: %+v", body.ExplainChain)
 	}
 }
 
@@ -1395,10 +1408,19 @@ func TestAccessDryRunAllowsChatByAppID(t *testing.T) {
 		Allowed      bool   `json:"allowed"`
 		AppID        string `json:"app_id"`
 		MatchedGrant string `json:"matched_grant"`
+		ExplainChain struct {
+			Stage        string `json:"stage"`
+			Decision     string `json:"decision"`
+			MatchedGrant string `json:"matched_grant"`
+			NextAction   string `json:"next_action"`
+		} `json:"explain_chain"`
 	}
 	decodeBody(t, res, &body)
 	if !body.Allowed || body.AppID != "dev-app" || body.MatchedGrant != "chat" {
 		t.Fatalf("unexpected access dry-run body: %+v", body)
+	}
+	if body.ExplainChain.Stage != "access" || body.ExplainChain.Decision != "allow" || body.ExplainChain.MatchedGrant != "chat" || body.ExplainChain.NextAction != "continue" {
+		t.Fatalf("unexpected access explain chain: %+v", body.ExplainChain)
 	}
 }
 
@@ -1457,6 +1479,10 @@ func TestAccessDryRunExplainsMissingToolScope(t *testing.T) {
 	}
 	if missing, ok := events[0].Metadata["missing_grants"].([]string); !ok || len(missing) != 1 || missing[0] != "tool:runtime.read" {
 		t.Fatalf("expected missing grants audit metadata, got %+v", events[0].Metadata["missing_grants"])
+	}
+	chain, ok := events[0].Metadata["explain_chain"].(explainChain)
+	if !ok || chain.Stage != "access" || chain.Decision != "deny" || chain.ToolID != "gateway.runtime_health" || chain.NextAction != "fix_grants" {
+		t.Fatalf("expected access explain chain metadata, got %+v", events[0].Metadata["explain_chain"])
 	}
 }
 

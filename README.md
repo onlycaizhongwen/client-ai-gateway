@@ -267,6 +267,8 @@ curl -X POST http://127.0.0.1:18765/gateway/v1/access/dry-run `
 
 响应会说明 `allowed`、`reason`、`matched_grant`、`missing_grants`，工具试算还会返回工具来源、scope、只读状态和 sandbox 要求。控制台提供“权限试算”面板，并会把试算事件写入 Audit，Audit metadata 同步记录试算结论和缺失权限。
 
+Policy dry-run、Routing explain 和 Access dry-run 都会返回 `explain_chain`，并把同名字段写入 Audit metadata。该字段统一描述当前阶段、决策、原因、命中的策略规则或授权、缺失授权和建议下一步，便于从控制台审计详情或导出文件中串联“为什么允许 / 为什么拒绝 / 下一步该处理什么”。
+
 ## 工具调用
 
 查看工具：
