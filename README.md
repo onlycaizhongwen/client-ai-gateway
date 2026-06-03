@@ -273,6 +273,8 @@ curl -X POST http://127.0.0.1:18765/gateway/v1/access/dry-run `
 
 Policy dry-run、Routing explain 和 Access dry-run 都会返回 `explain_chain`，并把同名字段写入 Audit metadata。该字段统一描述当前阶段、决策、原因、命中的策略规则或授权、缺失授权和建议下一步，便于从控制台审计详情或导出文件中串联“为什么允许 / 为什么拒绝 / 下一步该处理什么”。
 
+Policy dry-run 和 Routing explain 还会在 `decision.rule_evaluations` / `policy.rule_evaluations` / Audit metadata 中返回规则评估诊断，按实际优先级顺序列出已检查规则、是否命中、未匹配字段和 `condition_summary`，用于解释“为什么不是上一条规则命中”。
+
 ## 工具调用
 
 查看工具：

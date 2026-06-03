@@ -1387,8 +1387,15 @@ func TestPolicyDryRunMatchesModelRuleHTTP(t *testing.T) {
 	}
 	var body struct {
 		Decision struct {
-			RuleID  string `json:"rule_id"`
-			Allowed bool   `json:"allowed"`
+			RuleID          string `json:"rule_id"`
+			Allowed         bool   `json:"allowed"`
+			RuleEvaluations []struct {
+				RuleID           string   `json:"rule_id"`
+				Priority         int      `json:"priority"`
+				ConditionSummary string   `json:"condition_summary"`
+				Matched          bool     `json:"matched"`
+				MismatchFields   []string `json:"mismatch_fields"`
+			} `json:"rule_evaluations"`
 		} `json:"decision"`
 		ExplainChain struct {
 			Stage        string `json:"stage"`
@@ -1408,6 +1415,15 @@ func TestPolicyDryRunMatchesModelRuleHTTP(t *testing.T) {
 	}
 	if body.ExplainChain.RulePriority != 0 || body.ExplainChain.Condition != "app in [dev-app] && model in [cloud-smart]" {
 		t.Fatalf("expected policy DSL explain fields, got %+v", body.ExplainChain)
+	}
+	if len(body.Decision.RuleEvaluations) != 2 {
+		t.Fatalf("expected rule evaluations, got %+v", body.Decision.RuleEvaluations)
+	}
+	if first := body.Decision.RuleEvaluations[0]; first.RuleID != "deny-sensitive-cloud" || first.Matched || len(first.MismatchFields) != 1 || first.MismatchFields[0] != "label" {
+		t.Fatalf("unexpected first rule evaluation: %+v", first)
+	}
+	if second := body.Decision.RuleEvaluations[1]; second.RuleID != "deny-cloud-smart" || !second.Matched || second.ConditionSummary != "app in [dev-app] && model in [cloud-smart]" {
+		t.Fatalf("unexpected second rule evaluation: %+v", second)
 	}
 }
 
@@ -1680,6 +1696,10 @@ func TestAuditListAdminHTTP(t *testing.T) {
 	decodeBody(t, res, &body)
 	if len(body.Events) != 1 || body.Events[0].Action != "policy.dry_run" {
 		t.Fatalf("expected dry-run audit event, got %+v", body.Events)
+	}
+	evaluations, ok := body.Events[0].Metadata["rule_evaluations"].([]any)
+	if !ok || len(evaluations) == 0 {
+		t.Fatalf("expected policy rule evaluations metadata, got %+v", body.Events[0].Metadata["rule_evaluations"])
 	}
 }
 

@@ -15,14 +15,23 @@ type Input struct {
 }
 
 type Decision struct {
-	RuleID           string `json:"rule_id"`
-	RulePriority     int    `json:"rule_priority"`
-	Version          string `json:"version"`
-	Allowed          bool   `json:"allowed"`
-	AllowCloud       bool   `json:"allow_cloud"`
-	ForceLocal       bool   `json:"force_local"`
-	ConditionSummary string `json:"condition_summary,omitempty"`
-	Explanation      string `json:"explanation"`
+	RuleID           string           `json:"rule_id"`
+	RulePriority     int              `json:"rule_priority"`
+	Version          string           `json:"version"`
+	Allowed          bool             `json:"allowed"`
+	AllowCloud       bool             `json:"allow_cloud"`
+	ForceLocal       bool             `json:"force_local"`
+	ConditionSummary string           `json:"condition_summary,omitempty"`
+	Explanation      string           `json:"explanation"`
+	RuleEvaluations  []RuleEvaluation `json:"rule_evaluations,omitempty"`
+}
+
+type RuleEvaluation struct {
+	RuleID           string   `json:"rule_id"`
+	Priority         int      `json:"priority"`
+	ConditionSummary string   `json:"condition_summary"`
+	Matched          bool     `json:"matched"`
+	MismatchFields   []string `json:"mismatch_fields,omitempty"`
 }
 
 type Engine struct {
@@ -43,7 +52,16 @@ func (e *Engine) Evaluate(input Input) Decision {
 		Explanation: "Allowed by default local development policy",
 	}
 	for _, rule := range e.rules {
-		if !matchesRule(rule, input) {
+		mismatchFields := ruleMismatchFields(rule, input)
+		matched := len(mismatchFields) == 0
+		decision.RuleEvaluations = append(decision.RuleEvaluations, RuleEvaluation{
+			RuleID:           rule.ID,
+			Priority:         rule.Priority,
+			ConditionSummary: ConditionSummary(rule),
+			Matched:          matched,
+			MismatchFields:   mismatchFields,
+		})
+		if !matched {
 			continue
 		}
 		decision.RuleID = rule.ID
@@ -118,28 +136,33 @@ func orderedRules(rules []config.Policy) []config.Policy {
 }
 
 func matchesRule(rule config.Policy, input Input) bool {
+	return len(ruleMismatchFields(rule, input)) == 0
+}
+
+func ruleMismatchFields(rule config.Policy, input Input) []string {
+	fields := []string{}
 	if !matchAny(rule.AppIDs, input.AppID) {
-		return false
+		fields = append(fields, "app")
 	}
 	if !matchAny(rule.RequestTypes, input.RequestType) {
-		return false
+		fields = append(fields, "request")
 	}
 	if !matchAny(rule.Models, input.Model) {
-		return false
+		fields = append(fields, "model")
 	}
 	if !matchesProviderClass(rule, input.ProviderClass) {
-		return false
+		fields = append(fields, "provider")
 	}
 	dataLabels := effectiveDataLabels(rule)
 	if len(dataLabels) == 0 {
-		return true
+		return fields
 	}
 	for _, want := range dataLabels {
 		if contains(input.DataLabels, want) {
-			return true
+			return fields
 		}
 	}
-	return false
+	return append(fields, "label")
 }
 
 func matchAny(patterns []string, value string) bool {

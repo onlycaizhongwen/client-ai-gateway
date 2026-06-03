@@ -1174,15 +1174,16 @@ func (h *Handler) policyDryRun(w http.ResponseWriter, r *http.Request) {
 
 func policyDryRunAuditMetadata(req policyDryRunRequest, decision policy.Decision) map[string]any {
 	return map[string]any{
-		"request_type":   req.RequestType,
-		"data_labels":    strings.Join(req.DataLabels, ","),
-		"provider_class": req.ProviderClass,
-		"policy_rule_id": decision.RuleID,
-		"rule_priority":  strconv.Itoa(decision.RulePriority),
-		"condition":      decision.ConditionSummary,
-		"allow_cloud":    strconv.FormatBool(decision.AllowCloud),
-		"force_local":    strconv.FormatBool(decision.ForceLocal),
-		"explain_chain":  policyExplainChain(req, decision),
+		"request_type":     req.RequestType,
+		"data_labels":      strings.Join(req.DataLabels, ","),
+		"provider_class":   req.ProviderClass,
+		"policy_rule_id":   decision.RuleID,
+		"rule_priority":    strconv.Itoa(decision.RulePriority),
+		"condition":        decision.ConditionSummary,
+		"rule_evaluations": decision.RuleEvaluations,
+		"allow_cloud":      strconv.FormatBool(decision.AllowCloud),
+		"force_local":      strconv.FormatBool(decision.ForceLocal),
+		"explain_chain":    policyExplainChain(req, decision),
 	}
 }
 
@@ -1318,13 +1319,16 @@ func (h *Handler) routingExplain(w http.ResponseWriter, r *http.Request) {
 		Target: req.Model,
 		Result: audit.ResultSuccess,
 		Metadata: map[string]any{
-			"request_type":    req.RequestType,
-			"data_labels":     req.DataLabels,
-			"policy_rule_id":  decision.RuleID,
-			"allow_cloud":     decision.AllowCloud,
-			"candidate_count": len(explanation.Candidates),
-			"skipped_count":   len(explanation.Skipped),
-			"explain_chain":   explainChain,
+			"request_type":     req.RequestType,
+			"data_labels":      req.DataLabels,
+			"policy_rule_id":   decision.RuleID,
+			"rule_priority":    decision.RulePriority,
+			"condition":        decision.ConditionSummary,
+			"rule_evaluations": decision.RuleEvaluations,
+			"allow_cloud":      decision.AllowCloud,
+			"candidate_count":  len(explanation.Candidates),
+			"skipped_count":    len(explanation.Skipped),
+			"explain_chain":    explainChain,
 		},
 	})
 	writeJSON(w, http.StatusOK, map[string]any{

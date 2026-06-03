@@ -919,6 +919,11 @@ const consoleHTML = `<!doctype html>
         policyVersion: "\u7b56\u7565\u7248\u672c",
         rulePriority: "\u89c4\u5219\u4f18\u5148\u7ea7",
         condition: "\u6761\u4ef6",
+        ruleEvaluations: "\u89c4\u5219\u8bc4\u4f30\u8bca\u65ad",
+        matched: "\u547d\u4e2d",
+        mismatchFields: "\u672a\u5339\u914d\u5b57\u6bb5",
+        yes: "\u662f",
+        no: "\u5426",
         candidateCount: "\u5019\u9009\u6570",
         skippedCount: "\u8df3\u8fc7\u6570",
         appFilter: "App ID",
@@ -1179,6 +1184,11 @@ const consoleHTML = `<!doctype html>
         policyVersion: "Policy Version",
         rulePriority: "Rule Priority",
         condition: "Condition",
+        ruleEvaluations: "Rule Evaluation Diagnostics",
+        matched: "Matched",
+        mismatchFields: "Mismatch Fields",
+        yes: "Yes",
+        no: "No",
         candidateCount: "Candidates",
         skippedCount: "Skipped",
         appFilter: "App ID",
@@ -2329,6 +2339,27 @@ const consoleHTML = `<!doctype html>
       if (!values) return "";
       return Array.isArray(values) ? values.join(", ") : String(values);
     }
+    function renderPolicyEvaluations(evaluations) {
+      if (!evaluations || !evaluations.length) return "";
+      return "<div class=\"explain-chain\">" +
+        "<div class=\"chain-title\">" + t("ruleEvaluations") + "</div>" +
+        "<div class=\"table-wrap\"><table class=\"policy-table\"><thead><tr>" +
+          "<th data-i18n=\"policy\">" + t("policy") + "</th>" +
+          "<th data-i18n=\"priority\">" + t("priority") + "</th>" +
+          "<th data-i18n=\"matched\">" + t("matched") + "</th>" +
+          "<th data-i18n=\"mismatchFields\">" + t("mismatchFields") + "</th>" +
+          "<th data-i18n=\"condition\">" + t("condition") + "</th>" +
+        "</tr></thead><tbody>" +
+          evaluations.map(item => "<tr>" +
+            "<td class=\"trace-id\">" + esc(item.rule_id || "") + "</td>" +
+            "<td>" + esc(item.priority == null ? 0 : item.priority) + "</td>" +
+            "<td>" + esc(item.matched ? t("yes") : t("no")) + "</td>" +
+            "<td title=\"" + esc(labelChainList(item.mismatch_fields)) + "\">" + esc(labelChainList(item.mismatch_fields) || "-") + "</td>" +
+            "<td title=\"" + esc(item.condition_summary || "") + "\">" + esc(item.condition_summary || "") + "</td>" +
+          "</tr>").join("") +
+        "</tbody></table></div>" +
+      "</div>";
+    }
     function renderJSONPanel(node, html) {
       node.outerHTML = html;
       return document.querySelector("#" + node.id);
@@ -2358,7 +2389,7 @@ const consoleHTML = `<!doctype html>
           policyDryResult.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
           return;
         }
-        policyDryResult = renderJSONPanel(policyDryResult, "<div id=\"policy-dry-result\">" + renderExplainChain(data.explain_chain) + "<pre>" + esc(JSON.stringify(data, null, 2)) + "</pre></div>");
+        policyDryResult = renderJSONPanel(policyDryResult, "<div id=\"policy-dry-result\">" + renderExplainChain(data.explain_chain) + renderPolicyEvaluations(data.decision && data.decision.rule_evaluations) + "<pre>" + esc(JSON.stringify(data, null, 2)) + "</pre></div>");
         loadAudit();
       } catch (err) {
         policyDryResult.textContent = t("failedPrefix") + err.message;

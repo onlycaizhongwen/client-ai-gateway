@@ -125,6 +125,26 @@ func TestEngineKeepsConfigOrderForSamePriority(t *testing.T) {
 	}
 }
 
+func TestEngineReturnsRuleEvaluationsInEvaluationOrder(t *testing.T) {
+	engine := NewEngine("v1", []config.Policy{
+		{ID: "low-model", Priority: 10, Effect: "deny", Reason: "low", Models: []string{"cloud-smart"}},
+		{ID: "high-sensitive", Priority: 100, Effect: "force_local", Reason: "high", DataLabels: []string{"sensitive"}},
+	})
+
+	decision := engine.Evaluate(Input{RequestType: "chat", Model: "cloud-smart"})
+	if decision.RuleID != "low-model" || len(decision.RuleEvaluations) != 2 {
+		t.Fatalf("unexpected decision evaluations: %+v", decision)
+	}
+	first := decision.RuleEvaluations[0]
+	if first.RuleID != "high-sensitive" || first.Matched || len(first.MismatchFields) != 1 || first.MismatchFields[0] != "label" {
+		t.Fatalf("unexpected first evaluation: %+v", first)
+	}
+	second := decision.RuleEvaluations[1]
+	if second.RuleID != "low-model" || !second.Matched || second.ConditionSummary != "model in [cloud-smart]" {
+		t.Fatalf("unexpected second evaluation: %+v", second)
+	}
+}
+
 func TestConditionSummaryUsesLegacySensitiveLabel(t *testing.T) {
 	summary := ConditionSummary(config.Policy{ID: "sensitive", Effect: "deny_cloud_for_sensitive"})
 	if summary != "label in [sensitive]" {
