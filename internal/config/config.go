@@ -9,17 +9,20 @@ import (
 )
 
 type Config struct {
-	ListenAddr        string     `json:"listen_addr"`
-	TraceStorePath    string     `json:"trace_store_path"`
-	AuditStorePath    string     `json:"audit_store_path"`
-	TraceRetentionMax int        `json:"trace_retention_max,omitempty"`
-	AuditRetentionMax int        `json:"audit_retention_max,omitempty"`
-	PolicyVersion     string     `json:"policy_version"`
-	Apps              []App      `json:"apps"`
-	Providers         []Provider `json:"providers"`
-	Tools             []Tool     `json:"tools,omitempty"`
-	MCPRuntime        MCPRuntime `json:"mcp_runtime,omitempty"`
-	Policies          []Policy   `json:"policies"`
+	ListenAddr            string     `json:"listen_addr"`
+	TraceStorePath        string     `json:"trace_store_path"`
+	AuditStorePath        string     `json:"audit_store_path"`
+	TraceRetentionMax     int        `json:"trace_retention_max,omitempty"`
+	AuditRetentionMax     int        `json:"audit_retention_max,omitempty"`
+	TraceSnapshotEnabled  *bool      `json:"trace_snapshot_enabled,omitempty"`
+	TraceRedactLabels     []string   `json:"trace_redact_labels,omitempty"`
+	TraceSnapshotMaxChars int        `json:"trace_snapshot_max_chars,omitempty"`
+	PolicyVersion         string     `json:"policy_version"`
+	Apps                  []App      `json:"apps"`
+	Providers             []Provider `json:"providers"`
+	Tools                 []Tool     `json:"tools,omitempty"`
+	MCPRuntime            MCPRuntime `json:"mcp_runtime,omitempty"`
+	Policies              []Policy   `json:"policies"`
 }
 
 type App struct {
@@ -144,6 +147,21 @@ func (c Config) Validate() error {
 	}
 	if c.AuditRetentionMax < 0 {
 		return fmt.Errorf("audit_retention_max must be >= 0")
+	}
+	if c.TraceSnapshotMaxChars < 0 {
+		return fmt.Errorf("trace_snapshot_max_chars must be >= 0")
+	}
+	redactLabels := map[string]struct{}{}
+	for i, label := range c.TraceRedactLabels {
+		normalized := strings.TrimSpace(label)
+		if normalized == "" {
+			return fmt.Errorf("trace_redact_labels[%d] must not be empty", i)
+		}
+		key := strings.ToLower(normalized)
+		if _, ok := redactLabels[key]; ok {
+			return fmt.Errorf("trace_redact_labels contains duplicate label %q", normalized)
+		}
+		redactLabels[key] = struct{}{}
 	}
 	if len(c.Apps) == 0 {
 		return fmt.Errorf("at least one app is required")
@@ -273,6 +291,24 @@ func (c Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+func (c Config) IsTraceSnapshotEnabled() bool {
+	return c.TraceSnapshotEnabled == nil || *c.TraceSnapshotEnabled
+}
+
+func (c Config) EffectiveTraceRedactLabels() []string {
+	if len(c.TraceRedactLabels) == 0 {
+		return []string{"sensitive"}
+	}
+	out := make([]string, 0, len(c.TraceRedactLabels))
+	for _, label := range c.TraceRedactLabels {
+		label = strings.TrimSpace(label)
+		if label != "" {
+			out = append(out, label)
+		}
+	}
+	return out
 }
 
 func validGrant(grant string) bool {

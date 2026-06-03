@@ -68,6 +68,25 @@ func TestLoadValidMCPRuntimePlaceholder(t *testing.T) {
 	}
 }
 
+func TestTraceSnapshotDefaults(t *testing.T) {
+	path := writeConfig(t, `{
+	  "listen_addr": "127.0.0.1:18765",
+	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat"]}],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}]
+	}`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.IsTraceSnapshotEnabled() {
+		t.Fatal("expected trace snapshot to default enabled")
+	}
+	if got := cfg.EffectiveTraceRedactLabels(); len(got) != 1 || got[0] != "sensitive" {
+		t.Fatalf("unexpected default trace redact labels: %+v", got)
+	}
+}
+
 func TestProviderEnabledDefaultsToTrue(t *testing.T) {
 	provider := Provider{ID: "p", Class: "local", Models: []string{"m"}, Healthy: true}
 	if !provider.IsEnabled() {
@@ -123,6 +142,36 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 			  "providers": [{"id":"p","class":"local","models":["m"]}]
 			}`,
 			want: "audit_retention_max",
+		},
+		{
+			name: "negative trace snapshot max chars",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "trace_snapshot_max_chars": -1,
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}]
+			}`,
+			want: "trace_snapshot_max_chars",
+		},
+		{
+			name: "empty trace redact label",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "trace_redact_labels": ["sensitive", " "],
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}]
+			}`,
+			want: "trace_redact_labels[1]",
+		},
+		{
+			name: "duplicate trace redact label",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "trace_redact_labels": ["Sensitive", "sensitive"],
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}]
+			}`,
+			want: "duplicate label",
 		},
 		{
 			name: "openai compatible provider requires base url",

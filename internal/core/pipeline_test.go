@@ -98,11 +98,86 @@ func TestPipelineSensitiveBlocksCloudFallbackRedactsTraceSnapshot(t *testing.T) 
 	}
 }
 
+func TestPipelineTraceSnapshotUsesConfiguredRedactLabels(t *testing.T) {
+	pipeline, store := newTestPipelineWithConfig(config.Config{
+		TraceRedactLabels: []string{"private"},
+	})
+
+	resp, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
+		Model:      "local-small",
+		Messages:   []core.Message{{Role: "user", Content: "private message"}},
+		DataLabels: []string{"private"},
+		Metadata:   map[string]string{"ticket": "secret-123"},
+	})
+	if err != nil {
+		t.Fatalf("chat failed: %v", err)
+	}
+	record, ok := store.Get(resp.TraceID)
+	if !ok {
+		t.Fatal("expected trace record")
+	}
+	if record.Request.Messages[0].Content != "[redacted]" || record.Request.Metadata["ticket"] != "[redacted]" {
+		t.Fatalf("expected configured label to redact snapshot, got %+v", record.Request)
+	}
+}
+
+func TestPipelineTraceSnapshotMaxChars(t *testing.T) {
+	pipeline, store := newTestPipelineWithConfig(config.Config{TraceSnapshotMaxChars: 4})
+
+	resp, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
+		Model:    "local-small",
+		Messages: []core.Message{{Role: "user", Content: "你好abcdef"}},
+		Metadata: map[string]string{"long": "metadata-value"},
+	})
+	if err != nil {
+		t.Fatalf("chat failed: %v", err)
+	}
+	record, ok := store.Get(resp.TraceID)
+	if !ok {
+		t.Fatal("expected trace record")
+	}
+	if record.Request.Messages[0].Content != "你好ab...[truncated]" {
+		t.Fatalf("expected message truncation, got %+v", record.Request.Messages)
+	}
+	if record.Request.Metadata["long"] != "meta...[truncated]" {
+		t.Fatalf("expected metadata truncation, got %+v", record.Request.Metadata)
+	}
+}
+
+func TestPipelineTraceSnapshotCanBeDisabled(t *testing.T) {
+	enabled := false
+	pipeline, store := newTestPipelineWithConfig(config.Config{TraceSnapshotEnabled: &enabled})
+
+	resp, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
+		Model:      "local-small",
+		Messages:   []core.Message{{Role: "user", Content: "hello"}},
+		DataLabels: []string{"sensitive"},
+		Metadata:   map[string]string{"k": "v"},
+	})
+	if err != nil {
+		t.Fatalf("chat failed: %v", err)
+	}
+	record, ok := store.Get(resp.TraceID)
+	if !ok {
+		t.Fatal("expected trace record")
+	}
+	if record.Request.Model != "" || len(record.Request.Messages) != 0 || len(record.Request.Metadata) != 0 || len(record.Request.DataLabels) != 0 {
+		t.Fatalf("expected empty request snapshot, got %+v", record.Request)
+	}
+}
+
 func newTestPipeline() (*core.Pipeline, *trace.MemoryStore) {
+	return newTestPipelineWithConfig(config.Config{})
+}
+
+func newTestPipelineWithConfig(overrides config.Config) (*core.Pipeline, *trace.MemoryStore) {
 	cfg := config.Config{
-		ListenAddr:    "127.0.0.1:0",
-		PolicyVersion: "test",
-		Apps:          []config.App{{ID: "dev-app", Token: "dev-token", Grants: []string{"chat"}}},
+		ListenAddr:            "127.0.0.1:0",
+		PolicyVersion:         "test",
+		TraceSnapshotEnabled:  overrides.TraceSnapshotEnabled,
+		TraceRedactLabels:     overrides.TraceRedactLabels,
+		TraceSnapshotMaxChars: overrides.TraceSnapshotMaxChars,
+		Apps:                  []config.App{{ID: "dev-app", Token: "dev-token", Grants: []string{"chat"}}},
 		Providers: []config.Provider{
 			{ID: "local-mock", Class: "local", Models: []string{"local-small"}, Healthy: true},
 			{ID: "cloud-mock", Class: "cloud", Models: []string{"local-small", "cloud-smart"}, Healthy: true},

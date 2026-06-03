@@ -54,15 +54,10 @@ func (p *Pipeline) Chat(ctx context.Context, token string, req ChatRequest) (Cha
 		RequestType: "chat",
 		AppID:       env.AppID,
 		Model:       req.Model,
-		Request: trace.RequestSnapshot{
-			Model:      req.Model,
-			Messages:   toTraceMessages(req.Messages, req.DataLabels),
-			Metadata:   traceMetadata(req.Metadata, req.DataLabels),
-			DataLabels: append([]string(nil), req.DataLabels...),
-		},
-		Status:    "started",
-		StartedAt: env.StartedAt,
-		Events:    []trace.Event{{Type: "request_started", Message: "request accepted by access layer", At: env.StartedAt}},
+		Request:     p.traceRequestSnapshot(req),
+		Status:      "started",
+		StartedAt:   env.StartedAt,
+		Events:      []trace.Event{{Type: "request_started", Message: "request accepted by access layer", At: env.StartedAt}},
 	}
 
 	if !ok {
@@ -231,38 +226,64 @@ func toAdapterMessages(messages []Message) []adapters.Message {
 	return out
 }
 
-func toTraceMessages(messages []Message, dataLabels []string) []trace.MessageSnapshot {
+func (p *Pipeline) traceRequestSnapshot(req ChatRequest) trace.RequestSnapshot {
+	if !p.deps.Config.IsTraceSnapshotEnabled() {
+		return trace.RequestSnapshot{}
+	}
+	redact := shouldRedactTraceSnapshot(req.DataLabels, p.deps.Config.EffectiveTraceRedactLabels())
+	maxChars := p.deps.Config.TraceSnapshotMaxChars
+	return trace.RequestSnapshot{
+		Model:      req.Model,
+		Messages:   toTraceMessages(req.Messages, redact, maxChars),
+		Metadata:   traceMetadata(req.Metadata, redact, maxChars),
+		DataLabels: append([]string(nil), req.DataLabels...),
+	}
+}
+
+func toTraceMessages(messages []Message, redact bool, maxChars int) []trace.MessageSnapshot {
 	out := make([]trace.MessageSnapshot, 0, len(messages))
-	redact := hasDataLabel(dataLabels, "sensitive")
 	for _, message := range messages {
-		content := message.Content
-		if redact {
-			content = "[redacted]"
-		}
+		content := traceSnapshotValue(message.Content, redact, maxChars)
 		out = append(out, trace.MessageSnapshot{Role: message.Role, Content: content})
 	}
 	return out
 }
 
-func traceMetadata(values map[string]string, dataLabels []string) map[string]string {
+func traceMetadata(values map[string]string, redact bool, maxChars int) map[string]string {
 	if len(values) == 0 {
 		return nil
 	}
-	redact := hasDataLabel(dataLabels, "sensitive")
 	out := make(map[string]string, len(values))
 	for key, value := range values {
-		if redact {
-			value = "[redacted]"
-		}
-		out[key] = value
+		out[key] = traceSnapshotValue(value, redact, maxChars)
 	}
 	return out
 }
 
-func hasDataLabel(labels []string, want string) bool {
-	for _, label := range labels {
-		if strings.EqualFold(strings.TrimSpace(label), want) {
-			return true
+func traceSnapshotValue(value string, redact bool, maxChars int) string {
+	if redact {
+		return "[redacted]"
+	}
+	return truncateTraceSnapshotValue(value, maxChars)
+}
+
+func truncateTraceSnapshotValue(value string, maxChars int) string {
+	if maxChars <= 0 {
+		return value
+	}
+	runes := []rune(value)
+	if len(runes) <= maxChars {
+		return value
+	}
+	return string(runes[:maxChars]) + "...[truncated]"
+}
+
+func shouldRedactTraceSnapshot(dataLabels []string, redactLabels []string) bool {
+	for _, label := range dataLabels {
+		for _, redactLabel := range redactLabels {
+			if strings.EqualFold(strings.TrimSpace(label), strings.TrimSpace(redactLabel)) {
+				return true
+			}
 		}
 	}
 	return false

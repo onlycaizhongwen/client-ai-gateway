@@ -4,6 +4,11 @@
   "audit_store_path": "data/audit.jsonl",
   "trace_retention_max": 5000,
   "audit_retention_max": 5000,
+  "trace_snapshot_enabled": true,
+  "trace_redact_labels": [
+    "sensitive"
+  ],
+  "trace_snapshot_max_chars": 4000,
   "policy_version": "local-dev-v1",
   "apps": [
     {
