@@ -64,8 +64,8 @@ func TestPipelineFallbackAllowed(t *testing.T) {
 	}
 }
 
-func TestPipelineSensitiveBlocksCloudFallback(t *testing.T) {
-	pipeline, _ := newTestPipeline()
+func TestPipelineSensitiveBlocksCloudFallbackRedactsTraceSnapshot(t *testing.T) {
+	pipeline, store := newTestPipeline()
 
 	_, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
 		Model:      "local-small",
@@ -82,6 +82,19 @@ func TestPipelineSensitiveBlocksCloudFallback(t *testing.T) {
 	}
 	if gatewayErr.TraceID == "" {
 		t.Fatal("expected trace id on failure")
+	}
+	record, ok := store.Get(gatewayErr.TraceID)
+	if !ok {
+		t.Fatal("expected failed trace record")
+	}
+	if len(record.Request.Messages) != 1 || record.Request.Messages[0].Content != "[redacted]" {
+		t.Fatalf("expected sensitive message to be redacted, got %+v", record.Request.Messages)
+	}
+	if record.Request.Metadata["fail_provider"] != "[redacted]" {
+		t.Fatalf("expected sensitive metadata to be redacted, got %+v", record.Request.Metadata)
+	}
+	if len(record.Request.DataLabels) != 1 || record.Request.DataLabels[0] != "sensitive" {
+		t.Fatalf("expected data labels to be preserved, got %+v", record.Request.DataLabels)
 	}
 }
 
