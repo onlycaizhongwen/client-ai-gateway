@@ -693,6 +693,7 @@ func (h *Handler) policyViews(r *http.Request) []policyView {
 	rules := policy.OrderedRules(snapshot.Config.Policies)
 	views := make([]policyView, 0, len(rules))
 	for index, rule := range rules {
+		dataLabels := policy.EffectiveDataLabels(rule)
 		if policyFilter != "" && rule.ID != policyFilter {
 			continue
 		}
@@ -711,7 +712,7 @@ func (h *Handler) policyViews(r *http.Request) []policyView {
 		if providerClassFilter != "" && !containsString(rule.ProviderClasses, providerClassFilter) {
 			continue
 		}
-		if dataLabelFilter != "" && !containsString(rule.DataLabels, dataLabelFilter) {
+		if dataLabelFilter != "" && !containsString(dataLabels, dataLabelFilter) {
 			continue
 		}
 		views = append(views, policyView{
@@ -725,7 +726,7 @@ func (h *Handler) policyViews(r *http.Request) []policyView {
 			RequestTypes:     append([]string(nil), rule.RequestTypes...),
 			Models:           append([]string(nil), rule.Models...),
 			ProviderClasses:  append([]string(nil), rule.ProviderClasses...),
-			DataLabels:       append([]string(nil), rule.DataLabels...),
+			DataLabels:       dataLabels,
 		})
 	}
 	return views

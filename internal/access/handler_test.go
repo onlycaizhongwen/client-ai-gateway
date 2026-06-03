@@ -629,6 +629,43 @@ func TestPoliciesListUsesEvaluationOrder(t *testing.T) {
 	}
 }
 
+func TestPoliciesListFiltersLegacySensitivePolicyByEffectiveLabel(t *testing.T) {
+	path := writeHandlerConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "audit_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"admin-app","token":"admin-token","grants":["admin"]}],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "policies": [{"id":"legacy-sensitive","effect":"deny_cloud_for_sensitive","reason":"legacy sensitive"}]
+	}`)
+	store := trace.NewMemoryStore()
+	manager, err := gatewayruntime.NewManager(path, store)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	handler := NewRuntimeHandler(manager, store).WithAudit(audit.NewMemoryStore()).Routes()
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/policies?data_label=sensitive", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Policies []policyView `json:"policies"`
+		Total    int          `json:"total"`
+	}
+	decodeBody(t, res, &body)
+	if body.Total != 1 || len(body.Policies) != 1 {
+		t.Fatalf("expected one legacy sensitive policy, got %+v", body)
+	}
+	if labels := body.Policies[0].DataLabels; len(labels) != 1 || labels[0] != "sensitive" {
+		t.Fatalf("expected effective sensitive label, got %+v", body.Policies[0])
+	}
+}
+
 func TestPoliciesExportHTTP(t *testing.T) {
 	handler, _ := newTestHandler()
 	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/policies/export?data_label=sensitive", nil)

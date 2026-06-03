@@ -151,3 +151,17 @@ func TestConditionSummaryUsesLegacySensitiveLabel(t *testing.T) {
 		t.Fatalf("unexpected summary %q", summary)
 	}
 }
+
+func TestEffectiveDataLabelsReturnsCopyAndLegacyDefault(t *testing.T) {
+	legacy := EffectiveDataLabels(config.Policy{ID: "sensitive", Effect: "deny_cloud_for_sensitive"})
+	if len(legacy) != 1 || legacy[0] != "sensitive" {
+		t.Fatalf("unexpected legacy labels %+v", legacy)
+	}
+
+	rule := config.Policy{ID: "explicit", Effect: "deny", DataLabels: []string{"private"}}
+	labels := EffectiveDataLabels(rule)
+	labels[0] = "changed"
+	if rule.DataLabels[0] != "private" {
+		t.Fatalf("effective labels should not mutate source rule: %+v", rule.DataLabels)
+	}
+}

@@ -95,7 +95,7 @@ func ConditionSummary(rule config.Policy) string {
 		conditionPart("request", rule.RequestTypes),
 		conditionPart("model", rule.Models),
 		conditionPart("provider", rule.ProviderClasses),
-		conditionPart("label", effectiveDataLabels(rule)),
+		conditionPart("label", EffectiveDataLabels(rule)),
 	}
 	out := make([]string, 0, len(parts))
 	for _, part := range parts {
@@ -116,11 +116,11 @@ func conditionPart(name string, values []string) string {
 	return name + " in [" + strings.Join(values, ",") + "]"
 }
 
-func effectiveDataLabels(rule config.Policy) []string {
+func EffectiveDataLabels(rule config.Policy) []string {
 	if len(rule.DataLabels) == 0 && rule.Effect == "deny_cloud_for_sensitive" {
 		return []string{"sensitive"}
 	}
-	return rule.DataLabels
+	return append([]string(nil), rule.DataLabels...)
 }
 
 func orderedRules(rules []config.Policy) []config.Policy {
@@ -159,7 +159,7 @@ func ruleMismatchFields(rule config.Policy, input Input) []string {
 	if !matchesProviderClass(rule, input.ProviderClass) {
 		fields = append(fields, "provider")
 	}
-	dataLabels := effectiveDataLabels(rule)
+	dataLabels := EffectiveDataLabels(rule)
 	if len(dataLabels) == 0 {
 		return fields
 	}
