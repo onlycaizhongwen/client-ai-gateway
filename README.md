@@ -138,6 +138,8 @@ Trace 详情会保存一份用于复盘的请求快照，包含 `model`、`messa
 
 脱敏后会保留结构、角色、metadata key 和数据标签，值写为 `[redacted]`；截断后追加 `...[truncated]`，Trace 详情和导出都会复用这份安全快照。
 
+Trace 导出只导出 Trace Store 中已经保存的记录，不重新读取原始请求；请求快照会保持已脱敏或已截断状态，导出文件不包含应用 Token。
+
 ## Audit
 
 ```powershell
@@ -155,6 +157,8 @@ curl "http://127.0.0.1:18765/gateway/v1/audit/events/export?limit=500&action=too
 Audit 支持 `action`、`result`、`app_id`、`trace_id`、`limit`、`offset` 查询。控制台可按动作、结果、应用和 Trace ID 筛选，导出会带上当前筛选条件；点击审计行可查看完整事件 JSON，并在存在 `trace_id` 时联动打开 Trace 详情。默认持久化到 `data/audit.jsonl`，可通过 `audit_store_path` 调整路径，通过 `audit_retention_max` 控制保留条数。
 
 工具调用和权限试算的 Audit `metadata` 会包含 `required_scopes`、`matched_grant`、`missing_grants`、`sandbox_required`、`origin` 等字段，用于解释为什么允许或拒绝。
+
+Audit 导出需要管理员授权，导出内容复用当前筛选条件；当审计事件通过 `trace_id` 关联请求复盘时，请求内容仍以 Trace 安全快照为准。
 
 ## Provider 与模型目录
 

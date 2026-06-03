@@ -196,6 +196,30 @@ func TestTraceExportHTTP(t *testing.T) {
 	}
 }
 
+func TestTraceExportUsesSafeRequestSnapshot(t *testing.T) {
+	handler, _ := newTestHandler()
+	postJSON(handler, "/v1/chat/completions", "dev-token", map[string]any{
+		"model":       "local-small",
+		"messages":    []map[string]string{{"role": "user", "content": "export-secret"}},
+		"metadata":    map[string]string{"fail_provider": "local-mock"},
+		"data_labels": []string{"sensitive"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/traces/export?status=failed&limit=1", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	body := res.Body.String()
+	if strings.Contains(body, "export-secret") || strings.Contains(body, `"fail_provider":"local-mock"`) {
+		t.Fatalf("trace export leaked raw request snapshot: %s", body)
+	}
+	if !strings.Contains(body, `"[redacted]"`) || !strings.Contains(body, `"data_labels":["sensitive"]`) {
+		t.Fatalf("trace export did not include safe snapshot markers: %s", body)
+	}
+}
+
 func TestAccessLogIncludesTraceID(t *testing.T) {
 	var logs bytes.Buffer
 	handler, _ := newTestHandlerWithLogger(slog.New(slog.NewJSONHandler(&logs, nil)))
@@ -1114,6 +1138,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 	body := res.Body.String()
 	for _, want := range []string{
 		"id=\"trace-export\"",
+		"id=\"trace-export-message\"",
 		"id=\"trace-app-filter\"",
 		"id=\"trace-provider-filter\"",
 		"id=\"trace-filter-apply\"",
@@ -1222,6 +1247,8 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function exportMCPCatalog()",
 		"function exportTraces()",
 		"function exportAudit()",
+		"traceExportSafety",
+		"auditExportSafety",
 		"function auditQuery",
 		"function showAuditDetail",
 		"function buildIssues()",

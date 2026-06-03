@@ -500,6 +500,9 @@ const consoleHTML = `<!doctype html>
               <button class="secondary" id="trace-export" data-i18n="export">导出</button>
             </div>
           </div>
+          <div class="panel-body" style="padding-top: 0; padding-bottom: 8px;">
+            <div class="muted" id="trace-export-message"></div>
+          </div>
           <div class="table-wrap">
             <table class="trace-table">
               <thead>
@@ -759,6 +762,7 @@ const consoleHTML = `<!doctype html>
     const statusFilter = document.querySelector("#status-filter");
     const traceAppFilter = document.querySelector("#trace-app-filter");
     const traceProviderFilter = document.querySelector("#trace-provider-filter");
+    const traceExportMessage = document.querySelector("#trace-export-message");
     const sendResult = document.querySelector("#send-result");
     const auditRows = document.querySelector("#audit-rows");
     const auditMessage = document.querySelector("#audit-message");
@@ -891,6 +895,8 @@ const consoleHTML = `<!doctype html>
         fallbackAttempts: "降级次数",
         requestTraces: "请求追踪",
         allStatus: "全部状态",
+        traceExportSafety: "Trace \u5bfc\u51fa\u5df2\u6309\u5f53\u524d\u7b5b\u9009\u6761\u4ef6\u751f\u6210\uff0c\u8bf7\u6c42\u5feb\u7167\u590d\u7528\u5df2\u4fdd\u5b58\u7684\u8131\u654f/\u622a\u65ad\u7248\u672c\uff0c\u4e0d\u5305\u542b\u5e94\u7528 Token\u3002",
+        auditExportSafety: "Audit \u5bfc\u51fa\u9700\u8981\u7ba1\u7406\u5458\u4ee4\u724c\uff0c\u5df2\u6309\u5f53\u524d\u7b5b\u9009\u6761\u4ef6\u751f\u6210\uff1b\u82e5\u901a\u8fc7 trace_id \u590d\u76d8\u8bf7\u6c42\uff0c\u4ecd\u4f7f\u7528 Trace \u5b89\u5168\u5feb\u7167\u3002",
         appFilter: "App ID",
         providerFilter: "Provider ID",
         traceFilter: "Trace ID",
@@ -1137,6 +1143,8 @@ const consoleHTML = `<!doctype html>
         fallbackAttempts: "Fallback Attempts",
         requestTraces: "Request Traces",
         allStatus: "All status",
+        traceExportSafety: "Trace export uses the current filters and the stored safe request snapshot. Redacted or truncated values stay redacted, and app tokens are not included.",
+        auditExportSafety: "Audit export requires an admin token and uses the current filters. Request replay by trace_id still relies on the Trace safe snapshot.",
         appFilter: "App ID",
         providerFilter: "Provider ID",
         traceFilter: "Trace ID",
@@ -1544,6 +1552,7 @@ const consoleHTML = `<!doctype html>
       link.remove();
     }
     function exportTraces() {
+      traceExportMessage.textContent = t("traceExportSafety");
       downloadURL("/gateway/v1/traces/export?" + traceQuery(500, 0).toString(), "traces.jsonl");
     }
     function renderTraces() {
@@ -2576,6 +2585,7 @@ const consoleHTML = `<!doctype html>
         auditMessage.textContent = t("adminTokenRequired");
         return;
       }
+      auditMessage.textContent = t("auditExportSafety");
       fetch("/gateway/v1/audit/events/export?" + auditQuery(500, 0).toString(), {
         headers: { "Authorization": "Bearer " + token }
       })
