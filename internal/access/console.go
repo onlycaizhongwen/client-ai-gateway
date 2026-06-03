@@ -112,6 +112,8 @@ const consoleHTML = `<!doctype html>
     .pager button { padding: 5px 9px; font-size: 12px; }
     .kv { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 8px 10px; margin-bottom: 12px; }
     .k { color: var(--muted); }
+    .notice { border: 1px solid #d4e5f6; background: #f3f9ff; color: #204b6a; border-radius: 6px; padding: 10px 12px; line-height: 1.55; margin-bottom: 12px; }
+    .notice strong { display: block; margin-bottom: 2px; }
     pre { margin: 0; padding: 12px; background: var(--code); border: 1px solid var(--line); border-radius: 6px; overflow: auto; max-height: 430px; font-size: 12px; }
     @media (max-width: 1280px) {
       main { padding: 14px; }
@@ -988,6 +990,11 @@ const consoleHTML = `<!doctype html>
         replayTrace: "\u56de\u586b\u5230\u5feb\u6377\u8bf7\u6c42",
         copyTraceRequest: "\u590d\u5236\u8bf7\u6c42 JSON",
         copyTraceCurl: "\u590d\u5236 curl \u8349\u7a3f",
+        traceSnapshotSafetyTitle: "Trace \u5b89\u5168\u5feb\u7167",
+        traceSnapshotSafetyBody: "\u672c\u533a\u57df\u53ea\u4f7f\u7528 Trace \u4e2d\u5df2\u4fdd\u5b58\u7684\u8bf7\u6c42\u5feb\u7167\uff1b\u4e0d\u4fdd\u5b58\u5e94\u7528 Token\uff0c\u547d\u4e2d\u654f\u611f\u6807\u7b7e\u7684\u5185\u5bb9\u4f1a\u6309\u914d\u7f6e\u8131\u654f\u6216\u622a\u65ad\u3002",
+        traceCopySafetyHint: "\u590d\u5236\u548c\u56de\u586b\u4ec5\u7528\u4e8e\u672c\u5730\u590d\u76d8\uff0ccurl \u8349\u7a3f\u4ec5\u4f7f\u7528 $GATEWAY_TOKEN \u5360\u4f4d\u7b26\u3002",
+        traceRequestCopied: "\u5df2\u590d\u5236 Trace \u8bf7\u6c42\u5feb\u7167 JSON\uff0c\u5185\u5bb9\u5df2\u6309\u5feb\u7167\u7b56\u7565\u5904\u7406\u3002",
+        traceCurlCopied: "\u5df2\u590d\u5236 curl \u8349\u7a3f\uff0c\u4ee4\u724c\u4f7f\u7528 $GATEWAY_TOKEN \u5360\u4f4d\u7b26\u3002",
         replayFilled: "\u5df2\u56de\u586b Trace \u8bf7\u6c42\u8349\u7a3f\uff0c\u672a\u53d1\u9001\u3002",
         replayUnavailable: "\u8be5 Trace \u6ca1\u6709\u53ef\u56de\u586b\u7684\u8bf7\u6c42\u5feb\u7167\u3002",
         copied: "\u5df2\u590d\u5236\u5230\u526a\u8d34\u677f\u3002",
@@ -1229,6 +1236,11 @@ const consoleHTML = `<!doctype html>
         replayTrace: "Fill Quick Request",
         copyTraceRequest: "Copy Request JSON",
         copyTraceCurl: "Copy curl Draft",
+        traceSnapshotSafetyTitle: "Trace Safe Snapshot",
+        traceSnapshotSafetyBody: "This panel only uses the request snapshot already stored in Trace. App tokens are never stored; data that matches sensitive labels is redacted or truncated by configuration.",
+        traceCopySafetyHint: "Copy and fill actions are for local replay only. The curl draft uses the $GATEWAY_TOKEN placeholder.",
+        traceRequestCopied: "Trace request snapshot JSON copied; content follows the configured snapshot safety policy.",
+        traceCurlCopied: "curl draft copied with the $GATEWAY_TOKEN placeholder.",
         replayFilled: "Trace request draft filled, not sent.",
         replayUnavailable: "This trace has no request snapshot to fill.",
         copied: "Copied to clipboard.",
@@ -2431,6 +2443,11 @@ const consoleHTML = `<!doctype html>
           "<button class=\"secondary\" id=\"trace-copy-request\" data-i18n=\"copyTraceRequest\">" + t("copyTraceRequest") + "</button>" +
           "<button class=\"secondary\" id=\"trace-copy-curl\" data-i18n=\"copyTraceCurl\">" + t("copyTraceCurl") + "</button>" +
         "</div>" +
+        "<div class=\"notice\">" +
+          "<strong data-i18n=\"traceSnapshotSafetyTitle\">" + t("traceSnapshotSafetyTitle") + "</strong>" +
+          "<div data-i18n=\"traceSnapshotSafetyBody\">" + t("traceSnapshotSafetyBody") + "</div>" +
+          "<div class=\"muted\" data-i18n=\"traceCopySafetyHint\">" + t("traceCopySafetyHint") + "</div>" +
+        "</div>" +
         "<pre>" + esc(JSON.stringify(trace, null, 2)) + "</pre>";
       document.querySelector("#trace-fill-quick").addEventListener("click", fillQuickRequestFromTrace);
       document.querySelector("#trace-copy-request").addEventListener("click", copyTraceRequestJSON);
@@ -2475,7 +2492,7 @@ const consoleHTML = `<!doctype html>
         sendResult.textContent = t("replayUnavailable");
         return;
       }
-      await copyText(JSON.stringify(body, null, 2));
+      await copyText(JSON.stringify(body, null, 2), t("traceRequestCopied"));
     }
     async function copyTraceCurlDraft() {
       const body = traceRequestBody();
@@ -2488,9 +2505,9 @@ const consoleHTML = `<!doctype html>
         "  -H \"Authorization: Bearer $GATEWAY_TOKEN\" \\\n" +
         "  -H \"Content-Type: application/json\" \\\n" +
         "  --data '" + json.replaceAll("'", "'\\''") + "'";
-      await copyText(curl);
+      await copyText(curl, t("traceCurlCopied"));
     }
-    async function copyText(value) {
+    async function copyText(value, successMessage) {
       try {
         if (navigator.clipboard && window.isSecureContext) {
           await navigator.clipboard.writeText(value);
@@ -2505,7 +2522,7 @@ const consoleHTML = `<!doctype html>
           document.execCommand("copy");
           area.remove();
         }
-        sendResult.textContent = t("copied");
+        sendResult.textContent = successMessage || t("copied");
       } catch (err) {
         sendResult.textContent = t("copyFailed", { error: err.message });
       }
