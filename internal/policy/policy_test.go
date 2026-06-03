@@ -136,11 +136,11 @@ func TestEngineReturnsRuleEvaluationsInEvaluationOrder(t *testing.T) {
 		t.Fatalf("unexpected decision evaluations: %+v", decision)
 	}
 	first := decision.RuleEvaluations[0]
-	if first.RuleID != "high-sensitive" || first.Matched || len(first.MismatchFields) != 1 || first.MismatchFields[0] != "label" {
+	if first.RuleID != "high-sensitive" || first.EvaluationOrder != 1 || first.Matched || len(first.MismatchFields) != 1 || first.MismatchFields[0] != "label" {
 		t.Fatalf("unexpected first evaluation: %+v", first)
 	}
 	second := decision.RuleEvaluations[1]
-	if second.RuleID != "low-model" || !second.Matched || second.ConditionSummary != "model in [cloud-smart]" {
+	if second.RuleID != "low-model" || second.EvaluationOrder != 2 || !second.Matched || second.ConditionSummary != "model in [cloud-smart]" {
 		t.Fatalf("unexpected second evaluation: %+v", second)
 	}
 }

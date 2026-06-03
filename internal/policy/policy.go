@@ -28,6 +28,7 @@ type Decision struct {
 
 type RuleEvaluation struct {
 	RuleID           string   `json:"rule_id"`
+	EvaluationOrder  int      `json:"evaluation_order"`
 	Priority         int      `json:"priority"`
 	ConditionSummary string   `json:"condition_summary"`
 	Matched          bool     `json:"matched"`
@@ -56,6 +57,7 @@ func (e *Engine) Evaluate(input Input) Decision {
 		matched := len(mismatchFields) == 0
 		decision.RuleEvaluations = append(decision.RuleEvaluations, RuleEvaluation{
 			RuleID:           rule.ID,
+			EvaluationOrder:  len(decision.RuleEvaluations) + 1,
 			Priority:         rule.Priority,
 			ConditionSummary: ConditionSummary(rule),
 			Matched:          matched,
@@ -122,6 +124,10 @@ func effectiveDataLabels(rule config.Policy) []string {
 }
 
 func orderedRules(rules []config.Policy) []config.Policy {
+	return OrderedRules(rules)
+}
+
+func OrderedRules(rules []config.Policy) []config.Policy {
 	out := append([]config.Policy(nil), rules...)
 	for i := 1; i < len(out); i++ {
 		current := out[i]

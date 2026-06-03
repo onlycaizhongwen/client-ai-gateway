@@ -231,6 +231,8 @@ curl -X POST http://127.0.0.1:18765/gateway/v1/routing/explain `
 
 Policy 目录和 dry-run 会返回 `condition_summary`，用于把散落的匹配字段汇总成可读条件；命中规则的 `priority`、`condition_summary` 也会进入 `explain_chain` 和 Audit metadata。
 
+Policy 目录按实际评估顺序返回，并提供 `evaluation_order`，便于控制台列表、导出文件和 dry-run 诊断保持同一套规则顺序。
+
 支持效果：
 
 - `allow`：允许请求，可走本地或云端。

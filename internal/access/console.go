@@ -90,11 +90,12 @@ const consoleHTML = `<!doctype html>
     .app-table th:nth-child(1), .app-table td:nth-child(1) { width: 240px; }
     .app-table th:nth-child(2), .app-table td:nth-child(2) { width: 180px; }
     .app-table th:nth-child(3), .app-table td:nth-child(3) { width: 360px; }
-    .policy-table th:nth-child(1), .policy-table td:nth-child(1) { width: 220px; }
-    .policy-table th:nth-child(2), .policy-table td:nth-child(2) { width: 100px; }
-    .policy-table th:nth-child(3), .policy-table td:nth-child(3) { width: 130px; }
-    .policy-table th:nth-child(4), .policy-table td:nth-child(4) { width: 420px; }
-    .policy-table th:nth-child(5), .policy-table td:nth-child(5) { width: 220px; }
+    .policy-table th:nth-child(1), .policy-table td:nth-child(1) { width: 80px; }
+    .policy-table th:nth-child(2), .policy-table td:nth-child(2) { width: 220px; }
+    .policy-table th:nth-child(3), .policy-table td:nth-child(3) { width: 100px; }
+    .policy-table th:nth-child(4), .policy-table td:nth-child(4) { width: 130px; }
+    .policy-table th:nth-child(5), .policy-table td:nth-child(5) { width: 420px; }
+    .policy-table th:nth-child(6), .policy-table td:nth-child(6) { width: 220px; }
     .grant-table th:nth-child(1), .grant-table td:nth-child(1) { width: 230px; }
     .grant-table th:nth-child(2), .grant-table td:nth-child(2) { width: 130px; }
     .grant-table th:nth-child(3), .grant-table td:nth-child(3) { width: 230px; }
@@ -428,6 +429,7 @@ const consoleHTML = `<!doctype html>
             <table class="policy-table">
               <thead>
                 <tr>
+                  <th data-i18n="evaluationOrder">Order</th>
                   <th data-i18n="policy">Policy</th>
                   <th data-i18n="priority">Priority</th>
                   <th data-i18n="effect">Effect</th>
@@ -917,6 +919,7 @@ const consoleHTML = `<!doctype html>
         matchedGrant: "\u547d\u4e2d\u6388\u6743",
         missingGrants: "\u7f3a\u5931\u6388\u6743",
         policyVersion: "\u7b56\u7565\u7248\u672c",
+        evaluationOrder: "\u987a\u5e8f",
         rulePriority: "\u89c4\u5219\u4f18\u5148\u7ea7",
         condition: "\u6761\u4ef6",
         ruleEvaluations: "\u89c4\u5219\u8bc4\u4f30\u8bca\u65ad",
@@ -1182,6 +1185,7 @@ const consoleHTML = `<!doctype html>
         matchedGrant: "Matched Grant",
         missingGrants: "Missing Grants",
         policyVersion: "Policy Version",
+        evaluationOrder: "Order",
         rulePriority: "Rule Priority",
         condition: "Condition",
         ruleEvaluations: "Rule Evaluation Diagnostics",
@@ -2287,6 +2291,7 @@ const consoleHTML = `<!doctype html>
           "label: " + labelList(item.data_labels)
         ].join(" / ");
         return "<tr>" +
+          "<td>" + esc(item.evaluation_order || "") + "</td>" +
           "<td class=\"trace-id\">" + esc(item.id) + "</td>" +
           "<td>" + esc(item.priority == null ? 0 : item.priority) + "</td>" +
           "<td><span class=\"status " + esc(item.effect || "healthy") + "\">" + esc(labelPolicyEffect(item.effect)) + "</span></td>" +
@@ -2295,7 +2300,7 @@ const consoleHTML = `<!doctype html>
         "</tr>";
       }).join("");
       if (!allPolicies.length) {
-        policyRows.innerHTML = "<tr><td colspan=\"5\" class=\"muted\">" + t("noPolicies") + "</td></tr>";
+        policyRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + t("noPolicies") + "</td></tr>";
       }
     }
     function labelList(values) {
@@ -2344,6 +2349,7 @@ const consoleHTML = `<!doctype html>
       return "<div class=\"explain-chain\">" +
         "<div class=\"chain-title\">" + t("ruleEvaluations") + "</div>" +
         "<div class=\"table-wrap\"><table class=\"policy-table\"><thead><tr>" +
+          "<th data-i18n=\"evaluationOrder\">" + t("evaluationOrder") + "</th>" +
           "<th data-i18n=\"policy\">" + t("policy") + "</th>" +
           "<th data-i18n=\"priority\">" + t("priority") + "</th>" +
           "<th data-i18n=\"matched\">" + t("matched") + "</th>" +
@@ -2351,6 +2357,7 @@ const consoleHTML = `<!doctype html>
           "<th data-i18n=\"condition\">" + t("condition") + "</th>" +
         "</tr></thead><tbody>" +
           evaluations.map(item => "<tr>" +
+            "<td>" + esc(item.evaluation_order || "") + "</td>" +
             "<td class=\"trace-id\">" + esc(item.rule_id || "") + "</td>" +
             "<td>" + esc(item.priority == null ? 0 : item.priority) + "</td>" +
             "<td>" + esc(item.matched ? t("yes") : t("no")) + "</td>" +

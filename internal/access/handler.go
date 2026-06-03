@@ -445,6 +445,7 @@ type grantView struct {
 
 type policyView struct {
 	ID               string   `json:"id"`
+	EvaluationOrder  int      `json:"evaluation_order"`
 	Priority         int      `json:"priority"`
 	Effect           string   `json:"effect"`
 	Reason           string   `json:"reason"`
@@ -689,8 +690,9 @@ func (h *Handler) policyViews(r *http.Request) []policyView {
 	modelFilter := query.Get("model")
 	providerClassFilter := query.Get("provider_class")
 	dataLabelFilter := query.Get("data_label")
-	views := make([]policyView, 0, len(snapshot.Config.Policies))
-	for _, rule := range snapshot.Config.Policies {
+	rules := policy.OrderedRules(snapshot.Config.Policies)
+	views := make([]policyView, 0, len(rules))
+	for index, rule := range rules {
 		if policyFilter != "" && rule.ID != policyFilter {
 			continue
 		}
@@ -714,6 +716,7 @@ func (h *Handler) policyViews(r *http.Request) []policyView {
 		}
 		views = append(views, policyView{
 			ID:               rule.ID,
+			EvaluationOrder:  index + 1,
 			Priority:         rule.Priority,
 			Effect:           rule.Effect,
 			Reason:           rule.Reason,

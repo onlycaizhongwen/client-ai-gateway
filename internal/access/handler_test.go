@@ -600,8 +600,32 @@ func TestPoliciesListFiltersAndPaginates(t *testing.T) {
 	if body.Policies[0].ID != "deny-cloud-smart" || body.Policies[0].Effect != "deny" {
 		t.Fatalf("unexpected policy view: %+v", body.Policies[0])
 	}
-	if body.Policies[0].Priority != 0 || body.Policies[0].ConditionSummary != "app in [dev-app] && model in [cloud-smart]" {
+	if body.Policies[0].EvaluationOrder != 2 || body.Policies[0].Priority != 0 || body.Policies[0].ConditionSummary != "app in [dev-app] && model in [cloud-smart]" {
 		t.Fatalf("expected policy DSL fields, got %+v", body.Policies[0])
+	}
+}
+
+func TestPoliciesListUsesEvaluationOrder(t *testing.T) {
+	handler, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/policies?limit=2", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Policies []policyView `json:"policies"`
+	}
+	decodeBody(t, res, &body)
+	if len(body.Policies) != 2 {
+		t.Fatalf("expected two policies, got %+v", body.Policies)
+	}
+	if body.Policies[0].ID != "deny-sensitive-cloud" || body.Policies[0].EvaluationOrder != 1 {
+		t.Fatalf("expected first policy to match evaluation order, got %+v", body.Policies[0])
+	}
+	if body.Policies[1].ID != "deny-cloud-smart" || body.Policies[1].EvaluationOrder != 2 {
+		t.Fatalf("expected second policy to match evaluation order, got %+v", body.Policies[1])
 	}
 }
 
@@ -1391,6 +1415,7 @@ func TestPolicyDryRunMatchesModelRuleHTTP(t *testing.T) {
 			Allowed         bool   `json:"allowed"`
 			RuleEvaluations []struct {
 				RuleID           string   `json:"rule_id"`
+				EvaluationOrder  int      `json:"evaluation_order"`
 				Priority         int      `json:"priority"`
 				ConditionSummary string   `json:"condition_summary"`
 				Matched          bool     `json:"matched"`
@@ -1419,10 +1444,10 @@ func TestPolicyDryRunMatchesModelRuleHTTP(t *testing.T) {
 	if len(body.Decision.RuleEvaluations) != 2 {
 		t.Fatalf("expected rule evaluations, got %+v", body.Decision.RuleEvaluations)
 	}
-	if first := body.Decision.RuleEvaluations[0]; first.RuleID != "deny-sensitive-cloud" || first.Matched || len(first.MismatchFields) != 1 || first.MismatchFields[0] != "label" {
+	if first := body.Decision.RuleEvaluations[0]; first.RuleID != "deny-sensitive-cloud" || first.EvaluationOrder != 1 || first.Matched || len(first.MismatchFields) != 1 || first.MismatchFields[0] != "label" {
 		t.Fatalf("unexpected first rule evaluation: %+v", first)
 	}
-	if second := body.Decision.RuleEvaluations[1]; second.RuleID != "deny-cloud-smart" || !second.Matched || second.ConditionSummary != "app in [dev-app] && model in [cloud-smart]" {
+	if second := body.Decision.RuleEvaluations[1]; second.RuleID != "deny-cloud-smart" || second.EvaluationOrder != 2 || !second.Matched || second.ConditionSummary != "app in [dev-app] && model in [cloud-smart]" {
 		t.Fatalf("unexpected second rule evaluation: %+v", second)
 	}
 }
@@ -1822,7 +1847,7 @@ func newTestHandlerWithLogger(logger *slog.Logger) (http.Handler, *trace.MemoryS
 			{ID: "cloud-mock", Class: "cloud", Models: []string{"local-small", "cloud-smart"}, Healthy: true},
 		},
 		Policies: []config.Policy{
-			{ID: "deny-sensitive-cloud", Effect: "deny_cloud_for_sensitive", Reason: "Sensitive data cannot use cloud providers", DataLabels: []string{"sensitive"}},
+			{ID: "deny-sensitive-cloud", Priority: 100, Effect: "deny_cloud_for_sensitive", Reason: "Sensitive data cannot use cloud providers", DataLabels: []string{"sensitive"}},
 			{ID: "deny-cloud-smart", Effect: "deny", Reason: "cloud-smart is disabled for this app", AppIDs: []string{"dev-app"}, Models: []string{"cloud-smart"}},
 		},
 		Tools: []config.Tool{{ID: "gateway.runtime_health", Name: "Runtime Health", Adapter: "runtime-health", ReadOnly: true, RiskLevel: "low", Scopes: []string{"runtime.read"}}},
