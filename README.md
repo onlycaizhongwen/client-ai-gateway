@@ -222,11 +222,14 @@ curl -X POST http://127.0.0.1:18765/gateway/v1/routing/explain `
 
 策略规则支持轻量匹配 DSL。空匹配字段表示匹配全部。支持字段：
 
+- `priority`：可选，数字越大越先评估；同优先级保持配置顺序。
 - `app_ids`
 - `request_types`
 - `models`
 - `provider_classes`
 - `data_labels`
+
+Policy 目录和 dry-run 会返回 `condition_summary`，用于把散落的匹配字段汇总成可读条件；命中规则的 `priority`、`condition_summary` 也会进入 `explain_chain` 和 Audit metadata。
 
 支持效果：
 
@@ -240,6 +243,7 @@ curl -X POST http://127.0.0.1:18765/gateway/v1/routing/explain `
 ```json
 {
   "id": "desktop-local-only",
+  "priority": 80,
   "effect": "force_local",
   "reason": "桌面 AI 请求优先留在本地运行时",
   "app_ids": ["desktop-app"],

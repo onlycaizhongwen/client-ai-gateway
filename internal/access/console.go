@@ -49,6 +49,7 @@ const consoleHTML = `<!doctype html>
     .issue-table { min-width: 980px; }
     .app-table { min-width: 860px; }
     .grant-table { min-width: 1040px; }
+    .policy-table { min-width: 1060px; }
     th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; }
     th { position: sticky; top: 0; background: var(--head); z-index: 1; font-weight: 700; }
     td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -89,6 +90,11 @@ const consoleHTML = `<!doctype html>
     .app-table th:nth-child(1), .app-table td:nth-child(1) { width: 240px; }
     .app-table th:nth-child(2), .app-table td:nth-child(2) { width: 180px; }
     .app-table th:nth-child(3), .app-table td:nth-child(3) { width: 360px; }
+    .policy-table th:nth-child(1), .policy-table td:nth-child(1) { width: 220px; }
+    .policy-table th:nth-child(2), .policy-table td:nth-child(2) { width: 100px; }
+    .policy-table th:nth-child(3), .policy-table td:nth-child(3) { width: 130px; }
+    .policy-table th:nth-child(4), .policy-table td:nth-child(4) { width: 420px; }
+    .policy-table th:nth-child(5), .policy-table td:nth-child(5) { width: 220px; }
     .grant-table th:nth-child(1), .grant-table td:nth-child(1) { width: 230px; }
     .grant-table th:nth-child(2), .grant-table td:nth-child(2) { width: 130px; }
     .grant-table th:nth-child(3), .grant-table td:nth-child(3) { width: 230px; }
@@ -423,8 +429,9 @@ const consoleHTML = `<!doctype html>
               <thead>
                 <tr>
                   <th data-i18n="policy">Policy</th>
+                  <th data-i18n="priority">Priority</th>
                   <th data-i18n="effect">Effect</th>
-                  <th data-i18n="scope">Scope</th>
+                  <th data-i18n="condition">Condition</th>
                   <th data-i18n="reason">Reason</th>
                 </tr>
               </thead>
@@ -910,6 +917,8 @@ const consoleHTML = `<!doctype html>
         matchedGrant: "\u547d\u4e2d\u6388\u6743",
         missingGrants: "\u7f3a\u5931\u6388\u6743",
         policyVersion: "\u7b56\u7565\u7248\u672c",
+        rulePriority: "\u89c4\u5219\u4f18\u5148\u7ea7",
+        condition: "\u6761\u4ef6",
         candidateCount: "\u5019\u9009\u6570",
         skippedCount: "\u8df3\u8fc7\u6570",
         appFilter: "App ID",
@@ -1038,6 +1047,7 @@ const consoleHTML = `<!doctype html>
         policy: "\u7b56\u7565",
         policyFilter: "\u7b56\u7565 ID",
         effect: "\u6548\u679c",
+        priority: "\u4f18\u5148\u7ea7",
         allEffects: "\u5168\u90e8\u6548\u679c",
         effectAllow: "\u5141\u8bb8",
         effectDeny: "\u62d2\u7edd",
@@ -1167,6 +1177,8 @@ const consoleHTML = `<!doctype html>
         matchedGrant: "Matched Grant",
         missingGrants: "Missing Grants",
         policyVersion: "Policy Version",
+        rulePriority: "Rule Priority",
+        condition: "Condition",
         candidateCount: "Candidates",
         skippedCount: "Skipped",
         appFilter: "App ID",
@@ -1295,6 +1307,7 @@ const consoleHTML = `<!doctype html>
         policy: "Policy",
         policyFilter: "Policy ID",
         effect: "Effect",
+        priority: "Priority",
         allEffects: "All effects",
         effectAllow: "Allow",
         effectDeny: "Deny",
@@ -2265,13 +2278,14 @@ const consoleHTML = `<!doctype html>
         ].join(" / ");
         return "<tr>" +
           "<td class=\"trace-id\">" + esc(item.id) + "</td>" +
+          "<td>" + esc(item.priority == null ? 0 : item.priority) + "</td>" +
           "<td><span class=\"status " + esc(item.effect || "healthy") + "\">" + esc(labelPolicyEffect(item.effect)) + "</span></td>" +
-          "<td title=\"" + esc(scope) + "\">" + esc(scope) + "</td>" +
+          "<td title=\"" + esc(scope) + "\">" + esc(item.condition_summary || scope) + "</td>" +
           "<td title=\"" + esc(item.reason || "") + "\">" + esc(item.reason || "") + "</td>" +
         "</tr>";
       }).join("");
       if (!allPolicies.length) {
-        policyRows.innerHTML = "<tr><td colspan=\"4\" class=\"muted\">" + t("noPolicies") + "</td></tr>";
+        policyRows.innerHTML = "<tr><td colspan=\"5\" class=\"muted\">" + t("noPolicies") + "</td></tr>";
       }
     }
     function labelList(values) {
@@ -2292,7 +2306,9 @@ const consoleHTML = `<!doctype html>
         [t("decision"), chain.decision],
         [t("reason"), chain.reason],
         [t("policyRule"), chain.policy_rule_id],
+        [t("rulePriority"), chain.rule_priority],
         [t("policyVersion"), chain.policy_version],
+        [t("condition"), chain.condition],
         [t("cloud"), chain.allow_cloud == null ? "" : (chain.allow_cloud ? t("allowed") : t("blocked"))],
         [t("matchedGrant"), chain.matched_grant],
         [t("missingGrants"), labelChainList(chain.missing_grants)],

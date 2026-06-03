@@ -1,6 +1,10 @@
 package policy
 
-import "client-ai-gateway/internal/config"
+import (
+	"strings"
+
+	"client-ai-gateway/internal/config"
+)
 
 type Input struct {
 	AppID         string
@@ -11,12 +15,14 @@ type Input struct {
 }
 
 type Decision struct {
-	RuleID      string `json:"rule_id"`
-	Version     string `json:"version"`
-	Allowed     bool   `json:"allowed"`
-	AllowCloud  bool   `json:"allow_cloud"`
-	ForceLocal  bool   `json:"force_local"`
-	Explanation string `json:"explanation"`
+	RuleID           string `json:"rule_id"`
+	RulePriority     int    `json:"rule_priority"`
+	Version          string `json:"version"`
+	Allowed          bool   `json:"allowed"`
+	AllowCloud       bool   `json:"allow_cloud"`
+	ForceLocal       bool   `json:"force_local"`
+	ConditionSummary string `json:"condition_summary,omitempty"`
+	Explanation      string `json:"explanation"`
 }
 
 type Engine struct {
@@ -25,7 +31,7 @@ type Engine struct {
 }
 
 func NewEngine(version string, rules []config.Policy) *Engine {
-	return &Engine{version: version, rules: rules}
+	return &Engine{version: version, rules: orderedRules(rules)}
 }
 
 func (e *Engine) Evaluate(input Input) Decision {
@@ -41,6 +47,8 @@ func (e *Engine) Evaluate(input Input) Decision {
 			continue
 		}
 		decision.RuleID = rule.ID
+		decision.RulePriority = rule.Priority
+		decision.ConditionSummary = ConditionSummary(rule)
 		decision.Explanation = rule.Reason
 		switch rule.Effect {
 		case "allow":
@@ -61,6 +69,54 @@ func (e *Engine) Evaluate(input Input) Decision {
 	return decision
 }
 
+func ConditionSummary(rule config.Policy) string {
+	parts := []string{
+		conditionPart("app", rule.AppIDs),
+		conditionPart("request", rule.RequestTypes),
+		conditionPart("model", rule.Models),
+		conditionPart("provider", rule.ProviderClasses),
+		conditionPart("label", effectiveDataLabels(rule)),
+	}
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	if len(out) == 0 {
+		return "any"
+	}
+	return strings.Join(out, " && ")
+}
+
+func conditionPart(name string, values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return name + " in [" + strings.Join(values, ",") + "]"
+}
+
+func effectiveDataLabels(rule config.Policy) []string {
+	if len(rule.DataLabels) == 0 && rule.Effect == "deny_cloud_for_sensitive" {
+		return []string{"sensitive"}
+	}
+	return rule.DataLabels
+}
+
+func orderedRules(rules []config.Policy) []config.Policy {
+	out := append([]config.Policy(nil), rules...)
+	for i := 1; i < len(out); i++ {
+		current := out[i]
+		j := i - 1
+		for j >= 0 && out[j].Priority < current.Priority {
+			out[j+1] = out[j]
+			j--
+		}
+		out[j+1] = current
+	}
+	return out
+}
+
 func matchesRule(rule config.Policy, input Input) bool {
 	if !matchAny(rule.AppIDs, input.AppID) {
 		return false
@@ -74,10 +130,7 @@ func matchesRule(rule config.Policy, input Input) bool {
 	if !matchesProviderClass(rule, input.ProviderClass) {
 		return false
 	}
-	dataLabels := rule.DataLabels
-	if len(dataLabels) == 0 && rule.Effect == "deny_cloud_for_sensitive" {
-		dataLabels = []string{"sensitive"}
-	}
+	dataLabels := effectiveDataLabels(rule)
 	if len(dataLabels) == 0 {
 		return true
 	}

@@ -97,3 +97,37 @@ func TestEngineDenyEffect(t *testing.T) {
 		t.Fatalf("unexpected deny decision: %+v", decision)
 	}
 }
+
+func TestEngineEvaluatesHigherPriorityRuleFirst(t *testing.T) {
+	engine := NewEngine("v1", []config.Policy{
+		{ID: "low-allow", Priority: 10, Effect: "allow", Reason: "low allow", Models: []string{"local-small"}},
+		{ID: "high-deny", Priority: 100, Effect: "deny", Reason: "high deny", Models: []string{"local-small"}},
+	})
+
+	decision := engine.Evaluate(Input{RequestType: "chat", Model: "local-small"})
+	if decision.Allowed || decision.RuleID != "high-deny" || decision.RulePriority != 100 {
+		t.Fatalf("expected high priority deny, got %+v", decision)
+	}
+	if decision.ConditionSummary != "model in [local-small]" {
+		t.Fatalf("unexpected condition summary %q", decision.ConditionSummary)
+	}
+}
+
+func TestEngineKeepsConfigOrderForSamePriority(t *testing.T) {
+	engine := NewEngine("v1", []config.Policy{
+		{ID: "first", Priority: 10, Effect: "deny", Reason: "first", Models: []string{"local-small"}},
+		{ID: "second", Priority: 10, Effect: "allow", Reason: "second", Models: []string{"local-small"}},
+	})
+
+	decision := engine.Evaluate(Input{RequestType: "chat", Model: "local-small"})
+	if decision.RuleID != "first" {
+		t.Fatalf("expected same priority to keep config order, got %+v", decision)
+	}
+}
+
+func TestConditionSummaryUsesLegacySensitiveLabel(t *testing.T) {
+	summary := ConditionSummary(config.Policy{ID: "sensitive", Effect: "deny_cloud_for_sensitive"})
+	if summary != "label in [sensitive]" {
+		t.Fatalf("unexpected summary %q", summary)
+	}
+}

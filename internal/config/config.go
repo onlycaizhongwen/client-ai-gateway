@@ -86,6 +86,7 @@ type MCPTool struct {
 
 type Policy struct {
 	ID              string   `json:"id"`
+	Priority        int      `json:"priority,omitempty"`
 	Effect          string   `json:"effect"`
 	Reason          string   `json:"reason"`
 	AppIDs          []string `json:"app_ids,omitempty"`

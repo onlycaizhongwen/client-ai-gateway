@@ -96,6 +96,7 @@
   "policies": [
     {
       "id": "deny-sensitive-cloud",
+      "priority": 100,
       "effect": "deny_cloud_for_sensitive",
       "reason": "Sensitive data cannot use cloud providers",
       "request_types": [
@@ -107,6 +108,7 @@
     },
     {
       "id": "local-large-force-local",
+      "priority": 50,
       "effect": "force_local",
       "reason": "Large local model requests should stay on the local runtime first",
       "request_types": [

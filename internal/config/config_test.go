@@ -87,6 +87,23 @@ func TestTraceSnapshotDefaults(t *testing.T) {
 	}
 }
 
+func TestLoadPolicyPriority(t *testing.T) {
+	path := writeConfig(t, `{
+	  "listen_addr": "127.0.0.1:18765",
+	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat"]}],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "policies": [{"id":"p1","priority":80,"effect":"force_local","reason":"stay local"}]
+	}`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if len(cfg.Policies) != 1 || cfg.Policies[0].Priority != 80 {
+		t.Fatalf("expected policy priority, got %+v", cfg.Policies)
+	}
+}
+
 func TestProviderEnabledDefaultsToTrue(t *testing.T) {
 	provider := Provider{ID: "p", Class: "local", Models: []string{"m"}, Healthy: true}
 	if !provider.IsEnabled() {

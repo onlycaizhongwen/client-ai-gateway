@@ -600,6 +600,9 @@ func TestPoliciesListFiltersAndPaginates(t *testing.T) {
 	if body.Policies[0].ID != "deny-cloud-smart" || body.Policies[0].Effect != "deny" {
 		t.Fatalf("unexpected policy view: %+v", body.Policies[0])
 	}
+	if body.Policies[0].Priority != 0 || body.Policies[0].ConditionSummary != "app in [dev-app] && model in [cloud-smart]" {
+		t.Fatalf("expected policy DSL fields, got %+v", body.Policies[0])
+	}
 }
 
 func TestPoliciesExportHTTP(t *testing.T) {
@@ -1391,6 +1394,8 @@ func TestPolicyDryRunMatchesModelRuleHTTP(t *testing.T) {
 			Stage        string `json:"stage"`
 			Decision     string `json:"decision"`
 			PolicyRuleID string `json:"policy_rule_id"`
+			RulePriority int    `json:"rule_priority"`
+			Condition    string `json:"condition"`
 			NextAction   string `json:"next_action"`
 		} `json:"explain_chain"`
 	}
@@ -1400,6 +1405,9 @@ func TestPolicyDryRunMatchesModelRuleHTTP(t *testing.T) {
 	}
 	if body.ExplainChain.Stage != "policy" || body.ExplainChain.Decision != "deny" || body.ExplainChain.PolicyRuleID != "deny-cloud-smart" || body.ExplainChain.NextAction != "stop" {
 		t.Fatalf("unexpected policy explain chain: %+v", body.ExplainChain)
+	}
+	if body.ExplainChain.RulePriority != 0 || body.ExplainChain.Condition != "app in [dev-app] && model in [cloud-smart]" {
+		t.Fatalf("expected policy DSL explain fields, got %+v", body.ExplainChain)
 	}
 }
 

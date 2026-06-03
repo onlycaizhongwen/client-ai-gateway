@@ -444,14 +444,16 @@ type grantView struct {
 }
 
 type policyView struct {
-	ID              string   `json:"id"`
-	Effect          string   `json:"effect"`
-	Reason          string   `json:"reason"`
-	AppIDs          []string `json:"app_ids,omitempty"`
-	RequestTypes    []string `json:"request_types,omitempty"`
-	Models          []string `json:"models,omitempty"`
-	ProviderClasses []string `json:"provider_classes,omitempty"`
-	DataLabels      []string `json:"data_labels,omitempty"`
+	ID               string   `json:"id"`
+	Priority         int      `json:"priority"`
+	Effect           string   `json:"effect"`
+	Reason           string   `json:"reason"`
+	ConditionSummary string   `json:"condition_summary"`
+	AppIDs           []string `json:"app_ids,omitempty"`
+	RequestTypes     []string `json:"request_types,omitempty"`
+	Models           []string `json:"models,omitempty"`
+	ProviderClasses  []string `json:"provider_classes,omitempty"`
+	DataLabels       []string `json:"data_labels,omitempty"`
 }
 
 func (h *Handler) appsList(w http.ResponseWriter, r *http.Request) {
@@ -711,14 +713,16 @@ func (h *Handler) policyViews(r *http.Request) []policyView {
 			continue
 		}
 		views = append(views, policyView{
-			ID:              rule.ID,
-			Effect:          rule.Effect,
-			Reason:          rule.Reason,
-			AppIDs:          append([]string(nil), rule.AppIDs...),
-			RequestTypes:    append([]string(nil), rule.RequestTypes...),
-			Models:          append([]string(nil), rule.Models...),
-			ProviderClasses: append([]string(nil), rule.ProviderClasses...),
-			DataLabels:      append([]string(nil), rule.DataLabels...),
+			ID:               rule.ID,
+			Priority:         rule.Priority,
+			Effect:           rule.Effect,
+			Reason:           rule.Reason,
+			ConditionSummary: policy.ConditionSummary(rule),
+			AppIDs:           append([]string(nil), rule.AppIDs...),
+			RequestTypes:     append([]string(nil), rule.RequestTypes...),
+			Models:           append([]string(nil), rule.Models...),
+			ProviderClasses:  append([]string(nil), rule.ProviderClasses...),
+			DataLabels:       append([]string(nil), rule.DataLabels...),
 		})
 	}
 	return views
@@ -1174,6 +1178,8 @@ func policyDryRunAuditMetadata(req policyDryRunRequest, decision policy.Decision
 		"data_labels":    strings.Join(req.DataLabels, ","),
 		"provider_class": req.ProviderClass,
 		"policy_rule_id": decision.RuleID,
+		"rule_priority":  strconv.Itoa(decision.RulePriority),
+		"condition":      decision.ConditionSummary,
 		"allow_cloud":    strconv.FormatBool(decision.AllowCloud),
 		"force_local":    strconv.FormatBool(decision.ForceLocal),
 		"explain_chain":  policyExplainChain(req, decision),
@@ -1691,7 +1697,9 @@ type explainChain struct {
 	Decision      string   `json:"decision"`
 	Reason        string   `json:"reason"`
 	PolicyRuleID  string   `json:"policy_rule_id,omitempty"`
+	RulePriority  int      `json:"rule_priority,omitempty"`
 	PolicyVersion string   `json:"policy_version,omitempty"`
+	Condition     string   `json:"condition,omitempty"`
 	AllowCloud    bool     `json:"allow_cloud,omitempty"`
 	ForceLocal    bool     `json:"force_local,omitempty"`
 	MatchedGrant  string   `json:"matched_grant,omitempty"`
@@ -1720,7 +1728,9 @@ func policyExplainChain(req policyDryRunRequest, decision policy.Decision) expla
 		Decision:      decisionLabel,
 		Reason:        decision.Explanation,
 		PolicyRuleID:  decision.RuleID,
+		RulePriority:  decision.RulePriority,
 		PolicyVersion: decision.Version,
+		Condition:     decision.ConditionSummary,
 		AllowCloud:    decision.AllowCloud,
 		ForceLocal:    decision.ForceLocal,
 		NextAction:    nextAction,
