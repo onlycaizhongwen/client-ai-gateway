@@ -447,6 +447,7 @@ const consoleHTML = `<!doctype html>
               <button class="secondary" id="policy-next" data-i18n="next">Next</button>
             </div>
           </div>
+          <div class="panel-body" id="policy-detail"><p class="muted" data-i18n="selectPolicy">Select a policy from the table.</p></div>
         </section>
         <section class="panel">
           <div class="panel-head">
@@ -824,6 +825,7 @@ const consoleHTML = `<!doctype html>
     const modelAvailableFilter = document.querySelector("#model-available-filter");
     const policyRows = document.querySelector("#policy-rows");
     const policyMessage = document.querySelector("#policy-message");
+    const policyDetail = document.querySelector("#policy-detail");
     const policyIDFilter = document.querySelector("#policy-id-filter");
     const policyEffectFilter = document.querySelector("#policy-effect-filter");
     const policyAppFilter = document.querySelector("#policy-app-filter");
@@ -1066,6 +1068,8 @@ const consoleHTML = `<!doctype html>
         dataLabelFilter: "\u6570\u636e\u6807\u7b7e",
         loadingPolicies: "\u6b63\u5728\u52a0\u8f7d\u7b56\u7565...",
         noPolicies: "\u6682\u65e0\u7b56\u7565\u3002",
+        selectPolicy: "\u4ece\u7b56\u7565\u8868\u683c\u4e2d\u9009\u62e9\u4e00\u6761\u89c4\u5219\u3002",
+        loadingPolicyDetail: "\u6b63\u5728\u52a0\u8f7d\u7b56\u7565\u8be6\u60c5...",
         anyScope: "\u5168\u90e8",
         policyDryRun: "\u7b56\u7565\u8bd5\u7b97",
         policyDryRunPlaceholder: "\u7b56\u7565\u8bd5\u7b97\u7ed3\u679c\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\u3002",
@@ -1332,6 +1336,8 @@ const consoleHTML = `<!doctype html>
         dataLabelFilter: "Data Label",
         loadingPolicies: "Loading policies...",
         noPolicies: "No policies.",
+        selectPolicy: "Select a policy from the table.",
+        loadingPolicyDetail: "Loading policy detail...",
         anyScope: "Any",
         policyDryRun: "Policy Dry-run",
         policyDryRunPlaceholder: "Policy dry-run result will appear here.",
@@ -2292,7 +2298,7 @@ const consoleHTML = `<!doctype html>
         ].join(" / ");
         return "<tr>" +
           "<td>" + esc(item.evaluation_order || "") + "</td>" +
-          "<td class=\"trace-id\">" + esc(item.id) + "</td>" +
+          "<td><button class=\"link-button\" data-policy-id=\"" + esc(item.id) + "\">" + esc(item.id) + "</button></td>" +
           "<td>" + esc(item.priority == null ? 0 : item.priority) + "</td>" +
           "<td title=\"" + esc(labelEffectSemantics(item.effect_semantics)) + "\"><span class=\"status " + esc(item.effect || "healthy") + "\">" + esc(labelPolicyEffect(item.effect)) + "</span></td>" +
           "<td title=\"" + esc(scope) + "\">" + esc(item.condition_summary || scope) + "</td>" +
@@ -2302,6 +2308,9 @@ const consoleHTML = `<!doctype html>
       if (!allPolicies.length) {
         policyRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + t("noPolicies") + "</td></tr>";
       }
+      policyRows.querySelectorAll("button[data-policy-id]").forEach(button => {
+        button.addEventListener("click", () => loadPolicyDetail(button.dataset.policyId));
+      });
     }
     function labelList(values) {
       return (values && values.length) ? values.join(", ") : t("anyScope");
@@ -2322,6 +2331,55 @@ const consoleHTML = `<!doctype html>
         t("nextAction") + ": " + (value.force_local ? t("effectForceLocal") : t("continue")),
         value.description || ""
       ].filter(Boolean).join(" / ");
+    }
+    async function loadPolicyDetail(policyID) {
+      const token = adminToken();
+      if (!token) {
+        policyDetail.innerHTML = "<p class=\"muted\">" + t("adminTokenRequired") + "</p>";
+        return;
+      }
+      policyDetail.innerHTML = "<p class=\"muted\">" + t("loadingPolicyDetail") + "</p>";
+      try {
+        const res = await fetch("/gateway/v1/policies/" + encodeURIComponent(policyID), {
+          headers: { "Authorization": "Bearer " + token }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          policyDetail.innerHTML = "<p class=\"muted\">" + esc(t("failedPrefix") + (data.error && data.error.message || res.status)) + "</p>";
+          return;
+        }
+        renderPolicyDetail(data.policy);
+      } catch (err) {
+        policyDetail.innerHTML = "<p class=\"muted\">" + esc(t("failedPrefix") + err.message) + "</p>";
+      }
+    }
+    function renderPolicyDetail(item) {
+      if (!item) {
+        policyDetail.innerHTML = "<p class=\"muted\">" + t("selectPolicy") + "</p>";
+        return;
+      }
+      const cells = [
+        [t("evaluationOrder"), item.evaluation_order],
+        [t("policy"), item.id],
+        [t("priority"), item.priority == null ? 0 : item.priority],
+        [t("effect"), labelPolicyEffect(item.effect)],
+        [t("condition"), item.condition_summary],
+        [t("reason"), item.reason],
+        [t("app"), labelList(item.app_ids)],
+        [t("requestTypeFilter"), labelList(item.request_types)],
+        [t("model"), labelList(item.models)],
+        [t("provider"), labelList(item.provider_classes)],
+        [t("dataLabelFilter"), labelList(item.data_labels)],
+        [t("cloud"), item.effect_semantics && item.effect_semantics.allow_cloud ? t("allowed") : t("blocked")],
+        [t("nextAction"), item.effect_semantics && item.effect_semantics.force_local ? t("effectForceLocal") : t("continue")]
+      ].filter(item => item[1] !== undefined && item[1] !== null && item[1] !== "");
+      policyDetail.innerHTML = "<div class=\"explain-chain\">" +
+        "<div class=\"chain-title\">" + esc(item.id) + "</div>" +
+        "<div class=\"chain-grid\">" +
+          cells.map(cell => "<div class=\"chain-cell\"><span class=\"k\">" + esc(cell[0]) + "</span><div>" + esc(String(cell[1])) + "</div></div>").join("") +
+        "</div>" +
+        "<pre>" + esc(JSON.stringify(item, null, 2)) + "</pre>" +
+      "</div>";
     }
     function renderExplainChain(chain) {
       if (!chain) return "";
