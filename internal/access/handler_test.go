@@ -1371,6 +1371,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"missingGrants",
 		"function auditQuery",
 		"function showAuditDetail",
+		"function renderAuditPolicy",
 		"function buildIssues()",
 		"function renderIssues()",
 		"function labelSeverity",

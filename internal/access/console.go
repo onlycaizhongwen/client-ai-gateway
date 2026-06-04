@@ -2927,6 +2927,7 @@ const consoleHTML = `<!doctype html>
           "<div class=\"k\">" + t("result") + "</div><div><span class=\"status " + esc(event.result) + "\">" + esc(labelResult(event.result)) + "</span></div>" +
           "<div class=\"k\">" + t("traceId") + "</div><div class=\"trace-id\">" + esc(event.trace_id || "-") + "</div>" +
           "<div class=\"k\">" + t("appTarget") + "</div><div>" + esc(event.app_id || "-") + " / " + esc(event.target || "-") + "</div>" +
+          "<div class=\"k\">" + t("policyRule") + "</div><div>" + renderAuditPolicy(event.metadata) + "</div>" +
           "<div class=\"k\">" + t("time") + "</div><div>" + esc(time(event.created_at)) + "</div>" +
         "</div>" +
         renderExplainChain(event.metadata && event.metadata.explain_chain) +
@@ -2934,6 +2935,11 @@ const consoleHTML = `<!doctype html>
       if (traceID) {
         loadDetail(traceID);
       }
+    }
+    function renderAuditPolicy(metadata) {
+      const policyID = metadata && metadata.policy_rule_id;
+      if (!policyID) return "-";
+      return "<button class=\"link-button\" data-chain-policy-id=\"" + esc(policyID) + "\">" + esc(policyID) + "</button>";
     }
     async function sendQuick(mode) {
       const body = {
