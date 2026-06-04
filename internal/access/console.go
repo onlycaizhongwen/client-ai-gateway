@@ -1493,6 +1493,11 @@ const consoleHTML = `<!doctype html>
       if (!button) return;
       loadPolicyDetail(button.dataset.chainPolicyId);
     });
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-trace-policy-id]");
+      if (!button) return;
+      loadPolicyDetail(button.dataset.tracePolicyId);
+    });
     document.querySelector("#routing-dry-run").addEventListener("click", routingDryRun);
     document.querySelector("#config-reload").addEventListener("click", configReload);
     toolSelect.addEventListener("change", renderSelectedTool);
@@ -2686,7 +2691,7 @@ const consoleHTML = `<!doctype html>
           "<div class=\"k\">" + t("traceId") + "</div><div class=\"trace-id\">" + esc(trace.trace_id) + "</div>" +
           "<div class=\"k\">" + t("status") + "</div><div><span class=\"status " + esc(trace.status) + "\">" + esc(labelStatus(trace.status)) + "</span></div>" +
           "<div class=\"k\">" + t("provider") + "</div><div>" + esc(trace.provider_id) + "</div>" +
-          "<div class=\"k\">" + t("policyRule") + "</div><div>" + esc(trace.policy && trace.policy.rule_id) + " / " + esc(trace.policy && trace.policy.explanation) + "</div>" +
+          "<div class=\"k\">" + t("policyRule") + "</div><div>" + renderTracePolicy(trace.policy) + "</div>" +
           "<div class=\"k\">" + t("fallbacks") + "</div><div>" + ((trace.fallbacks || []).length) + "</div>" +
         "</div>" +
         "<div class=\"actions\" style=\"margin-bottom: 12px;\">" +
@@ -2705,6 +2710,10 @@ const consoleHTML = `<!doctype html>
       document.querySelector("#trace-view-audit").addEventListener("click", filterAuditBySelectedTrace);
       document.querySelector("#trace-copy-request").addEventListener("click", copyTraceRequestJSON);
       document.querySelector("#trace-copy-curl").addEventListener("click", copyTraceCurlDraft);
+    }
+    function renderTracePolicy(policy) {
+      if (!policy || !policy.rule_id) return "-";
+      return "<button class=\"link-button\" data-trace-policy-id=\"" + esc(policy.rule_id) + "\">" + esc(policy.rule_id) + "</button> / " + esc(policy.explanation || "");
     }
     async function filterAuditBySelectedTrace() {
       if (!selectedTrace || !selectedTrace.trace_id) return;
