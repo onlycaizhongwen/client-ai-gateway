@@ -1482,6 +1482,11 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#policy-refresh").addEventListener("click", loadPolicyCatalog);
     document.querySelector("#policy-filter-apply").addEventListener("click", () => { policyPage = 1; loadPolicyCatalog(); });
     document.querySelector("#policy-dry-run").addEventListener("click", policyDryRun);
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-chain-policy-id]");
+      if (!button) return;
+      loadPolicyDetail(button.dataset.chainPolicyId);
+    });
     document.querySelector("#routing-dry-run").addEventListener("click", routingDryRun);
     document.querySelector("#config-reload").addEventListener("click", configReload);
     toolSelect.addEventListener("change", renderSelectedTool);
@@ -2424,28 +2429,34 @@ const consoleHTML = `<!doctype html>
     function renderExplainChain(chain) {
       if (!chain) return "";
       const cells = [
-        [t("stage"), chain.stage],
-        [t("decision"), chain.decision],
-        [t("reason"), chain.reason],
-        [t("policyRule"), chain.policy_rule_id],
-        [t("rulePriority"), chain.rule_priority],
-        [t("policyVersion"), chain.policy_version],
-        [t("condition"), chain.condition],
-        [t("cloud"), chain.allow_cloud == null ? "" : (chain.allow_cloud ? t("allowed") : t("blocked"))],
-        [t("matchedGrant"), chain.matched_grant],
-        [t("missingGrants"), labelChainList(chain.missing_grants)],
-        [t("toolName"), chain.tool_id],
-        [t("candidateCount"), chain.candidate_count],
-        [t("skippedCount"), chain.skipped_count],
-        [t("nextAction"), chain.next_action]
-      ].filter(item => item[1] !== undefined && item[1] !== null && item[1] !== "");
+        ["stage", t("stage"), chain.stage],
+        ["decision", t("decision"), chain.decision],
+        ["reason", t("reason"), chain.reason],
+        ["policy_rule_id", t("policyRule"), chain.policy_rule_id],
+        ["rule_priority", t("rulePriority"), chain.rule_priority],
+        ["policy_version", t("policyVersion"), chain.policy_version],
+        ["condition", t("condition"), chain.condition],
+        ["allow_cloud", t("cloud"), chain.allow_cloud == null ? "" : (chain.allow_cloud ? t("allowed") : t("blocked"))],
+        ["matched_grant", t("matchedGrant"), chain.matched_grant],
+        ["missing_grants", t("missingGrants"), labelChainList(chain.missing_grants)],
+        ["tool_id", t("toolName"), chain.tool_id],
+        ["candidate_count", t("candidateCount"), chain.candidate_count],
+        ["skipped_count", t("skippedCount"), chain.skipped_count],
+        ["next_action", t("nextAction"), chain.next_action]
+      ].filter(item => item[2] !== undefined && item[2] !== null && item[2] !== "");
       if (!cells.length) return "";
       return "<div class=\"explain-chain\">" +
         "<div class=\"chain-title\">" + t("explainChain") + "</div>" +
         "<div class=\"chain-grid\">" +
-          cells.map(item => "<div class=\"chain-cell\"><span class=\"k\">" + esc(item[0]) + "</span><div>" + esc(String(item[1])) + "</div></div>").join("") +
+          cells.map(item => "<div class=\"chain-cell\"><span class=\"k\">" + esc(item[1]) + "</span><div>" + renderChainValue(item[0], item[2]) + "</div></div>").join("") +
         "</div>" +
       "</div>";
+    }
+    function renderChainValue(key, value) {
+      if (key === "policy_rule_id" && value) {
+        return "<button class=\"link-button\" data-chain-policy-id=\"" + esc(String(value)) + "\">" + esc(String(value)) + "</button>";
+      }
+      return esc(String(value));
     }
     function labelChainList(values) {
       if (!values) return "";
