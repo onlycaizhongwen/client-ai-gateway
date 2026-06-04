@@ -1498,6 +1498,19 @@ const consoleHTML = `<!doctype html>
       if (!button) return;
       loadPolicyDetail(button.dataset.tracePolicyId);
     });
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-issue-trace-id]");
+      if (!button) return;
+      loadDetail(button.dataset.issueTraceId);
+    });
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-issue-audit-trace-id], button[data-issue-audit-target]");
+      if (!button) return;
+      auditTraceFilter.value = button.dataset.issueAuditTraceId || "";
+      auditTargetFilter.value = button.dataset.issueAuditTarget || "";
+      auditPage = 1;
+      loadAudit();
+    });
     document.querySelector("#routing-dry-run").addEventListener("click", routingDryRun);
     document.querySelector("#config-reload").addEventListener("click", configReload);
     toolSelect.addEventListener("change", renderSelectedTool);
@@ -1687,8 +1700,8 @@ const consoleHTML = `<!doctype html>
     function buildIssues() {
       const issues = [];
       const now = new Date().toISOString();
-      const addIssue = (severity, source, target, message, createdAt = "") => {
-        issues.push({ severity, source, target, message, created_at: createdAt || now });
+      const addIssue = (severity, source, target, message, createdAt = "", ref = {}) => {
+        issues.push({ severity, source, target, message, created_at: createdAt || now, ref });
       };
       if (runtimeData && runtimeData.mcp_runtime) {
         const mcp = runtimeData.mcp_runtime;
@@ -1732,14 +1745,14 @@ const consoleHTML = `<!doctype html>
         }
       });
       allTraces.filter(item => item.status === "failed").forEach(item => {
-        addIssue("critical", "trace", item.trace_id, t("issueTraceFailed", { error: item.error || "-" }), item.started_at);
+        addIssue("critical", "trace", item.trace_id, t("issueTraceFailed", { error: item.error || "-" }), item.started_at, { trace_id: item.trace_id });
       });
       allAuditEvents.filter(item => item.result === "denied" || item.result === "failed").forEach(item => {
         addIssue(item.result === "failed" ? "critical" : "warning", "audit", item.target || item.trace_id || "-", t("issueAuditProblem", {
           action: labelAction(item.action),
           result: labelResult(item.result),
           error: item.error ? " / " + item.error : ""
-        }), item.created_at);
+        }), item.created_at, { trace_id: item.trace_id, target: item.target });
       });
       const severityRank = { critical: 0, warning: 1, info: 2 };
       return issues.sort((a, b) => {
@@ -1766,7 +1779,7 @@ const consoleHTML = `<!doctype html>
         "<tr>" +
           "<td><span class=\"status " + esc(item.severity === "critical" ? "failed" : item.severity) + "\">" + esc(labelSeverity(item.severity)) + "</span></td>" +
           "<td>" + esc(item.source) + "</td>" +
-          "<td title=\"" + esc(item.target || "-") + "\">" + esc(item.target || "-") + "</td>" +
+          "<td title=\"" + esc(item.target || "-") + "\">" + renderIssueTarget(item) + "</td>" +
           "<td title=\"" + esc(item.message) + "\">" + esc(item.message) + "</td>" +
           "<td>" + esc(time(item.created_at)) + "</td>" +
         "</tr>"
@@ -1774,6 +1787,16 @@ const consoleHTML = `<!doctype html>
       if (!pageItems.length) {
         issueRows.innerHTML = "<tr><td colspan=\"5\" class=\"muted\">" + t("noIssues") + "</td></tr>";
       }
+    }
+    function renderIssueTarget(item) {
+      if (!item || !item.target) return "-";
+      if (item.source === "trace" && item.ref && item.ref.trace_id) {
+        return "<button class=\"link-button\" data-issue-trace-id=\"" + esc(item.ref.trace_id) + "\">" + esc(item.target) + "</button>";
+      }
+      if (item.source === "audit" && item.ref && (item.ref.trace_id || item.ref.target)) {
+        return "<button class=\"link-button\" data-issue-audit-trace-id=\"" + esc(item.ref.trace_id || "") + "\" data-issue-audit-target=\"" + esc(item.ref.target || "") + "\">" + esc(item.target) + "</button>";
+      }
+      return esc(item.target);
     }
     async function loadRuntimeHealth() {
       runtimeHealth.textContent = t("loadingRuntime");
