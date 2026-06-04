@@ -1360,6 +1360,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"auditExportSafety",
 		"function renderExplainChain",
 		"function renderChainValue",
+		"function renderPolicyLink",
 		"data-chain-policy-id",
 		"button[data-chain-policy-id]",
 		"function renderJSONPanel",

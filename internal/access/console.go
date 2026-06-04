@@ -2465,9 +2465,13 @@ const consoleHTML = `<!doctype html>
     }
     function renderChainValue(key, value) {
       if (key === "policy_rule_id" && value) {
-        return "<button class=\"link-button\" data-chain-policy-id=\"" + esc(String(value)) + "\">" + esc(String(value)) + "</button>";
+        return renderPolicyLink(String(value));
       }
       return esc(String(value));
+    }
+    function renderPolicyLink(policyID) {
+      if (!policyID) return "-";
+      return "<button class=\"link-button\" data-chain-policy-id=\"" + esc(policyID) + "\">" + esc(policyID) + "</button>";
     }
     function labelChainList(values) {
       if (!values) return "";
@@ -2487,7 +2491,7 @@ const consoleHTML = `<!doctype html>
         "</tr></thead><tbody>" +
           evaluations.map(item => "<tr>" +
             "<td>" + esc(item.evaluation_order || "") + "</td>" +
-            "<td class=\"trace-id\">" + esc(item.rule_id || "") + "</td>" +
+            "<td class=\"trace-id\">" + renderPolicyLink(item.rule_id || "") + "</td>" +
             "<td>" + esc(item.priority == null ? 0 : item.priority) + "</td>" +
             "<td>" + esc(item.matched ? t("yes") : t("no")) + "</td>" +
             "<td title=\"" + esc(labelChainList(item.mismatch_fields)) + "\">" + esc(labelChainList(item.mismatch_fields) || "-") + "</td>" +
@@ -2939,7 +2943,7 @@ const consoleHTML = `<!doctype html>
     function renderAuditPolicy(metadata) {
       const policyID = metadata && metadata.policy_rule_id;
       if (!policyID) return "-";
-      return "<button class=\"link-button\" data-chain-policy-id=\"" + esc(policyID) + "\">" + esc(policyID) + "</button>";
+      return renderPolicyLink(policyID);
     }
     async function sendQuick(mode) {
       const body = {
@@ -2999,7 +3003,7 @@ const consoleHTML = `<!doctype html>
         }
         routeExplain.innerHTML =
           "<div class=\"kv\">" +
-            "<div class=\"k\">" + t("rule") + "</div><div>" + esc(data.policy && data.policy.rule_id) + "</div>" +
+            "<div class=\"k\">" + t("rule") + "</div><div>" + renderPolicyLink(data.policy && data.policy.rule_id) + "</div>" +
             "<div class=\"k\">" + t("cloud") + "</div><div>" + (data.policy && data.policy.allow_cloud ? t("allowed") : t("blocked")) + "</div>" +
             "<div class=\"k\">" + t("reason") + "</div><div>" + esc(data.policy && data.policy.explanation) + "</div>" +
           "</div>" +
