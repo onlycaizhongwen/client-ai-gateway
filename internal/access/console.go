@@ -761,6 +761,7 @@ const consoleHTML = `<!doctype html>
             <div class="muted tool-meta" id="tool-meta" data-i18n="loadingTools">正在加载工具...</div>
             <input id="tool-token" value="dev-token" />
             <button id="tool-invoke" data-i18n="invokeTool">执行工具</button>
+            <div class="actions" id="tool-result-actions"></div>
             <pre id="tool-result" data-i18n="toolResultPlaceholder">工具执行结果会显示在这里。</pre>
           </div>
         </section>
@@ -796,6 +797,7 @@ const consoleHTML = `<!doctype html>
     const toolSelect = document.querySelector("#tool-select");
     const toolMeta = document.querySelector("#tool-meta");
     const toolResult = document.querySelector("#tool-result");
+    const toolResultActions = document.querySelector("#tool-result-actions");
     const toolRows = document.querySelector("#tool-rows");
     const toolOriginFilter = document.querySelector("#tool-origin-filter");
     const toolServerFilter = document.querySelector("#tool-server-filter");
@@ -1115,6 +1117,7 @@ const consoleHTML = `<!doctype html>
         noTools: "\u6682\u65e0\u53ef\u7528\u5de5\u5177\u3002",
         invokeTool: "\u6267\u884c\u5de5\u5177",
         invokingTool: "\u5de5\u5177\u6267\u884c\u4e2d...",
+        openToolTrace: "\u6253\u5f00\u5de5\u5177\u8ffd\u8e2a\u8be6\u60c5",
         toolResultPlaceholder: "\u5de5\u5177\u6267\u884c\u7ed3\u679c\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\u3002",
         toolTokenRequired: "\u9700\u8981\u5177\u6709 tool \u6388\u6743\u7684\u4ee4\u724c\u3002",
         selectToolFirst: "\u8bf7\u5148\u9009\u62e9\u5de5\u5177\u3002",
@@ -1389,6 +1392,7 @@ const consoleHTML = `<!doctype html>
         noTools: "No tools available.",
         invokeTool: "Invoke Tool",
         invokingTool: "Invoking tool...",
+        openToolTrace: "Open Tool Trace Detail",
         toolResultPlaceholder: "Tool result will appear here.",
         toolTokenRequired: "A token with the tool grant is required.",
         selectToolFirst: "Select a tool first.",
@@ -2592,6 +2596,7 @@ const consoleHTML = `<!doctype html>
     async function invokeTool() {
       const toolID = toolSelect.value;
       const token = document.querySelector("#tool-token").value.trim();
+      toolResultActions.innerHTML = "";
       if (!toolID) {
         toolResult.textContent = t("selectToolFirst");
         return;
@@ -2609,10 +2614,17 @@ const consoleHTML = `<!doctype html>
         });
         const data = await res.json();
         toolResult.textContent = JSON.stringify(data, null, 2);
+        renderToolTraceAction(data.trace_id || (data.error && data.error.trace_id));
         await Promise.all([loadAudit(), loadTraces()]);
       } catch (err) {
         toolResult.textContent = t("failedPrefix") + err.message;
       }
+    }
+    function renderToolTraceAction(traceID) {
+      toolResultActions.innerHTML = "";
+      if (!traceID) return;
+      toolResultActions.innerHTML = "<button class=\"secondary\" id=\"tool-open-trace\" data-trace-id=\"" + esc(traceID) + "\">" + t("openToolTrace") + "</button>";
+      document.querySelector("#tool-open-trace").addEventListener("click", () => loadDetail(traceID));
     }
     function adminToken() {
       return document.querySelector("#admin-token").value.trim();
