@@ -1070,6 +1070,8 @@ const consoleHTML = `<!doctype html>
         noPolicies: "\u6682\u65e0\u7b56\u7565\u3002",
         selectPolicy: "\u4ece\u7b56\u7565\u8868\u683c\u4e2d\u9009\u62e9\u4e00\u6761\u89c4\u5219\u3002",
         loadingPolicyDetail: "\u6b63\u5728\u52a0\u8f7d\u7b56\u7565\u8be6\u60c5...",
+        copyPolicyJSON: "\u590d\u5236\u7b56\u7565 JSON",
+        policyJSONCopied: "\u5df2\u590d\u5236\u7b56\u7565 JSON\u3002",
         anyScope: "\u5168\u90e8",
         policyDryRun: "\u7b56\u7565\u8bd5\u7b97",
         policyDryRunPlaceholder: "\u7b56\u7565\u8bd5\u7b97\u7ed3\u679c\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\u3002",
@@ -1338,6 +1340,8 @@ const consoleHTML = `<!doctype html>
         noPolicies: "No policies.",
         selectPolicy: "Select a policy from the table.",
         loadingPolicyDetail: "Loading policy detail...",
+        copyPolicyJSON: "Copy Policy JSON",
+        policyJSONCopied: "Policy JSON copied.",
         anyScope: "Any",
         policyDryRun: "Policy Dry-run",
         policyDryRunPlaceholder: "Policy dry-run result will appear here.",
@@ -2375,11 +2379,19 @@ const consoleHTML = `<!doctype html>
       ].filter(item => item[1] !== undefined && item[1] !== null && item[1] !== "");
       policyDetail.innerHTML = "<div class=\"explain-chain\">" +
         "<div class=\"chain-title\">" + esc(item.id) + "</div>" +
+        "<div class=\"actions\" style=\"margin-bottom: 12px;\">" +
+          "<button class=\"secondary\" id=\"policy-copy-json\" data-i18n=\"copyPolicyJSON\">" + t("copyPolicyJSON") + "</button>" +
+          "<span class=\"muted\" id=\"policy-copy-status\"></span>" +
+        "</div>" +
         "<div class=\"chain-grid\">" +
           cells.map(cell => "<div class=\"chain-cell\"><span class=\"k\">" + esc(cell[0]) + "</span><div>" + esc(String(cell[1])) + "</div></div>").join("") +
         "</div>" +
         "<pre>" + esc(JSON.stringify(item, null, 2)) + "</pre>" +
       "</div>";
+      document.querySelector("#policy-copy-json").addEventListener("click", () => copyPolicyJSON(item));
+    }
+    async function copyPolicyJSON(item) {
+      await copyText(JSON.stringify(item, null, 2), t("policyJSONCopied"), document.querySelector("#policy-copy-status"));
     }
     function renderExplainChain(chain) {
       if (!chain) return "";
@@ -2693,7 +2705,8 @@ const consoleHTML = `<!doctype html>
         "  --data '" + json.replaceAll("'", "'\\''") + "'";
       await copyText(curl, t("traceCurlCopied"));
     }
-    async function copyText(value, successMessage) {
+    async function copyText(value, successMessage, targetNode) {
+      const target = targetNode || sendResult;
       try {
         if (navigator.clipboard && window.isSecureContext) {
           await navigator.clipboard.writeText(value);
@@ -2708,9 +2721,9 @@ const consoleHTML = `<!doctype html>
           document.execCommand("copy");
           area.remove();
         }
-        sendResult.textContent = successMessage || t("copied");
+        target.textContent = successMessage || t("copied");
       } catch (err) {
-        sendResult.textContent = t("copyFailed", { error: err.message });
+        target.textContent = t("copyFailed", { error: err.message });
       }
     }
     async function loadAudit() {
