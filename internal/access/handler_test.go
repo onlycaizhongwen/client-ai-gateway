@@ -1363,6 +1363,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function renderPolicyLink",
 		"data-chain-policy-id",
 		"button[data-chain-policy-id]",
+		"event.target.closest(\"button\")",
 		"function renderJSONPanel",
 		"explain-chain",
 		"chain-grid",

@@ -1656,13 +1656,16 @@ const consoleHTML = `<!doctype html>
           "<td>" + esc(item.requested_model) + "</td>" +
           "<td>" + esc(item.provider_id) + "</td>" +
           "<td>" + esc(item.final_model) + "</td>" +
-          "<td>" + esc(item.policy && item.policy.rule_id) + "</td>" +
+          "<td>" + renderPolicyLink(item.policy && item.policy.rule_id) + "</td>" +
           "<td>" + ((item.fallbacks || []).length) + "</td>" +
           "<td>" + esc(time(item.started_at)) + "</td>" +
           "<td title=\"" + esc(item.error) + "\">" + esc(item.error) + "</td>" +
         "</tr>"
       ).join("");
-      rows.querySelectorAll("tr").forEach(row => row.addEventListener("click", () => loadDetail(row.dataset.trace)));
+      rows.querySelectorAll("tr").forEach(row => row.addEventListener("click", event => {
+        if (event.target.closest("button")) return;
+        loadDetail(row.dataset.trace);
+      }));
     }
     function pageCount(total, size) {
       return Math.max(1, Math.ceil(total / size));
