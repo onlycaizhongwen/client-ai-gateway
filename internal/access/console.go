@@ -1511,6 +1511,30 @@ const consoleHTML = `<!doctype html>
       auditPage = 1;
       loadAudit();
     });
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-issue-provider-id]");
+      if (!button) return;
+      providerIDFilter.value = button.dataset.issueProviderId;
+      providerPage = 1;
+      loadProviderCatalog();
+    });
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-issue-model]");
+      if (!button) return;
+      modelNameFilter.value = button.dataset.issueModel;
+      modelProviderFilter.value = button.dataset.issueModelProvider || "";
+      modelAvailableFilter.value = "all";
+      modelPage = 1;
+      loadModelCatalog();
+    });
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-issue-tool-id]");
+      if (!button) return;
+      toolSelect.value = button.dataset.issueToolId;
+      toolEnabledFilter.value = "false";
+      toolPage = 1;
+      loadTools();
+    });
     document.querySelector("#routing-dry-run").addEventListener("click", routingDryRun);
     document.querySelector("#config-reload").addEventListener("click", configReload);
     toolSelect.addEventListener("change", renderSelectedTool);
@@ -1718,7 +1742,7 @@ const consoleHTML = `<!doctype html>
           addIssue(status === "unhealthy" ? "critical" : "warning", "provider", item.id, t("issueProviderStatus", {
             status: labelRuntime(status || "disabled"),
             reason: item.degraded_reason ? " / " + item.degraded_reason : ""
-          }), item.updated_at);
+          }), item.updated_at, { provider_id: item.id });
         }
       });
       issueModels.forEach(item => {
@@ -1726,14 +1750,14 @@ const consoleHTML = `<!doctype html>
           addIssue("warning", "model", item.model, t("issueModelUnavailable", {
             provider: item.provider_id || "-",
             status: labelRuntime(item.runtime_status || "unavailable")
-          }));
+          }), "", { model: item.model, provider_id: item.provider_id });
         }
       });
       issueTools.forEach(item => {
         if (!item.enabled) {
           addIssue("info", "tool", item.id, t("issueToolDisabled", {
             scopes: (item.scopes || []).join(", ") || "-"
-          }));
+          }), "", { tool_id: item.id });
         }
       });
       issueMCPServers.forEach(server => {
@@ -1795,6 +1819,15 @@ const consoleHTML = `<!doctype html>
       }
       if (item.source === "audit" && item.ref && (item.ref.trace_id || item.ref.target)) {
         return "<button class=\"link-button\" data-issue-audit-trace-id=\"" + esc(item.ref.trace_id || "") + "\" data-issue-audit-target=\"" + esc(item.ref.target || "") + "\">" + esc(item.target) + "</button>";
+      }
+      if (item.source === "provider" && item.ref && item.ref.provider_id) {
+        return "<button class=\"link-button\" data-issue-provider-id=\"" + esc(item.ref.provider_id) + "\">" + esc(item.target) + "</button>";
+      }
+      if (item.source === "model" && item.ref && item.ref.model) {
+        return "<button class=\"link-button\" data-issue-model=\"" + esc(item.ref.model) + "\" data-issue-model-provider=\"" + esc(item.ref.provider_id || "") + "\">" + esc(item.target) + "</button>";
+      }
+      if (item.source === "tool" && item.ref && item.ref.tool_id) {
+        return "<button class=\"link-button\" data-issue-tool-id=\"" + esc(item.ref.tool_id) + "\">" + esc(item.target) + "</button>";
       }
       return esc(item.target);
     }
