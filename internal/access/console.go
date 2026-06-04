@@ -1030,6 +1030,7 @@ const consoleHTML = `<!doctype html>
         issueAuditProblem: "\u6700\u8fd1\u5ba1\u8ba1\u5f02\u5e38\uff1a{action} / {result}{error}",
         issueRange: "{range} / {total} | \u7b2c {page} / {pages} \u9875",
         replayTrace: "\u56de\u586b\u5230\u5feb\u6377\u8bf7\u6c42",
+        viewTraceAudit: "\u67e5\u770b\u5173\u8054\u5ba1\u8ba1",
         copyTraceRequest: "\u590d\u5236\u8bf7\u6c42 JSON",
         copyTraceCurl: "\u590d\u5236 curl \u8349\u7a3f",
         traceSnapshotSafetyTitle: "Trace \u5b89\u5168\u5feb\u7167",
@@ -1305,6 +1306,7 @@ const consoleHTML = `<!doctype html>
         issueAuditProblem: "Recent audit problem: {action} / {result}{error}",
         issueRange: "{range} of {total} | Page {page} / {pages}",
         replayTrace: "Fill Quick Request",
+        viewTraceAudit: "View Related Audit",
         copyTraceRequest: "Copy Request JSON",
         copyTraceCurl: "Copy curl Draft",
         traceSnapshotSafetyTitle: "Trace Safe Snapshot",
@@ -2689,6 +2691,7 @@ const consoleHTML = `<!doctype html>
         "</div>" +
         "<div class=\"actions\" style=\"margin-bottom: 12px;\">" +
           "<button class=\"secondary\" id=\"trace-fill-quick\" data-i18n=\"replayTrace\">" + t("replayTrace") + "</button>" +
+          "<button class=\"secondary\" id=\"trace-view-audit\" data-i18n=\"viewTraceAudit\">" + t("viewTraceAudit") + "</button>" +
           "<button class=\"secondary\" id=\"trace-copy-request\" data-i18n=\"copyTraceRequest\">" + t("copyTraceRequest") + "</button>" +
           "<button class=\"secondary\" id=\"trace-copy-curl\" data-i18n=\"copyTraceCurl\">" + t("copyTraceCurl") + "</button>" +
         "</div>" +
@@ -2699,8 +2702,15 @@ const consoleHTML = `<!doctype html>
         "</div>" +
         "<pre>" + esc(JSON.stringify(trace, null, 2)) + "</pre>";
       document.querySelector("#trace-fill-quick").addEventListener("click", fillQuickRequestFromTrace);
+      document.querySelector("#trace-view-audit").addEventListener("click", filterAuditBySelectedTrace);
       document.querySelector("#trace-copy-request").addEventListener("click", copyTraceRequestJSON);
       document.querySelector("#trace-copy-curl").addEventListener("click", copyTraceCurlDraft);
+    }
+    async function filterAuditBySelectedTrace() {
+      if (!selectedTrace || !selectedTrace.trace_id) return;
+      auditTraceFilter.value = selectedTrace.trace_id;
+      auditPage = 1;
+      await loadAudit();
     }
     function traceRequestBody() {
       const request = selectedTrace && selectedTrace.request;
