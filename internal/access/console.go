@@ -1072,6 +1072,8 @@ const consoleHTML = `<!doctype html>
         loadingPolicyDetail: "\u6b63\u5728\u52a0\u8f7d\u7b56\u7565\u8be6\u60c5...",
         copyPolicyJSON: "\u590d\u5236\u7b56\u7565 JSON",
         policyJSONCopied: "\u5df2\u590d\u5236\u7b56\u7565 JSON\u3002",
+        fillPolicyDryRun: "\u56de\u586b\u8bd5\u7b97",
+        policyDryRunFilled: "\u5df2\u56de\u586b\u7b56\u7565\u8bd5\u7b97\u6761\u4ef6\uff0c\u672a\u53d1\u9001\u3002",
         anyScope: "\u5168\u90e8",
         policyDryRun: "\u7b56\u7565\u8bd5\u7b97",
         policyDryRunPlaceholder: "\u7b56\u7565\u8bd5\u7b97\u7ed3\u679c\u4f1a\u663e\u793a\u5728\u8fd9\u91cc\u3002",
@@ -1342,6 +1344,8 @@ const consoleHTML = `<!doctype html>
         loadingPolicyDetail: "Loading policy detail...",
         copyPolicyJSON: "Copy Policy JSON",
         policyJSONCopied: "Policy JSON copied.",
+        fillPolicyDryRun: "Fill Dry-run",
+        policyDryRunFilled: "Policy dry-run fields filled, not sent.",
         anyScope: "Any",
         policyDryRun: "Policy Dry-run",
         policyDryRunPlaceholder: "Policy dry-run result will appear here.",
@@ -2381,6 +2385,7 @@ const consoleHTML = `<!doctype html>
         "<div class=\"chain-title\">" + esc(item.id) + "</div>" +
         "<div class=\"actions\" style=\"margin-bottom: 12px;\">" +
           "<button class=\"secondary\" id=\"policy-copy-json\" data-i18n=\"copyPolicyJSON\">" + t("copyPolicyJSON") + "</button>" +
+          "<button class=\"secondary\" id=\"policy-fill-dry-run\" data-i18n=\"fillPolicyDryRun\">" + t("fillPolicyDryRun") + "</button>" +
           "<span class=\"muted\" id=\"policy-copy-status\"></span>" +
         "</div>" +
         "<div class=\"chain-grid\">" +
@@ -2389,9 +2394,21 @@ const consoleHTML = `<!doctype html>
         "<pre>" + esc(JSON.stringify(item, null, 2)) + "</pre>" +
       "</div>";
       document.querySelector("#policy-copy-json").addEventListener("click", () => copyPolicyJSON(item));
+      document.querySelector("#policy-fill-dry-run").addEventListener("click", () => fillPolicyDryRunFromPolicy(item));
     }
     async function copyPolicyJSON(item) {
       await copyText(JSON.stringify(item, null, 2), t("policyJSONCopied"), document.querySelector("#policy-copy-status"));
+    }
+    function fillPolicyDryRunFromPolicy(item) {
+      policyDryAppID.value = firstPolicyValue(item.app_ids, policyDryAppID.value);
+      policyDryRequestType.value = firstPolicyValue(item.request_types, "chat");
+      policyDryModel.value = firstPolicyValue(item.models, policyDryModel.value);
+      policyDryProviderClass.value = firstPolicyValue(item.provider_classes, policyDryProviderClass.value);
+      policyDryDataLabels.value = (item.data_labels || []).join(",");
+      document.querySelector("#policy-copy-status").textContent = t("policyDryRunFilled");
+    }
+    function firstPolicyValue(values, fallback) {
+      return values && values.length ? values[0] : fallback;
     }
     function renderExplainChain(chain) {
       if (!chain) return "";
