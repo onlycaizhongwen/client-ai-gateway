@@ -1384,6 +1384,8 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"data-issue-model",
 		"data-issue-model-provider",
 		"data-issue-tool-id",
+		"data-issue-mcp-server-id",
+		"data-issue-mcp-runtime",
 		"function labelSeverity",
 		"function renderTracePolicy",
 		"function fillQuickRequestFromTrace",

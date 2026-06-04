@@ -1535,6 +1535,13 @@ const consoleHTML = `<!doctype html>
       toolPage = 1;
       loadTools();
     });
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-issue-mcp-server-id], button[data-issue-mcp-runtime]");
+      if (!button) return;
+      mcpServerFilter.value = button.dataset.issueMcpServerId || "";
+      mcpPage = 1;
+      loadMCPCatalog();
+    });
     document.querySelector("#routing-dry-run").addEventListener("click", routingDryRun);
     document.querySelector("#config-reload").addEventListener("click", configReload);
     toolSelect.addEventListener("change", renderSelectedTool);
@@ -1733,7 +1740,7 @@ const consoleHTML = `<!doctype html>
           addIssue(mcp.status === "unavailable" ? "critical" : "warning", "mcp_runtime", mcp.mode || "-", t("issueMCPRuntime", {
             status: labelRuntime(mcp.status),
             reason: mcp.reason ? " / " + mcp.reason : ""
-          }));
+          }), "", { mcp_runtime: true });
         }
       }
       issueProviders.forEach(item => {
@@ -1765,7 +1772,7 @@ const consoleHTML = `<!doctype html>
           addIssue("info", "mcp_server", server.id, t("issueMCPServerDisabled", {
             enabled: server.enabled_tools || 0,
             total: server.tool_count || 0
-          }));
+          }), "", { mcp_server_id: server.id });
         }
       });
       allTraces.filter(item => item.status === "failed").forEach(item => {
@@ -1828,6 +1835,12 @@ const consoleHTML = `<!doctype html>
       }
       if (item.source === "tool" && item.ref && item.ref.tool_id) {
         return "<button class=\"link-button\" data-issue-tool-id=\"" + esc(item.ref.tool_id) + "\">" + esc(item.target) + "</button>";
+      }
+      if (item.source === "mcp_server" && item.ref && item.ref.mcp_server_id) {
+        return "<button class=\"link-button\" data-issue-mcp-server-id=\"" + esc(item.ref.mcp_server_id) + "\">" + esc(item.target) + "</button>";
+      }
+      if (item.source === "mcp_runtime" && item.ref && item.ref.mcp_runtime) {
+        return "<button class=\"link-button\" data-issue-mcp-runtime=\"true\">" + esc(item.target) + "</button>";
       }
       return esc(item.target);
     }
