@@ -83,6 +83,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /gateway/v1/grants/export", h.grantsExport)
 	mux.HandleFunc("GET /gateway/v1/policies", h.policiesList)
 	mux.HandleFunc("GET /gateway/v1/policies/export", h.policiesExport)
+	mux.HandleFunc("GET /gateway/v1/policies/", h.policyByID)
 	mux.HandleFunc("GET /gateway/v1/tools", h.toolsList)
 	mux.HandleFunc("GET /gateway/v1/tools/export", h.toolsExport)
 	mux.HandleFunc("POST /gateway/v1/tools/", h.toolInvoke)
@@ -739,6 +740,26 @@ func (h *Handler) policiesExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSONL(w, "policies.jsonl", h.policyViews(r))
+}
+
+func (h *Handler) policyByID(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	policyID := strings.TrimPrefix(r.URL.Path, "/gateway/v1/policies/")
+	if policyID == "" || strings.Contains(policyID, "/") {
+		writeError(w, http.StatusNotFound, "", "not_found", "policy not found")
+		return
+	}
+	query := r.URL.Query()
+	query.Set("policy_id", policyID)
+	r.URL.RawQuery = query.Encode()
+	views := h.policyViews(r)
+	if len(views) == 0 {
+		writeError(w, http.StatusNotFound, "", "not_found", "policy not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"policy": views[0]})
 }
 
 func (h *Handler) toolsList(w http.ResponseWriter, r *http.Request) {

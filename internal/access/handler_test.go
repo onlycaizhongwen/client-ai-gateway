@@ -690,6 +690,42 @@ func TestPoliciesExportHTTP(t *testing.T) {
 	}
 }
 
+func TestPolicyByIDHTTP(t *testing.T) {
+	handler, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/policies/deny-sensitive-cloud", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without admin token, got %d", res.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/policies/deny-sensitive-cloud", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Policy policyView `json:"policy"`
+	}
+	decodeBody(t, res, &body)
+	if body.Policy.ID != "deny-sensitive-cloud" || body.Policy.EvaluationOrder != 1 || body.Policy.ConditionSummary != "label in [sensitive]" {
+		t.Fatalf("unexpected policy detail: %+v", body.Policy)
+	}
+	if !body.Policy.EffectSemantics.Allowed || body.Policy.EffectSemantics.AllowCloud || !body.Policy.EffectSemantics.ForceLocal {
+		t.Fatalf("unexpected effect semantics: %+v", body.Policy.EffectSemantics)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/policies/missing", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing policy, got %d: %s", res.Code, res.Body.String())
+	}
+}
+
 func TestToolsListHTTP(t *testing.T) {
 	handler, _ := newTestHandler()
 	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/tools", nil)

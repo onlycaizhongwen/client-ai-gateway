@@ -237,6 +237,13 @@ Policy 目录的 `data_label` 过滤使用有效标签；未显式配置 `data_l
 
 Policy 目录还会返回 `effect_semantics`，结构化说明该效果是否允许请求、是否允许云端 Provider、是否强制本地以及可读描述。
 
+查看单条策略详情：
+
+```powershell
+curl http://127.0.0.1:18765/gateway/v1/policies/deny-sensitive-cloud `
+  -H "Authorization: Bearer admin-token"
+```
+
 支持效果：
 
 - `allow`：允许请求，可走本地或云端。
