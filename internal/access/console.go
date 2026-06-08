@@ -1068,6 +1068,9 @@ const consoleHTML = `<!doctype html>
         effectForceLocal: "\u5f3a\u5236\u672c\u5730",
         effectDenyCloudSensitive: "\u654f\u611f\u6570\u636e\u7981\u6b62\u4e91\u7aef",
         requestTypeFilter: "\u8bf7\u6c42\u7c7b\u578b",
+        requested: "\u8bf7\u6c42\u6a21\u578b",
+        final: "\u6700\u7ec8\u6a21\u578b",
+        route: "\u8def\u7531",
         providerClassFilter: "Provider \u7c7b\u578b",
         dataLabelFilter: "\u6570\u636e\u6807\u7b7e",
         loadingPolicies: "\u6b63\u5728\u52a0\u8f7d\u7b56\u7565...",
@@ -1344,6 +1347,9 @@ const consoleHTML = `<!doctype html>
         effectForceLocal: "Force local",
         effectDenyCloudSensitive: "Deny cloud sensitive",
         requestTypeFilter: "Request Type",
+        requested: "Requested Model",
+        final: "Final Model",
+        route: "Route",
         providerClassFilter: "Provider Class",
         dataLabelFilter: "Data Label",
         loadingPolicies: "Loading policies...",
@@ -2874,6 +2880,7 @@ const consoleHTML = `<!doctype html>
           "<div class=\"k\">" + t("policyRule") + "</div><div>" + renderTracePolicy(trace.policy) + "</div>" +
           "<div class=\"k\">" + t("fallbacks") + "</div><div>" + ((trace.fallbacks || []).length) + "</div>" +
         "</div>" +
+        renderTraceSummary(trace) +
         "<div class=\"actions\" style=\"margin-bottom: 12px;\">" +
           "<button class=\"secondary\" id=\"trace-fill-quick\" data-i18n=\"replayTrace\">" + t("replayTrace") + "</button>" +
           "<button class=\"secondary\" id=\"trace-view-audit\" data-i18n=\"viewTraceAudit\">" + t("viewTraceAudit") + "</button>" +
@@ -2894,6 +2901,29 @@ const consoleHTML = `<!doctype html>
     function renderTracePolicy(policy) {
       if (!policy || !policy.rule_id) return "-";
       return "<button class=\"link-button\" data-trace-policy-id=\"" + esc(policy.rule_id) + "\">" + esc(policy.rule_id) + "</button> / " + esc(policy.explanation || "");
+    }
+    function renderTraceSummary(trace) {
+      if (!trace) return "";
+      const cells = [
+        [t("requestTypeFilter"), esc(trace.request_type || "-")],
+        [t("apps"), renderAppLink(trace.app_id)],
+        [t("toolName"), renderToolLink(trace.tool_id)],
+        [t("requested"), renderModelLink(trace.requested_model, trace.provider_id)],
+        [t("final"), renderModelLink(trace.final_model, trace.provider_id)],
+        [t("provider"), renderProviderLink(trace.provider_id)]
+      ];
+      const routeCells = (trace.routes || []).map(item =>
+        [t("route"), renderProviderLink(item.provider_id) + " / " + renderModelLink(item.model, item.provider_id) + (item.reason ? " / " + esc(item.reason) : "")]
+      );
+      const fallbackCells = (trace.fallbacks || []).map(item =>
+        [t("fallbacks"), renderProviderLink(item.from_provider_id) + " / " + esc(item.action || "-") + (item.reason ? " / " + esc(item.reason) : "")]
+      );
+      return "<div class=\"explain-chain\"><div class=\"chain-title\">Trace</div><div class=\"chain-grid\">" +
+        cells.concat(routeCells, fallbackCells)
+          .filter(item => item[1] && item[1] !== "-")
+          .map(item => "<div class=\"chain-cell\"><span class=\"k\">" + esc(item[0]) + "</span><div>" + item[1] + "</div></div>")
+          .join("") +
+        "</div></div>";
     }
     async function filterAuditBySelectedTrace() {
       if (!selectedTrace || !selectedTrace.trace_id) return;

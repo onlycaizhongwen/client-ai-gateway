@@ -1425,6 +1425,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"data-issue-mcp-runtime",
 		"function labelSeverity",
 		"function renderTracePolicy",
+		"function renderTraceSummary",
 		"function fillQuickRequestFromTrace",
 		"function filterAuditBySelectedTrace",
 		"function filterAuditByMetadata",
