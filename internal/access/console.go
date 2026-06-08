@@ -217,6 +217,7 @@ const consoleHTML = `<!doctype html>
               <input id="app-id-filter" data-i18n-placeholder="appFilter" placeholder="App ID" />
               <input id="app-grant-filter" data-i18n-placeholder="grantFilter" placeholder="Grant" />
               <button class="secondary" id="app-filter-apply" data-i18n="applyFilter">筛选</button>
+              <button class="secondary" id="app-filter-clear" data-i18n="clearFilter">清空</button>
             </div>
             <div class="muted" id="app-message">\u6b63\u5728\u52a0\u8f7d\u5e94\u7528\u6388\u6743...</div>
           </div>
@@ -315,6 +316,7 @@ const consoleHTML = `<!doctype html>
                 <option value="disabled" data-i18n="runtimeDisabled">Disabled</option>
               </select>
               <button class="secondary" id="provider-filter-apply" data-i18n="applyFilter">Apply</button>
+              <button class="secondary" id="provider-filter-clear" data-i18n="clearFilter">Clear</button>
             </div>
             <div class="muted" id="provider-message" data-i18n="loadingProviders">Loading providers...</div>
           </div>
@@ -368,6 +370,7 @@ const consoleHTML = `<!doctype html>
                 <option value="all" data-i18n="allModels">All models</option>
               </select>
               <button class="secondary" id="model-filter-apply" data-i18n="applyFilter">Apply</button>
+              <button class="secondary" id="model-filter-clear" data-i18n="clearFilter">Clear</button>
             </div>
             <div class="muted" id="model-message" data-i18n="loadingModels">Loading models...</div>
           </div>
@@ -422,6 +425,7 @@ const consoleHTML = `<!doctype html>
               <input id="policy-request-type-filter" data-i18n-placeholder="requestTypeFilter" placeholder="Request Type" />
               <input id="policy-provider-class-filter" data-i18n-placeholder="providerClassFilter" placeholder="Provider Class" />
               <input id="policy-data-label-filter" data-i18n-placeholder="dataLabelFilter" placeholder="Data Label" />
+              <button class="secondary" id="policy-filter-clear" data-i18n="clearFilter">Clear</button>
             </div>
             <div class="muted" id="policy-message" data-i18n="loadingPolicies">Loading policies...</div>
           </div>
@@ -473,6 +477,7 @@ const consoleHTML = `<!doctype html>
               <input id="grant-app-filter" data-i18n-placeholder="appFilter" placeholder="App ID" />
               <input id="grant-tool-filter" data-i18n-placeholder="toolIdPlaceholder" placeholder="Tool ID" />
               <button class="secondary" id="grant-filter-apply" data-i18n="applyFilter">Apply</button>
+              <button class="secondary" id="grant-filter-clear" data-i18n="clearFilter">Clear</button>
             </div>
             <div class="muted" id="grant-message" data-i18n="loadingGrants">Loading grant catalog...</div>
           </div>
@@ -1491,18 +1496,23 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#app-export").addEventListener("click", exportApps);
     document.querySelector("#app-refresh").addEventListener("click", loadApps);
     document.querySelector("#app-filter-apply").addEventListener("click", () => { appPage = 1; loadApps(); });
+    document.querySelector("#app-filter-clear").addEventListener("click", clearAppFilters);
     document.querySelector("#grant-export").addEventListener("click", exportGrants);
     document.querySelector("#grant-refresh").addEventListener("click", loadGrants);
     document.querySelector("#grant-filter-apply").addEventListener("click", () => { grantPage = 1; loadGrants(); });
+    document.querySelector("#grant-filter-clear").addEventListener("click", clearGrantFilters);
     document.querySelector("#provider-export").addEventListener("click", exportProviderCatalog);
     document.querySelector("#provider-refresh").addEventListener("click", loadProviderCatalog);
     document.querySelector("#provider-filter-apply").addEventListener("click", () => { providerPage = 1; loadProviderCatalog(); });
+    document.querySelector("#provider-filter-clear").addEventListener("click", clearProviderFilters);
     document.querySelector("#model-export").addEventListener("click", exportModelCatalog);
     document.querySelector("#model-refresh").addEventListener("click", loadModelCatalog);
     document.querySelector("#model-filter-apply").addEventListener("click", () => { modelPage = 1; loadModelCatalog(); });
+    document.querySelector("#model-filter-clear").addEventListener("click", clearModelFilters);
     document.querySelector("#policy-export").addEventListener("click", exportPolicyCatalog);
     document.querySelector("#policy-refresh").addEventListener("click", loadPolicyCatalog);
     document.querySelector("#policy-filter-apply").addEventListener("click", () => { policyPage = 1; loadPolicyCatalog(); });
+    document.querySelector("#policy-filter-clear").addEventListener("click", clearPolicyFilters);
     document.querySelector("#policy-dry-run").addEventListener("click", policyDryRun);
     document.addEventListener("click", event => {
       const button = event.target.closest("button[data-chain-policy-id]");
@@ -3021,6 +3031,47 @@ const consoleHTML = `<!doctype html>
       mcpEnabledFilter.value = "";
       mcpPage = 1;
       loadMCPCatalog();
+    }
+    function clearAppFilters() {
+      appIDFilter.value = "";
+      appGrantFilter.value = "";
+      appPage = 1;
+      loadApps();
+    }
+    function clearGrantFilters() {
+      grantIDFilter.value = "";
+      grantTypeFilter.value = "";
+      grantAppFilter.value = "";
+      grantToolFilter.value = "";
+      grantPage = 1;
+      loadGrants();
+    }
+    function clearProviderFilters() {
+      providerIDFilter.value = "";
+      providerClassFilter.value = "";
+      providerEnabledFilter.value = "";
+      providerRuntimeFilter.value = "";
+      providerPage = 1;
+      loadProviderCatalog();
+    }
+    function clearModelFilters() {
+      modelNameFilter.value = "";
+      modelProviderFilter.value = "";
+      modelClassFilter.value = "";
+      modelAvailableFilter.value = "";
+      modelPage = 1;
+      loadModelCatalog();
+    }
+    function clearPolicyFilters() {
+      policyIDFilter.value = "";
+      policyEffectFilter.value = "";
+      policyAppFilter.value = "";
+      policyModelFilter.value = "";
+      policyRequestTypeFilter.value = "";
+      policyProviderClassFilter.value = "";
+      policyDataLabelFilter.value = "";
+      policyPage = 1;
+      loadPolicyCatalog();
     }
     function filterProviderByID(providerID) {
       if (!providerID) return;
