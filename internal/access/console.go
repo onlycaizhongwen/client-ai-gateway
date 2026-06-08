@@ -1537,6 +1537,11 @@ const consoleHTML = `<!doctype html>
       filterAppByID(button.dataset.appLinkId);
     });
     document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-grant-link-id]");
+      if (!button) return;
+      filterGrantByID(button.dataset.grantLinkId);
+    });
+    document.addEventListener("click", event => {
       const button = event.target.closest("button[data-issue-tool-id]");
       if (!button) return;
       toolSelect.value = button.dataset.issueToolId;
@@ -1996,13 +2001,14 @@ const consoleHTML = `<!doctype html>
       mcpRows.innerHTML = servers.map(server => {
         const tools = server.tools || [];
         const names = tools.map(tool => tool.name || tool.id).join(", ") || "-";
-        const scopes = [...new Set(tools.flatMap(tool => tool.scopes || []))].join(", ") || "-";
+        const scopes = [...new Set(tools.flatMap(tool => tool.scopes || []))];
+        const scopeText = scopes.join(", ") || "-";
         return "<tr>" +
           "<td><strong>" + esc(server.name || server.id) + "</strong><div class=\"muted\">" + esc(server.id) + "</div></td>" +
           "<td><span class=\"status " + (server.enabled ? "healthy" : "disabled") + "\">" + (server.enabled ? t("enabled") : t("disabled")) + "</span></td>" +
           "<td>" + esc(server.enabled_tools || 0) + " / " + esc(server.tool_count || 0) + "</td>" +
           "<td title=\"" + esc(names) + "\">" + esc(names) + "</td>" +
-          "<td title=\"" + esc(scopes) + "\">" + esc(scopes) + "</td>" +
+          "<td title=\"" + esc(scopeText) + "\">" + renderScopeGrantLinks(scopes) + "</td>" +
         "</tr>";
       }).join("");
       if (!servers.length) {
@@ -2075,7 +2081,7 @@ const consoleHTML = `<!doctype html>
           "<td>" + esc(item.origin || "builtin") + (item.server_id ? "<div class=\"muted\">" + esc(item.server_id) + "</div>" : "") + "</td>" +
           "<td>" + esc(item.adapter) + "</td>" +
           "<td>" + esc(item.risk_level || "-") + "<div class=\"muted\">" + (item.read_only ? t("readOnlyTool") : t("writeTool")) + "</div></td>" +
-          "<td>" + esc((item.scopes || []).join(", ") || "-") + "</td>" +
+          "<td title=\"" + esc((item.scopes || []).join(", ") || "-") + "\">" + renderScopeGrantLinks(item.scopes || []) + "</td>" +
           "<td><span class=\"status " + (item.enabled ? "healthy" : "disabled") + "\">" + (item.enabled ? t("enabled") : t("disabled")) + "</span></td>" +
         "</tr>"
       ).join("");
@@ -2174,7 +2180,7 @@ const consoleHTML = `<!doctype html>
         "<tr>" +
           "<td><strong>" + esc(item.name || item.id) + "</strong><div class=\"muted\">" + renderAppLink(item.id) + "</div></td>" +
           "<td class=\"trace-id\">" + esc(item.token_hint || "-") + "</td>" +
-          "<td title=\"" + esc((item.grants || []).join(", ")) + "\">" + esc((item.grants || []).join(", ") || "-") + "</td>" +
+          "<td title=\"" + esc((item.grants || []).join(", ")) + "\">" + renderGrantLinks(item.grants || []) + "</td>" +
         "</tr>"
       ).join("");
       if (!allApps.length) {
@@ -2548,6 +2554,12 @@ const consoleHTML = `<!doctype html>
       if (key === "policy_rule_id" && value) {
         return renderPolicyLink(String(value));
       }
+      if (key === "matched_grant" && value) {
+        return renderGrantLink(String(value));
+      }
+      if (key === "missing_grants" && value) {
+        return renderGrantLinks(Array.isArray(value) ? value : String(value).split(",").map(item => item.trim()).filter(Boolean));
+      }
       return esc(String(value));
     }
     function renderPolicyLink(policyID) {
@@ -2565,6 +2577,22 @@ const consoleHTML = `<!doctype html>
     function renderAppLink(appID) {
       if (!appID) return "-";
       return "<button class=\"link-button\" data-app-link-id=\"" + esc(appID) + "\">" + esc(appID) + "</button>";
+    }
+    function renderAppLinks(appIDs) {
+      if (!appIDs || !appIDs.length) return "-";
+      return appIDs.map(item => renderAppLink(item)).join(", ");
+    }
+    function renderGrantLink(grantID) {
+      if (!grantID) return "-";
+      return "<button class=\"link-button\" data-grant-link-id=\"" + esc(grantID) + "\">" + esc(grantID) + "</button>";
+    }
+    function renderGrantLinks(grants) {
+      if (!grants || !grants.length) return "-";
+      return grants.map(item => renderGrantLink(item)).join(", ");
+    }
+    function renderScopeGrantLinks(scopes) {
+      if (!scopes || !scopes.length) return "-";
+      return scopes.map(scope => renderGrantLink("tool:" + scope)).join(", ");
     }
     function labelChainList(values) {
       if (!values) return "";
@@ -2686,9 +2714,9 @@ const consoleHTML = `<!doctype html>
         const servers = (item.servers || []).join(", ");
         const toolText = servers ? tools + " / " + servers : tools;
         return "<tr>" +
-          "<td class=\"trace-id\">" + esc(item.id) + "</td>" +
+          "<td class=\"trace-id\">" + renderGrantLink(item.id) + "</td>" +
           "<td>" + esc(item.type || "-") + "</td>" +
-          "<td title=\"" + esc(apps) + "\">" + esc(apps) + "</td>" +
+          "<td title=\"" + esc(apps) + "\">" + renderAppLinks(item.apps || []) + "</td>" +
           "<td title=\"" + esc(toolText) + "\">" + esc(toolText) + "</td>" +
           "<td title=\"" + esc(item.description || "") + "\">" + esc(item.description || "") + "</td>" +
         "</tr>";
@@ -2837,6 +2865,15 @@ const consoleHTML = `<!doctype html>
       appIDFilter.value = appID;
       appPage = 1;
       loadApps();
+    }
+    function filterGrantByID(grantID) {
+      if (!grantID) return;
+      grantIDFilter.value = grantID;
+      grantTypeFilter.value = "";
+      grantAppFilter.value = "";
+      grantToolFilter.value = "";
+      grantPage = 1;
+      loadGrants();
     }
     function traceRequestBody() {
       const request = selectedTrace && selectedTrace.request;
