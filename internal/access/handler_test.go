@@ -829,6 +829,17 @@ func TestToolsListFiltersAndPages(t *testing.T) {
 	if body.Tools[0].ID != "mcp.desktop.list_context" {
 		t.Fatalf("unexpected filtered tool: %+v", body.Tools[0])
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/tools?tool_id=mcp.repo.list", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	decodeBody(t, res, &body)
+	if body.Total != 1 || len(body.Tools) != 1 || body.Tools[0].ID != "mcp.repo.list" {
+		t.Fatalf("unexpected tool_id filtered body: %+v", body)
+	}
 }
 
 func TestToolsExportHTTP(t *testing.T) {
@@ -1365,15 +1376,21 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function renderModelLink",
 		"function renderAppLink",
 		"function renderGrantLink",
+		"function renderToolLink",
+		"function renderMCPServerLink",
 		"function filterProviderByID",
 		"function filterModelByID",
 		"function filterAppByID",
 		"function filterGrantByID",
+		"function filterToolByID",
+		"function filterMCPServerByID",
 		"data-provider-link-id",
 		"data-model-link-id",
 		"data-model-link-provider",
 		"data-app-link-id",
 		"data-grant-link-id",
+		"data-tool-link-id",
+		"data-mcp-server-link-id",
 		"data-chain-policy-id",
 		"button[data-chain-policy-id]",
 		"event.target.closest(\"button\")",

@@ -866,6 +866,7 @@ const consoleHTML = `<!doctype html>
     let issueTools = [];
     let toolTotal = 0;
     let toolPage = 1;
+    let toolIDFilter = "";
     const toolPageSize = 8;
     let allApps = [];
     let appTotal = 0;
@@ -1471,7 +1472,7 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#tool-invoke").addEventListener("click", invokeTool);
     document.querySelector("#tool-export").addEventListener("click", exportTools);
     document.querySelector("#tool-refresh").addEventListener("click", loadTools);
-    document.querySelector("#tool-filter-apply").addEventListener("click", () => { toolPage = 1; loadTools(); });
+    document.querySelector("#tool-filter-apply").addEventListener("click", () => { toolIDFilter = ""; toolPage = 1; loadTools(); });
     document.querySelector("#app-export").addEventListener("click", exportApps);
     document.querySelector("#app-refresh").addEventListener("click", loadApps);
     document.querySelector("#app-filter-apply").addEventListener("click", () => { appPage = 1; loadApps(); });
@@ -1542,9 +1543,19 @@ const consoleHTML = `<!doctype html>
       filterGrantByID(button.dataset.grantLinkId);
     });
     document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-tool-link-id]");
+      if (!button) return;
+      filterToolByID(button.dataset.toolLinkId);
+    });
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-mcp-server-link-id]");
+      if (!button) return;
+      filterMCPServerByID(button.dataset.mcpServerLinkId);
+    });
+    document.addEventListener("click", event => {
       const button = event.target.closest("button[data-issue-tool-id]");
       if (!button) return;
-      toolSelect.value = button.dataset.issueToolId;
+      toolIDFilter = button.dataset.issueToolId;
       toolEnabledFilter.value = "false";
       toolPage = 1;
       loadTools();
@@ -2004,7 +2015,7 @@ const consoleHTML = `<!doctype html>
         const scopes = [...new Set(tools.flatMap(tool => tool.scopes || []))];
         const scopeText = scopes.join(", ") || "-";
         return "<tr>" +
-          "<td><strong>" + esc(server.name || server.id) + "</strong><div class=\"muted\">" + esc(server.id) + "</div></td>" +
+          "<td><strong>" + esc(server.name || server.id) + "</strong><div class=\"muted\">" + renderMCPServerLink(server.id) + "</div></td>" +
           "<td><span class=\"status " + (server.enabled ? "healthy" : "disabled") + "\">" + (server.enabled ? t("enabled") : t("disabled")) + "</span></td>" +
           "<td>" + esc(server.enabled_tools || 0) + " / " + esc(server.tool_count || 0) + "</td>" +
           "<td title=\"" + esc(names) + "\">" + esc(names) + "</td>" +
@@ -2061,6 +2072,7 @@ const consoleHTML = `<!doctype html>
     }
     function toolCatalogQuery() {
       const query = new URLSearchParams();
+      if (toolIDFilter) query.set("tool_id", toolIDFilter);
       if (toolOriginFilter.value) query.set("origin", toolOriginFilter.value);
       if (toolServerFilter.value.trim()) query.set("server_id", toolServerFilter.value.trim());
       if (toolScopeFilter.value.trim()) query.set("scope", toolScopeFilter.value.trim());
@@ -2077,8 +2089,8 @@ const consoleHTML = `<!doctype html>
       document.querySelector("#tool-next").disabled = toolPage >= totalPages;
       toolRows.innerHTML = allTools.map(item =>
         "<tr data-tool=\"" + esc(item.id) + "\">" +
-          "<td><strong>" + esc(item.name || item.id) + "</strong><div class=\"muted\">" + esc(item.id) + "</div></td>" +
-          "<td>" + esc(item.origin || "builtin") + (item.server_id ? "<div class=\"muted\">" + esc(item.server_id) + "</div>" : "") + "</td>" +
+          "<td><strong>" + esc(item.name || item.id) + "</strong><div class=\"muted\">" + renderToolLink(item.id) + "</div></td>" +
+          "<td>" + esc(item.origin || "builtin") + (item.server_id ? "<div class=\"muted\">" + renderMCPServerLink(item.server_id) + "</div>" : "") + "</td>" +
           "<td>" + esc(item.adapter) + "</td>" +
           "<td>" + esc(item.risk_level || "-") + "<div class=\"muted\">" + (item.read_only ? t("readOnlyTool") : t("writeTool")) + "</div></td>" +
           "<td title=\"" + esc((item.scopes || []).join(", ") || "-") + "\">" + renderScopeGrantLinks(item.scopes || []) + "</td>" +
@@ -2560,6 +2572,9 @@ const consoleHTML = `<!doctype html>
       if (key === "missing_grants" && value) {
         return renderGrantLinks(Array.isArray(value) ? value : String(value).split(",").map(item => item.trim()).filter(Boolean));
       }
+      if (key === "tool_id" && value) {
+        return renderToolLink(String(value));
+      }
       return esc(String(value));
     }
     function renderPolicyLink(policyID) {
@@ -2593,6 +2608,14 @@ const consoleHTML = `<!doctype html>
     function renderScopeGrantLinks(scopes) {
       if (!scopes || !scopes.length) return "-";
       return scopes.map(scope => renderGrantLink("tool:" + scope)).join(", ");
+    }
+    function renderToolLink(toolID) {
+      if (!toolID) return "-";
+      return "<button class=\"link-button\" data-tool-link-id=\"" + esc(toolID) + "\">" + esc(toolID) + "</button>";
+    }
+    function renderMCPServerLink(serverID) {
+      if (!serverID) return "-";
+      return "<button class=\"link-button\" data-mcp-server-link-id=\"" + esc(serverID) + "\">" + esc(serverID) + "</button>";
     }
     function labelChainList(values) {
       if (!values) return "";
@@ -2874,6 +2897,28 @@ const consoleHTML = `<!doctype html>
       grantToolFilter.value = "";
       grantPage = 1;
       loadGrants();
+    }
+    function filterToolByID(toolID) {
+      if (!toolID) return;
+      toolIDFilter = toolID;
+      toolOriginFilter.value = "";
+      toolServerFilter.value = "";
+      toolScopeFilter.value = "";
+      toolEnabledFilter.value = "";
+      toolPage = 1;
+      loadTools();
+    }
+    function filterMCPServerByID(serverID) {
+      if (!serverID) return;
+      mcpServerFilter.value = serverID;
+      mcpPage = 1;
+      loadMCPCatalog();
+      toolIDFilter = "";
+      toolSelect.value = "";
+      toolOriginFilter.value = "mcp";
+      toolServerFilter.value = serverID;
+      toolPage = 1;
+      loadTools();
     }
     function traceRequestBody() {
       const request = selectedTrace && selectedTrace.request;

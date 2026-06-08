@@ -299,6 +299,7 @@ curl http://127.0.0.1:18765/gateway/v1/tools
 工具列表支持分页与过滤：
 
 - `limit` / `offset`
+- `tool_id`：只看指定工具
 - `origin`：`builtin` 或 `mcp`
 - `server_id`：只看指定 MCP server 下的工具
 - `scope`：只看包含指定 scope 的工具

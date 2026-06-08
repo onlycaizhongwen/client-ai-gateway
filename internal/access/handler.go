@@ -797,6 +797,7 @@ func (h *Handler) toolsExport(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) toolViews(r *http.Request) []toolView {
 	snapshot := h.snapshot()
 	query := r.URL.Query()
+	toolFilter := query.Get("tool_id")
 	originFilter := query.Get("origin")
 	serverFilter := query.Get("server_id")
 	scopeFilter := query.Get("scope")
@@ -823,7 +824,7 @@ func (h *Handler) toolViews(r *http.Request) []toolView {
 			SandboxRequired: manifest.SandboxRequired,
 			Enabled:         tool.IsEnabled(),
 		}
-		if includeToolView(view, originFilter, serverFilter, scopeFilter, enabledFilter) {
+		if includeToolView(view, toolFilter, originFilter, serverFilter, scopeFilter, enabledFilter) {
 			views = append(views, view)
 		}
 	}
@@ -845,7 +846,7 @@ func (h *Handler) toolViews(r *http.Request) []toolView {
 					SandboxRequired: tool.SandboxRequired,
 					Enabled:         server.IsEnabled() && tool.IsEnabled(),
 				}
-				if includeToolView(view, originFilter, serverFilter, scopeFilter, enabledFilter) {
+				if includeToolView(view, toolFilter, originFilter, serverFilter, scopeFilter, enabledFilter) {
 					views = append(views, view)
 				}
 			}
@@ -854,7 +855,10 @@ func (h *Handler) toolViews(r *http.Request) []toolView {
 	return views
 }
 
-func includeToolView(view toolView, originFilter, serverFilter, scopeFilter, enabledFilter string) bool {
+func includeToolView(view toolView, toolFilter, originFilter, serverFilter, scopeFilter, enabledFilter string) bool {
+	if toolFilter != "" && view.ID != toolFilter {
+		return false
+	}
 	if originFilter != "" && view.Origin != originFilter {
 		return false
 	}
