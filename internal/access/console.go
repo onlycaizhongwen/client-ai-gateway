@@ -1534,6 +1534,16 @@ const consoleHTML = `<!doctype html>
       filterProviderByID(button.dataset.providerLinkId);
     });
     document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-provider-class-link]");
+      if (!button) return;
+      filterProviderByClass(button.dataset.providerClassLink);
+    });
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-policy-filter-key]");
+      if (!button) return;
+      filterPolicyByField(button.dataset.policyFilterKey, button.dataset.policyFilterValue || "");
+    });
+    document.addEventListener("click", event => {
       const button = event.target.closest("button[data-issue-model]");
       if (!button) return;
       filterModelByID(button.dataset.issueModel, button.dataset.issueModelProvider || "");
@@ -2278,7 +2288,7 @@ const consoleHTML = `<!doctype html>
           "<td><strong>" + esc(item.name || item.id) + "</strong><div class=\"muted\">" + esc(item.id) + "</div></td>" +
           "<td>" + esc(item.class || "-") + "</td>" +
           "<td>" + esc(item.adapter || "mock") + "</td>" +
-          "<td title=\"" + esc((item.models || []).join(", ")) + "\">" + esc((item.models || []).join(", ") || "-") + "</td>" +
+          "<td title=\"" + esc((item.models || []).join(", ")) + "\">" + renderModelLinks(item.models || [], item.id) + "</td>" +
           "<td><span class=\"status " + esc(runtimeStatus) + "\">" + esc(labelRuntime(runtimeStatus)) + "</span><div class=\"muted\">" + (item.enabled === false ? t("disabled") : t("enabled")) + "</div></td>" +
           "<td><div class=\"provider-actions\">" +
             "<button class=\"secondary\" data-provider=\"" + esc(item.id) + "\" data-action=\"probe\">" + t("probe") + "</button>" +
@@ -2458,6 +2468,20 @@ const consoleHTML = `<!doctype html>
     function labelList(values) {
       return (values && values.length) ? values.join(", ") : t("anyScope");
     }
+    function renderPolicyValues(key, values) {
+      if (!values || !values.length) return t("anyScope");
+      return values.map(value => renderPolicyValue(key, value)).join(", ");
+    }
+    function renderPolicyValue(key, value) {
+      const text = String(value);
+      if (key === "app_id") return renderAppLink(text);
+      if (key === "model") return renderModelLink(text);
+      if (key === "provider_class") return renderProviderClassLink(text);
+      return renderPolicyFilterLink(key, text);
+    }
+    function renderPolicyFilterLink(key, value) {
+      return "<button class=\"link-button\" data-policy-filter-key=\"" + esc(key) + "\" data-policy-filter-value=\"" + esc(value) + "\">" + esc(value) + "</button>";
+    }
     function labelPolicyEffect(value) {
       return ({
         allow: t("effectAllow"),
@@ -2502,19 +2526,19 @@ const consoleHTML = `<!doctype html>
         return;
       }
       const cells = [
-        [t("evaluationOrder"), item.evaluation_order],
-        [t("policy"), item.id],
-        [t("priority"), item.priority == null ? 0 : item.priority],
-        [t("effect"), labelPolicyEffect(item.effect)],
-        [t("condition"), item.condition_summary],
-        [t("reason"), item.reason],
-        [t("app"), labelList(item.app_ids)],
-        [t("requestTypeFilter"), labelList(item.request_types)],
-        [t("model"), labelList(item.models)],
-        [t("provider"), labelList(item.provider_classes)],
-        [t("dataLabelFilter"), labelList(item.data_labels)],
-        [t("cloud"), item.effect_semantics && item.effect_semantics.allow_cloud ? t("allowed") : t("blocked")],
-        [t("nextAction"), item.effect_semantics && item.effect_semantics.force_local ? t("effectForceLocal") : t("continue")]
+        [t("evaluationOrder"), esc(item.evaluation_order == null ? "" : item.evaluation_order)],
+        [t("policy"), renderPolicyLink(item.id)],
+        [t("priority"), esc(item.priority == null ? 0 : item.priority)],
+        [t("effect"), esc(labelPolicyEffect(item.effect))],
+        [t("condition"), esc(item.condition_summary || "")],
+        [t("reason"), esc(item.reason || "")],
+        [t("app"), renderPolicyValues("app_id", item.app_ids)],
+        [t("requestTypeFilter"), renderPolicyValues("request_type", item.request_types)],
+        [t("model"), renderPolicyValues("model", item.models)],
+        [t("provider"), renderPolicyValues("provider_class", item.provider_classes)],
+        [t("dataLabelFilter"), renderPolicyValues("data_label", item.data_labels)],
+        [t("cloud"), esc(item.effect_semantics && item.effect_semantics.allow_cloud ? t("allowed") : t("blocked"))],
+        [t("nextAction"), esc(item.effect_semantics && item.effect_semantics.force_local ? t("effectForceLocal") : t("continue"))]
       ].filter(item => item[1] !== undefined && item[1] !== null && item[1] !== "");
       policyDetail.innerHTML = "<div class=\"explain-chain\">" +
         "<div class=\"chain-title\">" + esc(item.id) + "</div>" +
@@ -2525,7 +2549,7 @@ const consoleHTML = `<!doctype html>
           "<span class=\"muted\" id=\"policy-copy-status\"></span>" +
         "</div>" +
         "<div class=\"chain-grid\">" +
-          cells.map(cell => "<div class=\"chain-cell\"><span class=\"k\">" + esc(cell[0]) + "</span><div>" + esc(String(cell[1])) + "</div></div>").join("") +
+          cells.map(cell => "<div class=\"chain-cell\"><span class=\"k\">" + esc(cell[0]) + "</span><div>" + String(cell[1]) + "</div></div>").join("") +
         "</div>" +
         "<pre>" + esc(JSON.stringify(item, null, 2)) + "</pre>" +
       "</div>";
@@ -2604,6 +2628,14 @@ const consoleHTML = `<!doctype html>
     function renderModelLink(model, providerID = "") {
       if (!model) return "-";
       return "<button class=\"link-button\" data-model-link-id=\"" + esc(model) + "\" data-model-link-provider=\"" + esc(providerID || "") + "\">" + esc(model) + "</button>";
+    }
+    function renderModelLinks(models, providerID = "") {
+      if (!models || !models.length) return "-";
+      return models.map(model => renderModelLink(model, providerID)).join(", ");
+    }
+    function renderProviderClassLink(providerClass) {
+      if (!providerClass) return "-";
+      return "<button class=\"link-button\" data-provider-class-link=\"" + esc(providerClass) + "\">" + esc(providerClass) + "</button>";
     }
     function renderAppLink(appID) {
       if (!appID) return "-";
@@ -2944,6 +2976,13 @@ const consoleHTML = `<!doctype html>
       providerPage = 1;
       loadProviderCatalog();
     }
+    function filterProviderByClass(providerClass) {
+      if (!providerClass) return;
+      providerIDFilter.value = "";
+      providerClassFilter.value = providerClass;
+      providerPage = 1;
+      loadProviderCatalog();
+    }
     function filterModelByID(model, providerID = "") {
       if (!model) return;
       modelNameFilter.value = model;
@@ -2992,6 +3031,13 @@ const consoleHTML = `<!doctype html>
     function filterTraceByID(traceID) {
       if (!traceID) return;
       loadDetail(traceID);
+    }
+    function filterPolicyByField(key, value) {
+      if (!key || !value) return;
+      if (key === "request_type") policyRequestTypeFilter.value = value;
+      if (key === "data_label") policyDataLabelFilter.value = value;
+      policyPage = 1;
+      loadPolicyCatalog();
     }
     function traceRequestBody() {
       const request = selectedTrace && selectedTrace.request;
