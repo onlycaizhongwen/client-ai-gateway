@@ -16,6 +16,7 @@
 - Provider SDK 边界：[docs/provider-sdk.md](docs/provider-sdk.md)
 - Tool / Plugin SDK 边界：[docs/tool-plugin-sdk.md](docs/tool-plugin-sdk.md)
 - MCP 真实运行时设计：[docs/mcp-runtime-design.md](docs/mcp-runtime-design.md)
+- 配额预算与限流设计：[docs/quota-budget-rate-limit.md](docs/quota-budget-rate-limit.md)
 - 入口程序：[cmd/gateway-daemon](cmd/gateway-daemon)
 - 核心流水线：[internal/core](internal/core)
 - HTTP 接入层：[internal/access](internal/access)
