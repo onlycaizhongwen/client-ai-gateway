@@ -1524,11 +1524,12 @@ const consoleHTML = `<!doctype html>
     document.addEventListener("click", event => {
       const button = event.target.closest("button[data-issue-model]");
       if (!button) return;
-      modelNameFilter.value = button.dataset.issueModel;
-      modelProviderFilter.value = button.dataset.issueModelProvider || "";
-      modelAvailableFilter.value = "all";
-      modelPage = 1;
-      loadModelCatalog();
+      filterModelByID(button.dataset.issueModel, button.dataset.issueModelProvider || "");
+    });
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-model-link-id]");
+      if (!button) return;
+      filterModelByID(button.dataset.modelLinkId, button.dataset.modelLinkProvider || "");
     });
     document.addEventListener("click", event => {
       const button = event.target.closest("button[data-issue-tool-id]");
@@ -1700,9 +1701,9 @@ const consoleHTML = `<!doctype html>
           "<td><span class=\"status " + esc(item.status) + "\">" + esc(labelStatus(item.status)) + "</span></td>" +
           "<td class=\"trace-id\">" + esc(item.trace_id) + "</td>" +
           "<td>" + esc(item.app_id) + "</td>" +
-          "<td>" + esc(item.requested_model) + "</td>" +
+          "<td>" + renderModelLink(item.requested_model, item.provider_id) + "</td>" +
           "<td>" + renderProviderLink(item.provider_id) + "</td>" +
-          "<td>" + esc(item.final_model) + "</td>" +
+          "<td>" + renderModelLink(item.final_model, item.provider_id) + "</td>" +
           "<td>" + renderPolicyLink(item.policy && item.policy.rule_id) + "</td>" +
           "<td>" + ((item.fallbacks || []).length) + "</td>" +
           "<td>" + esc(time(item.started_at)) + "</td>" +
@@ -2316,7 +2317,7 @@ const consoleHTML = `<!doctype html>
       document.querySelector("#model-next").disabled = modelPage >= totalPages;
       modelRows.innerHTML = allModels.map(item =>
         "<tr>" +
-          "<td class=\"trace-id\">" + esc(item.model) + "</td>" +
+          "<td class=\"trace-id\">" + renderModelLink(item.model, item.provider_id) + "</td>" +
           "<td>" + renderProviderLink(item.provider_id) + "</td>" +
           "<td>" + esc(item.provider_class || "-") + "</td>" +
           "<td><span class=\"status " + esc(item.runtime_status || (item.available ? "healthy" : "unhealthy")) + "\">" + esc(labelRuntime(item.runtime_status) || "-") + "</span><div class=\"muted\">" + (item.enabled ? t("enabled") : t("disabled")) + "</div></td>" +
@@ -2551,6 +2552,10 @@ const consoleHTML = `<!doctype html>
     function renderProviderLink(providerID) {
       if (!providerID) return "-";
       return "<button class=\"link-button\" data-provider-link-id=\"" + esc(providerID) + "\">" + esc(providerID) + "</button>";
+    }
+    function renderModelLink(model, providerID = "") {
+      if (!model) return "-";
+      return "<button class=\"link-button\" data-model-link-id=\"" + esc(model) + "\" data-model-link-provider=\"" + esc(providerID || "") + "\">" + esc(model) + "</button>";
     }
     function labelChainList(values) {
       if (!values) return "";
@@ -2809,6 +2814,14 @@ const consoleHTML = `<!doctype html>
       providerIDFilter.value = providerID;
       providerPage = 1;
       loadProviderCatalog();
+    }
+    function filterModelByID(model, providerID = "") {
+      if (!model) return;
+      modelNameFilter.value = model;
+      modelProviderFilter.value = providerID || "";
+      modelAvailableFilter.value = "all";
+      modelPage = 1;
+      loadModelCatalog();
     }
     function traceRequestBody() {
       const request = selectedTrace && selectedTrace.request;
@@ -3129,7 +3142,7 @@ const consoleHTML = `<!doctype html>
         const provider = skipped ? { id: item.provider_id, class: item.class } : (item.provider || {});
         return "<div class=\"route-item" + (skipped ? " skipped" : "") + "\">" +
           "<strong>" + renderProviderLink(provider.id || "") + "</strong>" +
-          "<div class=\"muted\">" + esc(provider.class || "-") + (item.model ? " / " + esc(item.model) : "") + "</div>" +
+          "<div class=\"muted\">" + esc(provider.class || "-") + (item.model ? " / " + renderModelLink(item.model, provider.id || "") : "") + "</div>" +
           "<div>" + esc(item.reason || "") + "</div>" +
         "</div>";
       }).join("");
