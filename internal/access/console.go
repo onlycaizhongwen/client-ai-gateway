@@ -513,6 +513,7 @@ const consoleHTML = `<!doctype html>
                 <option value="failed" data-i18n="statusFailed">失败</option>
               </select>
               <button class="secondary" id="trace-filter-apply" data-i18n="applyFilter">筛选</button>
+              <button class="secondary" id="trace-filter-clear" data-i18n="clearFilter">清空</button>
               <button class="secondary" id="trace-export" data-i18n="export">导出</button>
             </div>
           </div>
@@ -578,6 +579,7 @@ const consoleHTML = `<!doctype html>
               <input id="audit-metadata-key-filter" data-i18n-placeholder="metadataKeyFilter" placeholder="Metadata key" />
               <input id="audit-metadata-value-filter" data-i18n-placeholder="metadataValueFilter" placeholder="Metadata value" />
               <button class="secondary" id="audit-filter-apply" data-i18n="applyFilter">筛选</button>
+              <button class="secondary" id="audit-filter-clear" data-i18n="clearFilter">清空</button>
             </div>
             <div class="audit-table-wrap">
               <table class="audit-table">
@@ -634,6 +636,7 @@ const consoleHTML = `<!doctype html>
                 <option value="false" data-i18n="disabled">禁用</option>
               </select>
               <button class="secondary" id="tool-filter-apply" data-i18n="applyFilter">筛选</button>
+              <button class="secondary" id="tool-filter-clear" data-i18n="clearFilter">清空</button>
             </div>
           </div>
           <div class="table-wrap" style="height: 320px;">
@@ -680,6 +683,7 @@ const consoleHTML = `<!doctype html>
                 <option value="false" data-i18n="disabled">禁用</option>
               </select>
               <button class="secondary" id="mcp-filter-apply" data-i18n="applyFilter">筛选</button>
+              <button class="secondary" id="mcp-filter-clear" data-i18n="clearFilter">清空</button>
             </div>
             <div class="muted" id="mcp-catalog">正在加载 MCP 目录...</div>
           </div>
@@ -1118,6 +1122,7 @@ const consoleHTML = `<!doctype html>
         mcpScopeFilter: "Scope",
         allEnabled: "全部启用状态",
         applyFilter: "筛选",
+        clearFilter: "清空",
         loadingTools: "\u6b63\u5728\u52a0\u8f7d\u5de5\u5177...",
         noTools: "\u6682\u65e0\u53ef\u7528\u5de5\u5177\u3002",
         invokeTool: "\u6267\u884c\u5de5\u5177",
@@ -1397,6 +1402,7 @@ const consoleHTML = `<!doctype html>
         mcpScopeFilter: "Scope",
         allEnabled: "All enabled states",
         applyFilter: "Apply",
+        clearFilter: "Clear",
         loadingTools: "Loading tools...",
         noTools: "No tools available.",
         invokeTool: "Invoke Tool",
@@ -1467,7 +1473,9 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#issue-refresh").addEventListener("click", loadAll);
     document.querySelector("#audit-refresh").addEventListener("click", loadAudit);
     document.querySelector("#trace-filter-apply").addEventListener("click", () => { tracePage = 1; loadTraces(); });
+    document.querySelector("#trace-filter-clear").addEventListener("click", clearTraceFilters);
     document.querySelector("#audit-filter-apply").addEventListener("click", () => { auditPage = 1; loadAudit(); });
+    document.querySelector("#audit-filter-clear").addEventListener("click", clearAuditFilters);
     document.querySelector("#trace-export").addEventListener("click", exportTraces);
     document.querySelector("#audit-export").addEventListener("click", exportAudit);
     document.querySelector("#lang-toggle").addEventListener("click", () => setLang(lang === "zh" ? "en" : "zh"));
@@ -1479,6 +1487,7 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#tool-export").addEventListener("click", exportTools);
     document.querySelector("#tool-refresh").addEventListener("click", loadTools);
     document.querySelector("#tool-filter-apply").addEventListener("click", () => { toolIDFilter = ""; toolPage = 1; loadTools(); });
+    document.querySelector("#tool-filter-clear").addEventListener("click", clearToolFilters);
     document.querySelector("#app-export").addEventListener("click", exportApps);
     document.querySelector("#app-refresh").addEventListener("click", loadApps);
     document.querySelector("#app-filter-apply").addEventListener("click", () => { appPage = 1; loadApps(); });
@@ -1597,6 +1606,7 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#config-reload").addEventListener("click", configReload);
     toolSelect.addEventListener("change", renderSelectedTool);
     document.querySelector("#mcp-filter-apply").addEventListener("click", () => { mcpPage = 1; loadMCPCatalog(); });
+    document.querySelector("#mcp-filter-clear").addEventListener("click", clearMCPFilters);
     document.querySelector("#mcp-export").addEventListener("click", exportMCPCatalog);
     document.querySelector("#mcp-refresh").addEventListener("click", loadMCPCatalog);
     document.querySelector("#trace-prev").addEventListener("click", () => { tracePage = Math.max(1, tracePage - 1); loadTraces(); });
@@ -2977,6 +2987,40 @@ const consoleHTML = `<!doctype html>
       auditMetadataValueFilter.value = value || "";
       auditPage = 1;
       await loadAudit();
+    }
+    function clearTraceFilters() {
+      traceAppFilter.value = "";
+      traceProviderFilter.value = "";
+      statusFilter.value = "";
+      tracePage = 1;
+      loadTraces();
+    }
+    function clearAuditFilters() {
+      auditActionFilter.value = "";
+      auditResultFilter.value = "";
+      auditAppFilter.value = "";
+      auditTraceFilter.value = "";
+      auditTargetFilter.value = "";
+      auditMetadataKeyFilter.value = "";
+      auditMetadataValueFilter.value = "";
+      auditPage = 1;
+      loadAudit();
+    }
+    function clearToolFilters() {
+      toolIDFilter = "";
+      toolOriginFilter.value = "";
+      toolServerFilter.value = "";
+      toolScopeFilter.value = "";
+      toolEnabledFilter.value = "";
+      toolPage = 1;
+      loadTools();
+    }
+    function clearMCPFilters() {
+      mcpServerFilter.value = "";
+      mcpScopeFilter.value = "";
+      mcpEnabledFilter.value = "";
+      mcpPage = 1;
+      loadMCPCatalog();
     }
     function filterProviderByID(providerID) {
       if (!providerID) return;
