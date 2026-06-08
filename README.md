@@ -10,6 +10,7 @@
 - 企业部署形态：[docs/enterprise-deployment.md](docs/enterprise-deployment.md)
 - 权限与审计模型：[docs/permission-audit-model.md](docs/permission-audit-model.md)
 - 失败降级机制：[docs/failure-degradation.md](docs/failure-degradation.md)
+- 企业集中审计：[docs/enterprise-audit-siem.md](docs/enterprise-audit-siem.md)
 - 安全审查清单：[docs/security-checklist.md](docs/security-checklist.md)
 - 产品化路线图：[docs/roadmap.md](docs/roadmap.md)
 - Provider SDK 边界：[docs/provider-sdk.md](docs/provider-sdk.md)

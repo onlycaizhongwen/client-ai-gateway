@@ -17,6 +17,7 @@
 | 安全审查清单 | 已补齐初版 | 覆盖 token、管理 API、Trace、Audit、工具、MCP、Provider 策略。 |
 | Provider SDK 边界 | 已补齐初版 | 已有接口、配置、凭证、健康检查、错误码和测试要求。 |
 | Tool / Plugin SDK 边界 | 已补齐初版 | 已有 Manifest、scope、只读边界、输入输出 schema、Trace/Audit 和测试要求。 |
+| 企业集中审计 | 已补齐初版 | 已有 JSONL 到 SIEM / SOC 的字段映射、脱敏、采集和告警建议。 |
 
 ## 主要缺口
 
@@ -26,7 +27,7 @@
 | P0 | 安全审查清单 | 已补齐初版，后续随真实 MCP / 插件 SDK 继续扩展。 |
 | P1 | Provider SDK 边界 | 已补齐初版，后续需要示例模板和能力矩阵。 |
 | P1 | 插件 / Tool SDK | 已补齐初版，后续需要签名/来源校验、示例模板和真实沙箱模型。 |
-| P1 | 企业集中审计 | 当前 JSONL 适合单机，缺少 SIEM / 日志管道对接方案。 |
+| P1 | 企业集中审计 | 已补齐初版，后续需要内置 exporter、时间游标和企业租户字段。 |
 | P2 | MCP 真实运行时 | 当前禁止执行外部 MCP，需要补进程模型、授权弹窗、审计字段和沙箱。 |
 | P2 | 配额 / 预算 / 速率限制 | 当前未实现用户级限流、Provider 预算和成本统计。 |
 | P2 | 安装包与服务管理 | 当前可 `go run` 或构建 daemon，缺少 Windows/macOS 服务安装脚本。 |
@@ -57,7 +58,7 @@ P1 阶段建议做到：
 
 - Provider SDK 文档给出接口、错误码、健康检查、超时和 credential 约定，并在 README 中可直达。
 - Tool SDK 文档给出 Manifest、scope、只读边界、输入输出 schema 和测试模板，并在 README 中可直达。
-- 企业审计方案说明 JSONL 到集中日志系统的字段映射和脱敏要求。
+- 企业审计方案说明 JSONL 到集中日志系统的字段映射和脱敏要求，并在 README 中可直达。
 
 ## 暂不做的事
 
