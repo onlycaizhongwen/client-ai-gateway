@@ -2626,6 +2626,24 @@ const consoleHTML = `<!doctype html>
       if (!traceID) return "-";
       return "<button class=\"link-button\" data-trace-link-id=\"" + esc(traceID) + "\">" + esc(label || traceID) + "</button>";
     }
+    function renderAuditTarget(event) {
+      if (!event || !event.target) return "-";
+      const target = event.target;
+      const metadata = event.metadata || {};
+      if (event.action === "tool.invoke" || metadata.tool_id) {
+        return renderToolLink(metadata.tool_id || target);
+      }
+      if (event.action === "provider.enabled" || event.action === "provider.probe") {
+        return renderProviderLink(target);
+      }
+      if (metadata.policy_rule_id) {
+        return renderPolicyLink(metadata.policy_rule_id);
+      }
+      if (event.action === "routing.explain" || event.action === "policy.dry_run") {
+        return renderModelLink(target, metadata.provider_id || "");
+      }
+      return esc(target);
+    }
     function labelChainList(values) {
       if (!values) return "";
       return Array.isArray(values) ? values.join(", ") : String(values);
@@ -3115,7 +3133,7 @@ const consoleHTML = `<!doctype html>
           "<td>" + esc(labelAction(item.action)) + "</td>" +
           "<td><span class=\"status " + esc(item.result) + "\">" + esc(labelResult(item.result)) + "</span></td>" +
           "<td class=\"trace-id\">" + renderTraceLink(item.trace_id, shortTraceID(item.trace_id)) + "</td>" +
-          "<td>" + renderAppLink(item.app_id) + " / " + esc(item.target || "-") + "</td>" +
+          "<td>" + renderAppLink(item.app_id) + " / " + renderAuditTarget(item) + "</td>" +
           "<td>" + esc(time(item.created_at)) + "</td>" +
           "<td>" + esc(item.duration_ms == null ? "-" : item.duration_ms + "ms") + "</td>" +
         "</tr>"
@@ -3141,7 +3159,7 @@ const consoleHTML = `<!doctype html>
           "<div class=\"k\">" + t("action") + "</div><div>" + esc(labelAction(event.action)) + "</div>" +
           "<div class=\"k\">" + t("result") + "</div><div><span class=\"status " + esc(event.result) + "\">" + esc(labelResult(event.result)) + "</span></div>" +
           "<div class=\"k\">" + t("traceId") + "</div><div class=\"trace-id\">" + renderTraceLink(event.trace_id) + "</div>" +
-          "<div class=\"k\">" + t("appTarget") + "</div><div>" + renderAppLink(event.app_id) + " / " + esc(event.target || "-") + "</div>" +
+          "<div class=\"k\">" + t("appTarget") + "</div><div>" + renderAppLink(event.app_id) + " / " + renderAuditTarget(event) + "</div>" +
           "<div class=\"k\">" + t("policyRule") + "</div><div>" + renderAuditPolicy(event.metadata) + "</div>" +
           "<div class=\"k\">" + t("time") + "</div><div>" + esc(time(event.created_at)) + "</div>" +
         "</div>" +
