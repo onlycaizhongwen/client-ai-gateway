@@ -1532,6 +1532,11 @@ const consoleHTML = `<!doctype html>
       filterModelByID(button.dataset.modelLinkId, button.dataset.modelLinkProvider || "");
     });
     document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-app-link-id]");
+      if (!button) return;
+      filterAppByID(button.dataset.appLinkId);
+    });
+    document.addEventListener("click", event => {
       const button = event.target.closest("button[data-issue-tool-id]");
       if (!button) return;
       toolSelect.value = button.dataset.issueToolId;
@@ -1700,7 +1705,7 @@ const consoleHTML = `<!doctype html>
         "<tr data-trace=\"" + esc(item.trace_id) + "\">" +
           "<td><span class=\"status " + esc(item.status) + "\">" + esc(labelStatus(item.status)) + "</span></td>" +
           "<td class=\"trace-id\">" + esc(item.trace_id) + "</td>" +
-          "<td>" + esc(item.app_id) + "</td>" +
+          "<td>" + renderAppLink(item.app_id) + "</td>" +
           "<td>" + renderModelLink(item.requested_model, item.provider_id) + "</td>" +
           "<td>" + renderProviderLink(item.provider_id) + "</td>" +
           "<td>" + renderModelLink(item.final_model, item.provider_id) + "</td>" +
@@ -2167,7 +2172,7 @@ const consoleHTML = `<!doctype html>
       document.querySelector("#app-next").disabled = appPage >= totalPages;
       appRows.innerHTML = allApps.map(item =>
         "<tr>" +
-          "<td><strong>" + esc(item.name || item.id) + "</strong><div class=\"muted\">" + esc(item.id) + "</div></td>" +
+          "<td><strong>" + esc(item.name || item.id) + "</strong><div class=\"muted\">" + renderAppLink(item.id) + "</div></td>" +
           "<td class=\"trace-id\">" + esc(item.token_hint || "-") + "</td>" +
           "<td title=\"" + esc((item.grants || []).join(", ")) + "\">" + esc((item.grants || []).join(", ") || "-") + "</td>" +
         "</tr>"
@@ -2557,6 +2562,10 @@ const consoleHTML = `<!doctype html>
       if (!model) return "-";
       return "<button class=\"link-button\" data-model-link-id=\"" + esc(model) + "\" data-model-link-provider=\"" + esc(providerID || "") + "\">" + esc(model) + "</button>";
     }
+    function renderAppLink(appID) {
+      if (!appID) return "-";
+      return "<button class=\"link-button\" data-app-link-id=\"" + esc(appID) + "\">" + esc(appID) + "</button>";
+    }
     function labelChainList(values) {
       if (!values) return "";
       return Array.isArray(values) ? values.join(", ") : String(values);
@@ -2823,6 +2832,12 @@ const consoleHTML = `<!doctype html>
       modelPage = 1;
       loadModelCatalog();
     }
+    function filterAppByID(appID) {
+      if (!appID) return;
+      appIDFilter.value = appID;
+      appPage = 1;
+      loadApps();
+    }
     function traceRequestBody() {
       const request = selectedTrace && selectedTrace.request;
       if (!request || !request.model) return null;
@@ -3005,7 +3020,7 @@ const consoleHTML = `<!doctype html>
           "<td>" + esc(labelAction(item.action)) + "</td>" +
           "<td><span class=\"status " + esc(item.result) + "\">" + esc(labelResult(item.result)) + "</span></td>" +
           "<td class=\"trace-id\">" + esc(shortTraceID(item.trace_id)) + "</td>" +
-          "<td>" + esc(item.app_id || "-") + " / " + esc(item.target || "-") + "</td>" +
+          "<td>" + renderAppLink(item.app_id) + " / " + esc(item.target || "-") + "</td>" +
           "<td>" + esc(time(item.created_at)) + "</td>" +
           "<td>" + esc(item.duration_ms == null ? "-" : item.duration_ms + "ms") + "</td>" +
         "</tr>"
@@ -3028,7 +3043,7 @@ const consoleHTML = `<!doctype html>
           "<div class=\"k\">" + t("action") + "</div><div>" + esc(labelAction(event.action)) + "</div>" +
           "<div class=\"k\">" + t("result") + "</div><div><span class=\"status " + esc(event.result) + "\">" + esc(labelResult(event.result)) + "</span></div>" +
           "<div class=\"k\">" + t("traceId") + "</div><div class=\"trace-id\">" + esc(event.trace_id || "-") + "</div>" +
-          "<div class=\"k\">" + t("appTarget") + "</div><div>" + esc(event.app_id || "-") + " / " + esc(event.target || "-") + "</div>" +
+          "<div class=\"k\">" + t("appTarget") + "</div><div>" + renderAppLink(event.app_id) + " / " + esc(event.target || "-") + "</div>" +
           "<div class=\"k\">" + t("policyRule") + "</div><div>" + renderAuditPolicy(event.metadata) + "</div>" +
           "<div class=\"k\">" + t("time") + "</div><div>" + esc(time(event.created_at)) + "</div>" +
         "</div>" +
