@@ -1021,6 +1021,7 @@ const consoleHTML = `<!doctype html>
         noGrants: "\u6682\u65e0 Grant\u3002",
         loadingApps: "\u6b63\u5728\u52a0\u8f7d\u5e94\u7528\u6388\u6743...",
         noApps: "\u6682\u65e0\u5e94\u7528\u3002",
+        noFilterResults: "\u6ca1\u6709\u5339\u914d\u5f53\u524d\u7b5b\u9009\u6761\u4ef6\u7684\u6570\u636e\u3002",
         issueSummary: "\u8fd0\u884c\u95ee\u9898\u6c47\u603b",
         loadingIssues: "\u6b63\u5728\u6c47\u603b\u8fd0\u884c\u95ee\u9898...",
         noIssues: "\u6682\u65e0\u8fd0\u884c\u95ee\u9898\u3002",
@@ -1141,6 +1142,7 @@ const consoleHTML = `<!doctype html>
         traceDetail: "追踪详情",
         selectTrace: "从表格中选择一条追踪。",
         loadingTraces: "正在加载追踪...",
+        noTraces: "暂无 Trace。",
         loadingProviders: "正在加载 Provider...",
         loadingAudit: "正在加载审计事件...",
         loadingRuntime: "正在加载运行时状态...",
@@ -1301,6 +1303,7 @@ const consoleHTML = `<!doctype html>
         noGrants: "No grants.",
         loadingApps: "Loading apps and grants...",
         noApps: "No apps.",
+        noFilterResults: "No data matches the current filters.",
         issueSummary: "Runtime Issue Summary",
         loadingIssues: "Summarizing runtime issues...",
         noIssues: "No runtime issues.",
@@ -1421,6 +1424,7 @@ const consoleHTML = `<!doctype html>
         traceDetail: "Trace Detail",
         selectTrace: "Select a trace from the table.",
         loadingTraces: "Loading traces...",
+        noTraces: "No traces.",
         loadingProviders: "Loading providers...",
         loadingAudit: "Loading audit events...",
         loadingRuntime: "Loading runtime status...",
@@ -1710,6 +1714,15 @@ const consoleHTML = `<!doctype html>
         unavailable: t("unavailable")
       })[value] || value || "";
     }
+    function hasQueryParams(query) {
+      for (const key of query.keys()) {
+        if (key !== "limit" && key !== "offset") return true;
+      }
+      return false;
+    }
+    function emptyText(defaultKey, query) {
+      return hasQueryParams(query) ? t("noFilterResults") : t(defaultKey);
+    }
     async function loadAll() {
       await Promise.all([loadTraces(), loadRuntimeHealth(), loadProviders(), loadModels(), loadProviderCatalog(), loadModelCatalog(), loadPolicyCatalog(), loadAudit(), loadApps(), loadGrants(), loadTools(), loadMCPCatalog()]);
     }
@@ -1781,6 +1794,9 @@ const consoleHTML = `<!doctype html>
         if (event.target.closest("button")) return;
         loadDetail(row.dataset.trace);
       }));
+      if (!allTraces.length) {
+        rows.innerHTML = "<tr><td colspan=\"10\" class=\"muted\">" + emptyText("noTraces", traceQuery()) + "</td></tr>";
+      }
     }
     function pageCount(total, size) {
       return Math.max(1, Math.ceil(total / size));
@@ -2023,7 +2039,7 @@ const consoleHTML = `<!doctype html>
         allMCPServers = servers;
         mcpTotal = data.total || servers.length;
         if (!servers.length) {
-          mcpCatalog.textContent = t("mcpMode") + ": " + (data.mode || "-") + " / " + t("noMCPServers");
+          mcpCatalog.textContent = t("mcpMode") + ": " + (data.mode || "-") + " / " + emptyText("noMCPServers", mcpCatalogQuery());
           renderMCPServers([]);
           syncIssues();
           return;
@@ -2069,7 +2085,7 @@ const consoleHTML = `<!doctype html>
         "</tr>";
       }).join("");
       if (!servers.length) {
-        mcpRows.innerHTML = "<tr><td colspan=\"5\" class=\"muted\">" + t("noMCPServers") + "</td></tr>";
+        mcpRows.innerHTML = "<tr><td colspan=\"5\" class=\"muted\">" + emptyText("noMCPServers", mcpCatalogQuery()) + "</td></tr>";
       }
     }
     function exportMCPCatalog() {
@@ -2148,9 +2164,10 @@ const consoleHTML = `<!doctype html>
         renderSelectedTool();
       }));
       if (!allTools.length) {
-        toolRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + t("noTools") + "</td></tr>";
+        const text = emptyText("noTools", toolCatalogQuery());
+        toolRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + text + "</td></tr>";
         toolSelect.innerHTML = "";
-        toolMeta.textContent = t("noTools");
+        toolMeta.textContent = text;
         document.querySelector("#tool-invoke").disabled = true;
         syncIssues();
         return;
@@ -2209,7 +2226,7 @@ const consoleHTML = `<!doctype html>
         }
         allApps = data.apps || [];
         appTotal = data.total || allApps.length;
-        appMessage.textContent = appTotal ? "" : t("noApps");
+        appMessage.textContent = appTotal ? "" : emptyText("noApps", appCatalogQuery());
         renderApps();
         syncIssues();
       } catch (err) {
@@ -2242,7 +2259,7 @@ const consoleHTML = `<!doctype html>
         "</tr>"
       ).join("");
       if (!allApps.length) {
-        appRows.innerHTML = "<tr><td colspan=\"3\" class=\"muted\">" + t("noApps") + "</td></tr>";
+        appRows.innerHTML = "<tr><td colspan=\"3\" class=\"muted\">" + emptyText("noApps", appCatalogQuery()) + "</td></tr>";
       }
     }
     function exportGrants() {
@@ -2274,7 +2291,7 @@ const consoleHTML = `<!doctype html>
         allProviders = data.providers || [];
         issueProviders = issueRes.ok ? (issueData.providers || []) : [];
         providerTotal = data.total || allProviders.length;
-        providerMessage.textContent = providerTotal ? "" : t("noProviders");
+        providerMessage.textContent = providerTotal ? "" : emptyText("noProviders", providerCatalogQuery());
         renderProviderCatalog();
         syncIssues();
       } catch (err) {
@@ -2319,7 +2336,7 @@ const consoleHTML = `<!doctype html>
       providerRows.querySelectorAll("[data-action='probe']").forEach(button => button.addEventListener("click", () => probeProvider(button.dataset.provider)));
       providerRows.querySelectorAll("[data-action='toggle']").forEach(button => button.addEventListener("click", () => setProviderEnabled(button.dataset.provider, button.dataset.enabled === "true")));
       if (!allProviders.length) {
-        providerRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + t("noProviders") + "</td></tr>";
+        providerRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + emptyText("noProviders", providerCatalogQuery()) + "</td></tr>";
       }
     }
     function exportProviderCatalog() {
@@ -2352,7 +2369,7 @@ const consoleHTML = `<!doctype html>
         allModels = data.models || [];
         issueModels = issueRes.ok ? (issueData.models || []) : [];
         modelTotal = data.total || allModels.length;
-        modelMessage.textContent = modelTotal ? "" : t("noModels");
+        modelMessage.textContent = modelTotal ? "" : emptyText("noModels", modelCatalogQuery());
         renderModelCatalog();
         syncIssues();
       } catch (err) {
@@ -2394,7 +2411,7 @@ const consoleHTML = `<!doctype html>
         "</tr>"
       ).join("");
       if (!allModels.length) {
-        modelRows.innerHTML = "<tr><td colspan=\"5\" class=\"muted\">" + t("noModels") + "</td></tr>";
+        modelRows.innerHTML = "<tr><td colspan=\"5\" class=\"muted\">" + emptyText("noModels", modelCatalogQuery()) + "</td></tr>";
       }
     }
     function exportModelCatalog() {
@@ -2431,7 +2448,7 @@ const consoleHTML = `<!doctype html>
         }
         allPolicies = data.policies || [];
         policyTotal = data.total || allPolicies.length;
-        policyMessage.textContent = policyTotal ? "" : t("noPolicies");
+        policyMessage.textContent = policyTotal ? "" : emptyText("noPolicies", policyCatalogQuery());
         renderPolicyCatalog();
         syncIssues();
       } catch (err) {
@@ -2479,7 +2496,7 @@ const consoleHTML = `<!doctype html>
         "</tr>";
       }).join("");
       if (!allPolicies.length) {
-        policyRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + t("noPolicies") + "</td></tr>";
+        policyRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + emptyText("noPolicies", policyCatalogQuery()) + "</td></tr>";
       }
       policyRows.querySelectorAll("button[data-policy-id]").forEach(button => {
         button.addEventListener("click", () => loadPolicyDetail(button.dataset.policyId));
@@ -2804,7 +2821,7 @@ const consoleHTML = `<!doctype html>
         }
         allGrants = data.grants || [];
         grantTotal = data.total || allGrants.length;
-        grantMessage.textContent = grantTotal ? "" : t("noGrants");
+        grantMessage.textContent = grantTotal ? "" : emptyText("noGrants", grantCatalogQuery());
         renderGrants();
       } catch (err) {
         allGrants = [];
@@ -2843,7 +2860,7 @@ const consoleHTML = `<!doctype html>
         "</tr>";
       }).join("");
       if (!allGrants.length) {
-        grantRows.innerHTML = "<tr><td colspan=\"5\" class=\"muted\">" + t("noGrants") + "</td></tr>";
+        grantRows.innerHTML = "<tr><td colspan=\"5\" class=\"muted\">" + emptyText("noGrants", grantCatalogQuery()) + "</td></tr>";
       }
     }
     async function invokeTool() {
@@ -3240,7 +3257,7 @@ const consoleHTML = `<!doctype html>
         }
         allAuditEvents = data.events || [];
         auditTotal = data.total || allAuditEvents.length;
-        auditMessage.textContent = auditTotal ? "" : t("noAuditEvents");
+        auditMessage.textContent = auditTotal ? "" : emptyText("noAuditEvents", auditQuery());
         renderAudit();
         syncIssues();
       } catch (err) {
@@ -3330,7 +3347,7 @@ const consoleHTML = `<!doctype html>
         "</tr>"
       ).join("");
       if (!allAuditEvents.length) {
-        auditRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + t("noAuditEvents") + "</td></tr>";
+        auditRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + emptyText("noAuditEvents", auditQuery()) + "</td></tr>";
       }
       auditRows.querySelectorAll("tr[data-audit]").forEach(row => {
         row.addEventListener("click", event => {
