@@ -1500,6 +1500,11 @@ const consoleHTML = `<!doctype html>
       loadPolicyDetail(button.dataset.tracePolicyId);
     });
     document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-trace-link-id]");
+      if (!button) return;
+      filterTraceByID(button.dataset.traceLinkId);
+    });
+    document.addEventListener("click", event => {
       const button = event.target.closest("button[data-issue-trace-id]");
       if (!button) return;
       loadDetail(button.dataset.issueTraceId);
@@ -1720,7 +1725,7 @@ const consoleHTML = `<!doctype html>
       rows.innerHTML = allTraces.map(item =>
         "<tr data-trace=\"" + esc(item.trace_id) + "\">" +
           "<td><span class=\"status " + esc(item.status) + "\">" + esc(labelStatus(item.status)) + "</span></td>" +
-          "<td class=\"trace-id\">" + esc(item.trace_id) + "</td>" +
+          "<td class=\"trace-id\">" + renderTraceLink(item.trace_id) + "</td>" +
           "<td>" + renderAppLink(item.app_id) + "</td>" +
           "<td>" + renderModelLink(item.requested_model, item.provider_id) + "</td>" +
           "<td>" + renderProviderLink(item.provider_id) + "</td>" +
@@ -2617,6 +2622,10 @@ const consoleHTML = `<!doctype html>
       if (!serverID) return "-";
       return "<button class=\"link-button\" data-mcp-server-link-id=\"" + esc(serverID) + "\">" + esc(serverID) + "</button>";
     }
+    function renderTraceLink(traceID, label = "") {
+      if (!traceID) return "-";
+      return "<button class=\"link-button\" data-trace-link-id=\"" + esc(traceID) + "\">" + esc(label || traceID) + "</button>";
+    }
     function labelChainList(values) {
       if (!values) return "";
       return Array.isArray(values) ? values.join(", ") : String(values);
@@ -2836,7 +2845,7 @@ const consoleHTML = `<!doctype html>
       selectedTrace = trace;
       detail.innerHTML =
         "<div class=\"kv\">" +
-          "<div class=\"k\">" + t("traceId") + "</div><div class=\"trace-id\">" + esc(trace.trace_id) + "</div>" +
+          "<div class=\"k\">" + t("traceId") + "</div><div class=\"trace-id\">" + renderTraceLink(trace.trace_id) + "</div>" +
           "<div class=\"k\">" + t("status") + "</div><div><span class=\"status " + esc(trace.status) + "\">" + esc(labelStatus(trace.status)) + "</span></div>" +
           "<div class=\"k\">" + t("provider") + "</div><div>" + renderProviderLink(trace.provider_id) + "</div>" +
           "<div class=\"k\">" + t("policyRule") + "</div><div>" + renderTracePolicy(trace.policy) + "</div>" +
@@ -2919,6 +2928,10 @@ const consoleHTML = `<!doctype html>
       toolServerFilter.value = serverID;
       toolPage = 1;
       loadTools();
+    }
+    function filterTraceByID(traceID) {
+      if (!traceID) return;
+      loadDetail(traceID);
     }
     function traceRequestBody() {
       const request = selectedTrace && selectedTrace.request;
@@ -3101,7 +3114,7 @@ const consoleHTML = `<!doctype html>
         "<tr data-audit=\"" + esc(item.id || "") + "\" data-trace=\"" + esc(item.trace_id || "") + "\" title=\"" + esc(item.error || item.trace_id || "") + "\">" +
           "<td>" + esc(labelAction(item.action)) + "</td>" +
           "<td><span class=\"status " + esc(item.result) + "\">" + esc(labelResult(item.result)) + "</span></td>" +
-          "<td class=\"trace-id\">" + esc(shortTraceID(item.trace_id)) + "</td>" +
+          "<td class=\"trace-id\">" + renderTraceLink(item.trace_id, shortTraceID(item.trace_id)) + "</td>" +
           "<td>" + renderAppLink(item.app_id) + " / " + esc(item.target || "-") + "</td>" +
           "<td>" + esc(time(item.created_at)) + "</td>" +
           "<td>" + esc(item.duration_ms == null ? "-" : item.duration_ms + "ms") + "</td>" +
@@ -3111,7 +3124,10 @@ const consoleHTML = `<!doctype html>
         auditRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + t("noAuditEvents") + "</td></tr>";
       }
       auditRows.querySelectorAll("tr[data-audit]").forEach(row => {
-        row.addEventListener("click", () => showAuditDetail(row.dataset.audit, row.dataset.trace));
+        row.addEventListener("click", event => {
+          if (event.target.closest("button")) return;
+          showAuditDetail(row.dataset.audit, row.dataset.trace);
+        });
       });
     }
     function showAuditDetail(auditID, traceID) {
@@ -3124,7 +3140,7 @@ const consoleHTML = `<!doctype html>
         "<div class=\"kv\">" +
           "<div class=\"k\">" + t("action") + "</div><div>" + esc(labelAction(event.action)) + "</div>" +
           "<div class=\"k\">" + t("result") + "</div><div><span class=\"status " + esc(event.result) + "\">" + esc(labelResult(event.result)) + "</span></div>" +
-          "<div class=\"k\">" + t("traceId") + "</div><div class=\"trace-id\">" + esc(event.trace_id || "-") + "</div>" +
+          "<div class=\"k\">" + t("traceId") + "</div><div class=\"trace-id\">" + renderTraceLink(event.trace_id) + "</div>" +
           "<div class=\"k\">" + t("appTarget") + "</div><div>" + renderAppLink(event.app_id) + " / " + esc(event.target || "-") + "</div>" +
           "<div class=\"k\">" + t("policyRule") + "</div><div>" + renderAuditPolicy(event.metadata) + "</div>" +
           "<div class=\"k\">" + t("time") + "</div><div>" + esc(time(event.created_at)) + "</div>" +
@@ -3157,7 +3173,9 @@ const consoleHTML = `<!doctype html>
           body: JSON.stringify(body)
         });
         const data = await res.json();
-        sendResult.textContent = res.ok ? (t("okPrefix") + data.trace_id) : (t("failedPrefix") + (data.error && data.error.trace_id));
+        sendResult.innerHTML = res.ok
+          ? t("okPrefix") + renderTraceLink(data.trace_id)
+          : t("failedPrefix") + renderTraceLink(data.error && data.error.trace_id);
       } catch (err) {
         sendResult.textContent = t("failedPrefix") + err.message;
       }
