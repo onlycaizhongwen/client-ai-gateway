@@ -114,6 +114,14 @@ curl http://127.0.0.1:18765/healthz
 http://127.0.0.1:18765/console
 ```
 
+真实浏览器 UI smoke：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/ui-smoke.ps1
+```
+
+脚本会使用本机 Edge/Chrome headless 打开控制台，并生成桌面和窄屏截图到 `artifacts/ui-smoke/`。
+
 ## 快速聊天请求
 
 ```powershell
