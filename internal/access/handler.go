@@ -502,8 +502,9 @@ func (h *Handler) appsList(w http.ResponseWriter, r *http.Request) {
 		"offset": offset,
 		"limit":  limit,
 		"filters": map[string]string{
-			"app_id": query.Get("app_id"),
-			"grant":  query.Get("grant"),
+			"app_id":        query.Get("app_id"),
+			"grant":         query.Get("grant"),
+			"quota_enabled": query.Get("quota_enabled"),
 		},
 	})
 }
@@ -513,6 +514,7 @@ func (h *Handler) appViews(r *http.Request) []appView {
 	query := r.URL.Query()
 	appFilter := query.Get("app_id")
 	grantFilter := query.Get("grant")
+	quotaEnabledFilter := query.Get("quota_enabled")
 	quotas := appQuotaMap(snapshot.Config.Quotas)
 	views := make([]appView, 0, len(snapshot.Config.Apps))
 	for _, app := range snapshot.Config.Apps {
@@ -522,12 +524,19 @@ func (h *Handler) appViews(r *http.Request) []appView {
 		if grantFilter != "" && !hasGrant(app.Grants, grantFilter) {
 			continue
 		}
+		quotaView := quotas[app.ID]
+		if quotaEnabledFilter == "true" && !quotaView.Enabled {
+			continue
+		}
+		if quotaEnabledFilter == "false" && quotaView.Enabled {
+			continue
+		}
 		views = append(views, appView{
 			ID:        app.ID,
 			Name:      app.Name,
 			TokenHint: tokenHint(app.Token),
 			Grants:    append([]string(nil), app.Grants...),
-			Quota:     quotas[app.ID],
+			Quota:     quotaView,
 		})
 	}
 	return views

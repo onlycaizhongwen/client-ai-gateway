@@ -217,6 +217,11 @@ const consoleHTML = `<!doctype html>
             <div class="filters">
               <input id="app-id-filter" data-i18n-placeholder="appFilter" placeholder="App ID" />
               <input id="app-grant-filter" data-i18n-placeholder="grantFilter" placeholder="Grant" />
+              <select id="app-quota-filter">
+                <option value="" data-i18n="allQuotaStates">All quota states</option>
+                <option value="true" data-i18n="quotaEnabled">Quota enabled</option>
+                <option value="false" data-i18n="quotaDisabled">Quota disabled</option>
+              </select>
               <button class="secondary" id="app-filter-apply" data-i18n="applyFilter">筛选</button>
               <button class="secondary" id="app-filter-clear" data-i18n="clearFilter">清空</button>
             </div>
@@ -818,6 +823,7 @@ const consoleHTML = `<!doctype html>
     const appMessage = document.querySelector("#app-message");
     const appIDFilter = document.querySelector("#app-id-filter");
     const appGrantFilter = document.querySelector("#app-grant-filter");
+    const appQuotaFilter = document.querySelector("#app-quota-filter");
     const grantRows = document.querySelector("#grant-rows");
     const grantMessage = document.querySelector("#grant-message");
     const grantIDFilter = document.querySelector("#grant-id-filter");
@@ -1011,6 +1017,9 @@ const consoleHTML = `<!doctype html>
         appCatalog: "\u5e94\u7528\u4e0e\u6388\u6743",
         tokenHint: "Token \u63d0\u793a",
         quota: "\u914d\u989d",
+        allQuotaStates: "\u5168\u90e8\u914d\u989d\u72b6\u6001",
+        quotaEnabled: "\u5df2\u542f\u7528\u914d\u989d",
+        quotaDisabled: "\u672a\u542f\u7528\u914d\u989d",
         grants: "\u6388\u6743",
         type: "\u7c7b\u578b",
         description: "\u8bf4\u660e",
@@ -1298,6 +1307,9 @@ const consoleHTML = `<!doctype html>
         appCatalog: "Apps / Grants",
         tokenHint: "Token Hint",
         quota: "Quota",
+        allQuotaStates: "All quota states",
+        quotaEnabled: "Quota enabled",
+        quotaDisabled: "Quota disabled",
         grants: "Grants",
         type: "Type",
         description: "Description",
@@ -1656,6 +1668,9 @@ const consoleHTML = `<!doctype html>
     const zhFallback = {
       quotaRuntime: "\u914d\u989d\u8fd0\u884c\u65f6",
       quota: "\u914d\u989d",
+      allQuotaStates: "\u5168\u90e8\u914d\u989d\u72b6\u6001",
+      quotaEnabled: "\u5df2\u542f\u7528\u914d\u989d",
+      quotaDisabled: "\u672a\u542f\u7528\u914d\u989d",
       appQuotaCount: "\u5e94\u7528\u914d\u989d",
       appRpmEnabled: "\u542f\u7528 App RPM",
       totalAppRpm: "\u603b App RPM"
@@ -2266,6 +2281,7 @@ const consoleHTML = `<!doctype html>
       const query = new URLSearchParams();
       if (appIDFilter.value.trim()) query.set("app_id", appIDFilter.value.trim());
       if (appGrantFilter.value.trim()) query.set("grant", appGrantFilter.value.trim());
+      if (appQuotaFilter.value) query.set("quota_enabled", appQuotaFilter.value);
       return query;
     }
     function renderApps() {
@@ -3084,6 +3100,7 @@ const consoleHTML = `<!doctype html>
     function clearAppFilters() {
       appIDFilter.value = "";
       appGrantFilter.value = "";
+      appQuotaFilter.value = "";
       appPage = 1;
       loadApps();
     }

@@ -453,6 +453,30 @@ func TestAppsListMasksTokensAndFilters(t *testing.T) {
 		t.Fatalf("expected app quota summary, got %+v", body.Apps[0].Quota)
 	}
 
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/apps?quota_enabled=true", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	decodeBody(t, res, &body)
+	if body.Total != 1 || len(body.Apps) != 1 || body.Apps[0].ID != "dev-app" {
+		t.Fatalf("unexpected quota enabled app body: %+v", body)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/apps?quota_enabled=false", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	decodeBody(t, res, &body)
+	if body.Total != 1 || len(body.Apps) != 1 || body.Apps[0].ID != "admin-app" || body.Apps[0].Quota.Enabled {
+		t.Fatalf("unexpected quota disabled app body: %+v", body)
+	}
+
 	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/apps?app_id=admin-app", nil)
 	req.Header.Set("Authorization", "Bearer admin-token")
 	res = httptest.NewRecorder()

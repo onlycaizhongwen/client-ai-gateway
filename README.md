@@ -583,6 +583,7 @@ curl "http://127.0.0.1:18765/gateway/v1/apps?limit=20&offset=0&grant=tool" `
 - `limit` / `offset`：分页查看应用目录。
 - `app_id`：只看指定应用。
 - `grant`：只看具备指定 grant 的应用，例如 `chat`、`tool`、`tool:runtime.read` 或 `admin`。
+- `quota_enabled`：按 App RPM 配额是否启用筛选，支持 `true` 或 `false`。
 
 响应包含 `apps`、`total`、`offset`、`limit` 和当前 `filters`。控制台“应用与授权”面板复用同一接口，列表展示 App、Token 提示、配额摘要和 Grants，并支持按当前筛选条件导出 JSONL。
 
