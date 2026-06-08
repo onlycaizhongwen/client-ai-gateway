@@ -886,6 +886,7 @@ const consoleHTML = `<!doctype html>
     let toolIDFilter = "";
     const toolPageSize = 8;
     let allApps = [];
+    let issueApps = [];
     let appTotal = 0;
     let appPage = 1;
     const appPageSize = 8;
@@ -1885,7 +1886,7 @@ const consoleHTML = `<!doctype html>
           }), "", { model: item.model, provider_id: item.provider_id });
         }
       });
-      allApps.forEach(item => {
+      issueApps.forEach(item => {
         if ((item.grants || []).includes("chat") && !(item.quota && item.quota.enabled)) {
           addIssue("info", "app", item.id, t("issueAppQuotaDisabled"), "", { app_id: item.id, quota_enabled: "false" });
         }
@@ -2256,6 +2257,7 @@ const consoleHTML = `<!doctype html>
       const token = adminToken();
       if (!token) {
         allApps = [];
+        issueApps = [];
         appTotal = 0;
         appMessage.textContent = t("adminTokenRequired");
         renderApps();
@@ -2267,12 +2269,20 @@ const consoleHTML = `<!doctype html>
         const query = appCatalogQuery();
         query.set("limit", String(appPageSize));
         query.set("offset", String((appPage - 1) * appPageSize));
-        const res = await fetch("/gateway/v1/apps?" + query.toString(), {
-          headers: { "Authorization": "Bearer " + token }
-        });
+        const issueQuery = new URLSearchParams({ limit: "500", offset: "0" });
+        const [res, issueRes] = await Promise.all([
+          fetch("/gateway/v1/apps?" + query.toString(), {
+            headers: { "Authorization": "Bearer " + token }
+          }),
+          fetch("/gateway/v1/apps?" + issueQuery.toString(), {
+            headers: { "Authorization": "Bearer " + token }
+          })
+        ]);
         const data = await res.json();
+        const issueData = await issueRes.json();
         if (!res.ok) {
           allApps = [];
+          issueApps = [];
           appTotal = 0;
           appMessage.textContent = t("failedPrefix") + (data.error && data.error.message || res.status);
           renderApps();
@@ -2280,12 +2290,14 @@ const consoleHTML = `<!doctype html>
           return;
         }
         allApps = data.apps || [];
+        issueApps = issueRes.ok ? (issueData.apps || []) : [];
         appTotal = data.total || allApps.length;
         appMessage.textContent = appTotal ? "" : emptyText("noApps", appCatalogQuery());
         renderApps();
         syncIssues();
       } catch (err) {
         allApps = [];
+        issueApps = [];
         appTotal = 0;
         appMessage.textContent = t("failedPrefix") + err.message;
         renderApps();

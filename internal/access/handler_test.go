@@ -1548,6 +1548,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"data-audit-metadata-value",
 		"function accessDryRun",
 		"function loadApps()",
+		"issueApps",
 		"function appCatalogQuery()",
 		"function renderApps()",
 		"function exportApps()",
