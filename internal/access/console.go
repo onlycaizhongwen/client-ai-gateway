@@ -1047,6 +1047,7 @@ const consoleHTML = `<!doctype html>
         issueProviderStatus: "Provider \u8fd0\u884c\u72b6\u6001\u4e3a {status}{reason}",
         issueModelUnavailable: "\u6a21\u578b\u5f53\u524d\u4e0d\u53ef\u7528\uff0cProvider={provider}\uff0c\u72b6\u6001={status}",
         issueToolDisabled: "\u5de5\u5177\u5df2\u7981\u7528\uff0cScope={scopes}",
+        issueAppQuotaDisabled: "\u5e94\u7528\u5177\u5907 chat \u80fd\u529b\uff0c\u4f46\u672a\u542f\u7528 App RPM \u914d\u989d",
         issueMCPServerDisabled: "MCP Server \u5df2\u7981\u7528\uff0c\u5df2\u542f\u7528\u5de5\u5177 {enabled}/{total}",
         issueMCPRuntime: "MCP \u8fd0\u884c\u65f6\u72b6\u6001\u4e3a {status}{reason}",
         issueTraceFailed: "\u6700\u8fd1\u8bf7\u6c42\u5931\u8d25\uff1a{error}",
@@ -1337,6 +1338,7 @@ const consoleHTML = `<!doctype html>
         issueProviderStatus: "Provider runtime status is {status}{reason}",
         issueModelUnavailable: "Model is unavailable, provider={provider}, status={status}",
         issueToolDisabled: "Tool is disabled, scopes={scopes}",
+        issueAppQuotaDisabled: "App has chat capability but App RPM quota is not enabled",
         issueMCPServerDisabled: "MCP server is disabled, enabled tools {enabled}/{total}",
         issueMCPRuntime: "MCP runtime status is {status}{reason}",
         issueTraceFailed: "Recent request failed: {error}",
@@ -1570,6 +1572,11 @@ const consoleHTML = `<!doctype html>
       const button = event.target.closest("button[data-issue-provider-id]");
       if (!button) return;
       filterProviderByID(button.dataset.issueProviderId);
+    });
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-issue-app-id]");
+      if (!button) return;
+      filterAppByID(button.dataset.issueAppId, button.dataset.issueAppQuotaEnabled || "");
     });
     document.addEventListener("click", event => {
       const button = event.target.closest("button[data-provider-link-id]");
@@ -1878,6 +1885,11 @@ const consoleHTML = `<!doctype html>
           }), "", { model: item.model, provider_id: item.provider_id });
         }
       });
+      allApps.forEach(item => {
+        if ((item.grants || []).includes("chat") && !(item.quota && item.quota.enabled)) {
+          addIssue("info", "app", item.id, t("issueAppQuotaDisabled"), "", { app_id: item.id, quota_enabled: "false" });
+        }
+      });
       issueTools.forEach(item => {
         if (!item.enabled) {
           addIssue("info", "tool", item.id, t("issueToolDisabled", {
@@ -1947,6 +1959,9 @@ const consoleHTML = `<!doctype html>
       }
       if (item.source === "provider" && item.ref && item.ref.provider_id) {
         return "<button class=\"link-button\" data-issue-provider-id=\"" + esc(item.ref.provider_id) + "\">" + esc(item.target) + "</button>";
+      }
+      if (item.source === "app" && item.ref && item.ref.app_id) {
+        return "<button class=\"link-button\" data-issue-app-id=\"" + esc(item.ref.app_id) + "\" data-issue-app-quota-enabled=\"" + esc(item.ref.quota_enabled || "") + "\">" + esc(item.target) + "</button>";
       }
       if (item.source === "model" && item.ref && item.ref.model) {
         return "<button class=\"link-button\" data-issue-model=\"" + esc(item.ref.model) + "\" data-issue-model-provider=\"" + esc(item.ref.provider_id || "") + "\">" + esc(item.target) + "</button>";
@@ -3160,9 +3175,10 @@ const consoleHTML = `<!doctype html>
       modelPage = 1;
       loadModelCatalog();
     }
-    function filterAppByID(appID) {
+    function filterAppByID(appID, quotaEnabled = "") {
       if (!appID) return;
       appIDFilter.value = appID;
+      appQuotaFilter.value = quotaEnabled || "";
       appPage = 1;
       loadApps();
     }
