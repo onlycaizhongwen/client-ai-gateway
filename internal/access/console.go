@@ -1951,10 +1951,10 @@ const consoleHTML = `<!doctype html>
       document.querySelector("#providers").innerHTML = providers.map(item =>
         "<div class=\"provider\">" +
           "<strong>" + esc(item.name || item.id) + "</strong>" +
-          "<div class=\"muted\">" + esc(item.id) + " / " + esc(item.class) + " / " + esc(item.adapter || "mock") + "</div>" +
+          "<div class=\"muted\">" + renderProviderLink(item.id) + " / " + renderProviderClassLink(item.class) + " / " + esc(item.adapter || "mock") + "</div>" +
           "<div class=\"muted\">" + (item.enabled === false ? t("disabled") : t("enabled")) + " / " + t("runtime") + ": " + esc(labelRuntime(item.runtime_status) || (item.healthy ? t("healthy") : t("unhealthy"))) + "</div>" +
           (item.degraded_reason ? "<div class=\"muted\">" + esc(item.degraded_reason) + "</div>" : "") +
-          "<div>" + esc((item.models || []).join(", ")) + "</div>" +
+          "<div>" + renderModelLinks(item.models || [], item.id) + "</div>" +
           "<div class=\"provider-actions\">" +
             "<button class=\"secondary\" data-provider=\"" + esc(item.id) + "\" data-action=\"probe\">" + t("probe") + "</button>" +
             "<button class=\"secondary\" data-provider=\"" + esc(item.id) + "\" data-action=\"toggle\" data-enabled=\"" + (item.enabled === false ? "true" : "false") + "\">" + (item.enabled === false ? t("enable") : t("disable")) + "</button>" +
@@ -2285,8 +2285,8 @@ const consoleHTML = `<!doctype html>
       providerRows.innerHTML = allProviders.map(item => {
         const runtimeStatus = item.runtime_status || (item.configured_healthy ? "healthy" : "unhealthy");
         return "<tr>" +
-          "<td><strong>" + esc(item.name || item.id) + "</strong><div class=\"muted\">" + esc(item.id) + "</div></td>" +
-          "<td>" + esc(item.class || "-") + "</td>" +
+          "<td><strong>" + esc(item.name || item.id) + "</strong><div class=\"muted\">" + renderProviderLink(item.id) + "</div></td>" +
+          "<td>" + renderProviderClassLink(item.class) + "</td>" +
           "<td>" + esc(item.adapter || "mock") + "</td>" +
           "<td title=\"" + esc((item.models || []).join(", ")) + "\">" + renderModelLinks(item.models || [], item.id) + "</td>" +
           "<td><span class=\"status " + esc(runtimeStatus) + "\">" + esc(labelRuntime(runtimeStatus)) + "</span><div class=\"muted\">" + (item.enabled === false ? t("disabled") : t("enabled")) + "</div></td>" +
@@ -2661,9 +2661,17 @@ const consoleHTML = `<!doctype html>
       if (!toolID) return "-";
       return "<button class=\"link-button\" data-tool-link-id=\"" + esc(toolID) + "\">" + esc(toolID) + "</button>";
     }
+    function renderToolLinks(toolIDs) {
+      if (!toolIDs || !toolIDs.length) return "-";
+      return toolIDs.map(item => renderToolLink(item)).join(", ");
+    }
     function renderMCPServerLink(serverID) {
       if (!serverID) return "-";
       return "<button class=\"link-button\" data-mcp-server-link-id=\"" + esc(serverID) + "\">" + esc(serverID) + "</button>";
+    }
+    function renderMCPServerLinks(serverIDs) {
+      if (!serverIDs || !serverIDs.length) return "-";
+      return serverIDs.map(item => renderMCPServerLink(item)).join(", ");
     }
     function renderTraceLink(traceID, label = "") {
       if (!traceID) return "-";
@@ -2810,7 +2818,7 @@ const consoleHTML = `<!doctype html>
           "<td class=\"trace-id\">" + renderGrantLink(item.id) + "</td>" +
           "<td>" + esc(item.type || "-") + "</td>" +
           "<td title=\"" + esc(apps) + "\">" + renderAppLinks(item.apps || []) + "</td>" +
-          "<td title=\"" + esc(toolText) + "\">" + esc(toolText) + "</td>" +
+          "<td title=\"" + esc(toolText) + "\">" + renderToolLinks(item.tools || []) + (item.servers && item.servers.length ? " / " + renderMCPServerLinks(item.servers) : "") + "</td>" +
           "<td title=\"" + esc(item.description || "") + "\">" + esc(item.description || "") + "</td>" +
         "</tr>";
       }).join("");
