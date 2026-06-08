@@ -13,6 +13,7 @@
 - 安全审查清单：[docs/security-checklist.md](docs/security-checklist.md)
 - 产品化路线图：[docs/roadmap.md](docs/roadmap.md)
 - Provider SDK 边界：[docs/provider-sdk.md](docs/provider-sdk.md)
+- Tool / Plugin SDK 边界：[docs/tool-plugin-sdk.md](docs/tool-plugin-sdk.md)
 - 入口程序：[cmd/gateway-daemon](cmd/gateway-daemon)
 - 核心流水线：[internal/core](internal/core)
 - HTTP 接入层：[internal/access](internal/access)
