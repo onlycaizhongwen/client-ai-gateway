@@ -47,7 +47,7 @@ const consoleHTML = `<!doctype html>
     .audit-table { min-width: 760px; font-size: 13px; }
     .tool-table, .mcp-table { min-width: 980px; }
     .issue-table { min-width: 980px; }
-    .app-table { min-width: 860px; }
+    .app-table { min-width: 1040px; }
     .grant-table { min-width: 1040px; }
     .policy-table { min-width: 1060px; }
     th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; }
@@ -89,7 +89,8 @@ const consoleHTML = `<!doctype html>
     .issue-table th:nth-child(5), .issue-table td:nth-child(5) { width: 130px; }
     .app-table th:nth-child(1), .app-table td:nth-child(1) { width: 240px; }
     .app-table th:nth-child(2), .app-table td:nth-child(2) { width: 180px; }
-    .app-table th:nth-child(3), .app-table td:nth-child(3) { width: 360px; }
+    .app-table th:nth-child(3), .app-table td:nth-child(3) { width: 180px; }
+    .app-table th:nth-child(4), .app-table td:nth-child(4) { width: 360px; }
     .policy-table th:nth-child(1), .policy-table td:nth-child(1) { width: 80px; }
     .policy-table th:nth-child(2), .policy-table td:nth-child(2) { width: 220px; }
     .policy-table th:nth-child(3), .policy-table td:nth-child(3) { width: 100px; }
@@ -227,6 +228,7 @@ const consoleHTML = `<!doctype html>
                 <tr>
                   <th data-i18n="app">应用</th>
                   <th data-i18n="tokenHint">Token</th>
+                  <th data-i18n="quota">Quota</th>
                   <th data-i18n="grants">授权</th>
                 </tr>
               </thead>
@@ -1008,6 +1010,7 @@ const consoleHTML = `<!doctype html>
         grantFilter: "Grant",
         appCatalog: "\u5e94\u7528\u4e0e\u6388\u6743",
         tokenHint: "Token \u63d0\u793a",
+        quota: "\u914d\u989d",
         grants: "\u6388\u6743",
         type: "\u7c7b\u578b",
         description: "\u8bf4\u660e",
@@ -1294,6 +1297,7 @@ const consoleHTML = `<!doctype html>
         grantFilter: "Grant",
         appCatalog: "Apps / Grants",
         tokenHint: "Token Hint",
+        quota: "Quota",
         grants: "Grants",
         type: "Type",
         description: "Description",
@@ -1651,6 +1655,7 @@ const consoleHTML = `<!doctype html>
 
     const zhFallback = {
       quotaRuntime: "\u914d\u989d\u8fd0\u884c\u65f6",
+      quota: "\u914d\u989d",
       appQuotaCount: "\u5e94\u7528\u914d\u989d",
       appRpmEnabled: "\u542f\u7528 App RPM",
       totalAppRpm: "\u603b App RPM"
@@ -2275,12 +2280,19 @@ const consoleHTML = `<!doctype html>
         "<tr>" +
           "<td><strong>" + esc(item.name || item.id) + "</strong><div class=\"muted\">" + renderAppLink(item.id) + "</div></td>" +
           "<td class=\"trace-id\">" + esc(item.token_hint || "-") + "</td>" +
+          "<td>" + renderAppQuota(item.quota || {}) + "</td>" +
           "<td title=\"" + esc((item.grants || []).join(", ")) + "\">" + renderGrantLinks(item.grants || []) + "</td>" +
         "</tr>"
       ).join("");
       if (!allApps.length) {
-        appRows.innerHTML = "<tr><td colspan=\"3\" class=\"muted\">" + emptyText("noApps", appCatalogQuery()) + "</td></tr>";
+        appRows.innerHTML = "<tr><td colspan=\"4\" class=\"muted\">" + emptyText("noApps", appCatalogQuery()) + "</td></tr>";
       }
+    }
+    function renderAppQuota(quota) {
+      if (!quota || !quota.enabled) {
+        return "<span class=\"status disabled\">" + esc(t("disabled")) + "</span>";
+      }
+      return "<span class=\"status healthy\">" + esc(t("enabled")) + "</span><div class=\"muted\">RPM " + esc(quota.requests_per_minute || 0) + "</div>";
     }
     function exportGrants() {
       const query = grantCatalogQuery();

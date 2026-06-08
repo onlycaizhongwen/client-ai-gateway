@@ -422,7 +422,10 @@ func TestAppsListRequiresAdmin(t *testing.T) {
 }
 
 func TestAppsListMasksTokensAndFilters(t *testing.T) {
-	handler, _ := newTestHandler()
+	handler, _ := newTestHandlerWithQuota(config.Quotas{Apps: []config.AppQuota{{
+		AppID:             "dev-app",
+		RequestsPerMinute: 2,
+	}}})
 	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/apps?grant=tool&limit=1&offset=0", nil)
 	req.Header.Set("Authorization", "Bearer admin-token")
 	res := httptest.NewRecorder()
@@ -446,6 +449,9 @@ func TestAppsListMasksTokensAndFilters(t *testing.T) {
 	if body.Apps[0].ID != "dev-app" || body.Apps[0].TokenHint != "dev-...oken" || !hasGrant(body.Apps[0].Grants, "tool") {
 		t.Fatalf("unexpected app view: %+v", body.Apps[0])
 	}
+	if !body.Apps[0].Quota.Enabled || body.Apps[0].Quota.RequestsPerMinute != 2 {
+		t.Fatalf("expected app quota summary, got %+v", body.Apps[0].Quota)
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/apps?app_id=admin-app", nil)
 	req.Header.Set("Authorization", "Bearer admin-token")
@@ -461,7 +467,10 @@ func TestAppsListMasksTokensAndFilters(t *testing.T) {
 }
 
 func TestAppsExportMasksTokens(t *testing.T) {
-	handler, _ := newTestHandler()
+	handler, _ := newTestHandlerWithQuota(config.Quotas{Apps: []config.AppQuota{{
+		AppID:             "dev-app",
+		RequestsPerMinute: 2,
+	}}})
 	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/apps/export?grant=tool", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -480,7 +489,7 @@ func TestAppsExportMasksTokens(t *testing.T) {
 		t.Fatalf("expected jsonl content type, got %q", got)
 	}
 	body := res.Body.String()
-	if !strings.Contains(body, `"id":"dev-app"`) || !strings.Contains(body, `"token_hint":"dev-...oken"`) {
+	if !strings.Contains(body, `"id":"dev-app"`) || !strings.Contains(body, `"token_hint":"dev-...oken"`) || !strings.Contains(body, `"requests_per_minute":2`) {
 		t.Fatalf("unexpected apps export body: %s", body)
 	}
 	if strings.Contains(body, "dev-token") || strings.Contains(body, "admin-token") {

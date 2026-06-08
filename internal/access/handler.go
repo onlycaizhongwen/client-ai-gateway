@@ -435,6 +435,12 @@ type appView struct {
 	Name      string   `json:"name,omitempty"`
 	TokenHint string   `json:"token_hint"`
 	Grants    []string `json:"grants"`
+	Quota     appQuota `json:"quota,omitempty"`
+}
+
+type appQuota struct {
+	RequestsPerMinute int  `json:"requests_per_minute"`
+	Enabled           bool `json:"enabled"`
 }
 
 type grantView struct {
@@ -507,6 +513,7 @@ func (h *Handler) appViews(r *http.Request) []appView {
 	query := r.URL.Query()
 	appFilter := query.Get("app_id")
 	grantFilter := query.Get("grant")
+	quotas := appQuotaMap(snapshot.Config.Quotas)
 	views := make([]appView, 0, len(snapshot.Config.Apps))
 	for _, app := range snapshot.Config.Apps {
 		if appFilter != "" && app.ID != appFilter {
@@ -520,7 +527,19 @@ func (h *Handler) appViews(r *http.Request) []appView {
 			Name:      app.Name,
 			TokenHint: tokenHint(app.Token),
 			Grants:    append([]string(nil), app.Grants...),
+			Quota:     quotas[app.ID],
 		})
+	}
+	return views
+}
+
+func appQuotaMap(quotas config.Quotas) map[string]appQuota {
+	views := make(map[string]appQuota, len(quotas.Apps))
+	for _, quota := range quotas.Apps {
+		views[quota.AppID] = appQuota{
+			RequestsPerMinute: quota.RequestsPerMinute,
+			Enabled:           quota.RequestsPerMinute > 0,
+		}
 	}
 	return views
 }
