@@ -1514,9 +1514,12 @@ const consoleHTML = `<!doctype html>
     document.addEventListener("click", event => {
       const button = event.target.closest("button[data-issue-provider-id]");
       if (!button) return;
-      providerIDFilter.value = button.dataset.issueProviderId;
-      providerPage = 1;
-      loadProviderCatalog();
+      filterProviderByID(button.dataset.issueProviderId);
+    });
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-provider-link-id]");
+      if (!button) return;
+      filterProviderByID(button.dataset.providerLinkId);
     });
     document.addEventListener("click", event => {
       const button = event.target.closest("button[data-issue-model]");
@@ -1698,7 +1701,7 @@ const consoleHTML = `<!doctype html>
           "<td class=\"trace-id\">" + esc(item.trace_id) + "</td>" +
           "<td>" + esc(item.app_id) + "</td>" +
           "<td>" + esc(item.requested_model) + "</td>" +
-          "<td>" + esc(item.provider_id) + "</td>" +
+          "<td>" + renderProviderLink(item.provider_id) + "</td>" +
           "<td>" + esc(item.final_model) + "</td>" +
           "<td>" + renderPolicyLink(item.policy && item.policy.rule_id) + "</td>" +
           "<td>" + ((item.fallbacks || []).length) + "</td>" +
@@ -2314,7 +2317,7 @@ const consoleHTML = `<!doctype html>
       modelRows.innerHTML = allModels.map(item =>
         "<tr>" +
           "<td class=\"trace-id\">" + esc(item.model) + "</td>" +
-          "<td>" + esc(item.provider_id) + "</td>" +
+          "<td>" + renderProviderLink(item.provider_id) + "</td>" +
           "<td>" + esc(item.provider_class || "-") + "</td>" +
           "<td><span class=\"status " + esc(item.runtime_status || (item.available ? "healthy" : "unhealthy")) + "\">" + esc(labelRuntime(item.runtime_status) || "-") + "</span><div class=\"muted\">" + (item.enabled ? t("enabled") : t("disabled")) + "</div></td>" +
           "<td><span class=\"status " + (item.available ? "healthy" : "unhealthy") + "\">" + (item.available ? t("available") : t("unavailable")) + "</span></td>" +
@@ -2545,6 +2548,10 @@ const consoleHTML = `<!doctype html>
       if (!policyID) return "-";
       return "<button class=\"link-button\" data-chain-policy-id=\"" + esc(policyID) + "\">" + esc(policyID) + "</button>";
     }
+    function renderProviderLink(providerID) {
+      if (!providerID) return "-";
+      return "<button class=\"link-button\" data-provider-link-id=\"" + esc(providerID) + "\">" + esc(providerID) + "</button>";
+    }
     function labelChainList(values) {
       if (!values) return "";
       return Array.isArray(values) ? values.join(", ") : String(values);
@@ -2766,7 +2773,7 @@ const consoleHTML = `<!doctype html>
         "<div class=\"kv\">" +
           "<div class=\"k\">" + t("traceId") + "</div><div class=\"trace-id\">" + esc(trace.trace_id) + "</div>" +
           "<div class=\"k\">" + t("status") + "</div><div><span class=\"status " + esc(trace.status) + "\">" + esc(labelStatus(trace.status)) + "</span></div>" +
-          "<div class=\"k\">" + t("provider") + "</div><div>" + esc(trace.provider_id) + "</div>" +
+          "<div class=\"k\">" + t("provider") + "</div><div>" + renderProviderLink(trace.provider_id) + "</div>" +
           "<div class=\"k\">" + t("policyRule") + "</div><div>" + renderTracePolicy(trace.policy) + "</div>" +
           "<div class=\"k\">" + t("fallbacks") + "</div><div>" + ((trace.fallbacks || []).length) + "</div>" +
         "</div>" +
@@ -2796,6 +2803,12 @@ const consoleHTML = `<!doctype html>
       auditTraceFilter.value = selectedTrace.trace_id;
       auditPage = 1;
       await loadAudit();
+    }
+    function filterProviderByID(providerID) {
+      if (!providerID) return;
+      providerIDFilter.value = providerID;
+      providerPage = 1;
+      loadProviderCatalog();
     }
     function traceRequestBody() {
       const request = selectedTrace && selectedTrace.request;
@@ -3115,7 +3128,7 @@ const consoleHTML = `<!doctype html>
       return items.map(item => {
         const provider = skipped ? { id: item.provider_id, class: item.class } : (item.provider || {});
         return "<div class=\"route-item" + (skipped ? " skipped" : "") + "\">" +
-          "<strong>" + esc(provider.id || "-") + "</strong>" +
+          "<strong>" + renderProviderLink(provider.id || "") + "</strong>" +
           "<div class=\"muted\">" + esc(provider.class || "-") + (item.model ? " / " + esc(item.model) : "") + "</div>" +
           "<div>" + esc(item.reason || "") + "</div>" +
         "</div>";
