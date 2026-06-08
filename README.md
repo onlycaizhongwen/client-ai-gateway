@@ -7,6 +7,9 @@
 - 本地控制台：<http://127.0.0.1:18765/console>
 - 开发配置：[configs/dev.json](configs/dev.json)
 - 错误码：[docs/error-codes.md](docs/error-codes.md)
+- 企业部署形态：[docs/enterprise-deployment.md](docs/enterprise-deployment.md)
+- 权限与审计模型：[docs/permission-audit-model.md](docs/permission-audit-model.md)
+- 失败降级机制：[docs/failure-degradation.md](docs/failure-degradation.md)
 - 入口程序：[cmd/gateway-daemon](cmd/gateway-daemon)
 - 核心流水线：[internal/core](internal/core)
 - HTTP 接入层：[internal/access](internal/access)
