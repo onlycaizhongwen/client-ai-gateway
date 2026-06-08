@@ -9,6 +9,7 @@ The gateway returns stable error codes in JSON error responses and records the f
 | `invalid_request` | Request body or query parameters are invalid. |
 | `unauthorized` | The app token is missing, unknown, or lacks the required grant. |
 | `policy_denied` | A policy rule rejected the request before routing. |
+| `rate_limited` | A local gateway request-per-minute limit rejected the request before routing. |
 | `route_failed` | No enabled and routable Provider supports the request under the current policy. |
 | `provider_failed` | The Provider failed with an unclassified error. |
 

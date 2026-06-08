@@ -68,6 +68,23 @@ func TestLoadValidMCPRuntimePlaceholder(t *testing.T) {
 	}
 }
 
+func TestLoadValidAppRequestQuota(t *testing.T) {
+	path := writeConfig(t, `{
+	  "listen_addr": "127.0.0.1:18765",
+	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat"]}],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
+	  "quotas": {"apps": [{"app_id":"dev-app","requests_per_minute":2}]}
+	}`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load valid app quota: %v", err)
+	}
+	if len(cfg.Quotas.Apps) != 1 || cfg.Quotas.Apps[0].RequestsPerMinute != 2 {
+		t.Fatalf("unexpected quotas: %+v", cfg.Quotas)
+	}
+}
+
 func TestTraceSnapshotDefaults(t *testing.T) {
 	path := writeConfig(t, `{
 	  "listen_addr": "127.0.0.1:18765",
@@ -328,6 +345,46 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 			  "mcp_runtime": {"enabled":true,"servers":[{"id":"s","tools":[{"id":"mcp.sandbox","read_only":true,"scopes":["desktop.read"],"sandbox_required":true}]}]}
 			}`,
 			want: "sandbox_required",
+		},
+		{
+			name: "quota app id required",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "quotas": {"apps": [{"requests_per_minute":1}]}
+			}`,
+			want: "app_id is required",
+		},
+		{
+			name: "quota references unknown app",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "quotas": {"apps": [{"app_id":"missing","requests_per_minute":1}]}
+			}`,
+			want: "does not reference",
+		},
+		{
+			name: "duplicate app quota",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "quotas": {"apps": [{"app_id":"a","requests_per_minute":1},{"app_id":"a","requests_per_minute":2}]}
+			}`,
+			want: "duplicate app quota",
+		},
+		{
+			name: "negative app rpm quota",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "quotas": {"apps": [{"app_id":"a","requests_per_minute":-1}]}
+			}`,
+			want: "requests_per_minute",
 		},
 		{
 			name: "bad policy provider class",

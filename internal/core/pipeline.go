@@ -11,6 +11,7 @@ import (
 	"client-ai-gateway/internal/config"
 	"client-ai-gateway/internal/fallback"
 	"client-ai-gateway/internal/policy"
+	"client-ai-gateway/internal/quota"
 	"client-ai-gateway/internal/router"
 	"client-ai-gateway/internal/trace"
 )
@@ -23,6 +24,7 @@ type Dependencies struct {
 	Router     *router.Router
 	Fallback   *fallback.Manager
 	Adapters   *adapters.Registry
+	Quota      *quota.Limiter
 	TraceStore trace.Store
 }
 
@@ -97,6 +99,20 @@ func (p *Pipeline) Chat(ctx context.Context, token string, req ChatRequest) (Cha
 		record.FinishedAt = time.Now().UTC()
 		_ = p.deps.TraceStore.Save(record)
 		return ChatResponse{}, gatewayError(traceID, env.AppID, "policy_denied", "policy denied: "+decision.Explanation, nil)
+	}
+	if p.deps.Quota != nil {
+		quotaDecision := p.deps.Quota.AllowAppRequest(app.ID)
+		if !quotaDecision.Allowed {
+			record.Status = "failed"
+			record.Error = quotaDecision.Reason
+			record.FinishedAt = time.Now().UTC()
+			record.Events = append(record.Events, trace.Event{Type: "quota_rejected", Message: quotaDecision.Reason, At: record.FinishedAt})
+			_ = p.deps.TraceStore.Save(record)
+			return ChatResponse{}, gatewayError(traceID, env.AppID, "rate_limited", quotaDecision.Reason, nil)
+		}
+		if quotaDecision.Limit > 0 {
+			record.Events = append(record.Events, trace.Event{Type: "quota_checked", Message: fmt.Sprintf("app rpm remaining %d/%d", quotaDecision.Remaining, quotaDecision.Limit), At: time.Now().UTC()})
+		}
 	}
 
 	routePlan, err := p.deps.Router.Plan(router.Input{

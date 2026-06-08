@@ -22,6 +22,7 @@ type Config struct {
 	Providers             []Provider `json:"providers"`
 	Tools                 []Tool     `json:"tools,omitempty"`
 	MCPRuntime            MCPRuntime `json:"mcp_runtime,omitempty"`
+	Quotas                Quotas     `json:"quotas,omitempty"`
 	Policies              []Policy   `json:"policies"`
 }
 
@@ -82,6 +83,15 @@ type MCPTool struct {
 	OutputSchema    map[string]any `json:"output_schema,omitempty"`
 	SandboxRequired bool           `json:"sandbox_required,omitempty"`
 	Enabled         *bool          `json:"enabled,omitempty"`
+}
+
+type Quotas struct {
+	Apps []AppQuota `json:"apps,omitempty"`
+}
+
+type AppQuota struct {
+	AppID             string `json:"app_id"`
+	RequestsPerMinute int    `json:"requests_per_minute,omitempty"`
 }
 
 type Policy struct {
@@ -272,6 +282,9 @@ func (c Config) Validate() error {
 	if err := validateMCPRuntime(c.MCPRuntime); err != nil {
 		return err
 	}
+	if err := validateQuotas(c.Quotas, appIDs); err != nil {
+		return err
+	}
 	policyIDs := map[string]struct{}{}
 	for i, rule := range c.Policies {
 		if rule.ID == "" {
@@ -289,6 +302,26 @@ func (c Config) Validate() error {
 		}
 		if err := validatePolicyValues(i, rule); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func validateQuotas(quotas Quotas, appIDs map[string]struct{}) error {
+	seenApps := map[string]struct{}{}
+	for i, quota := range quotas.Apps {
+		if quota.AppID == "" {
+			return fmt.Errorf("quotas.apps[%d].app_id is required", i)
+		}
+		if _, ok := appIDs[quota.AppID]; !ok {
+			return fmt.Errorf("quotas.apps[%d].app_id %q does not reference a configured app", i, quota.AppID)
+		}
+		if _, ok := seenApps[quota.AppID]; ok {
+			return fmt.Errorf("duplicate app quota for app %q", quota.AppID)
+		}
+		seenApps[quota.AppID] = struct{}{}
+		if quota.RequestsPerMinute < 0 {
+			return fmt.Errorf("quotas.apps[%d].requests_per_minute must be >= 0", i)
 		}
 	}
 	return nil

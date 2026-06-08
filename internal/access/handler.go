@@ -137,6 +137,8 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 			code = gatewayErr.Code
 			if gatewayErr.Code == "policy_denied" {
 				status = http.StatusForbidden
+			} else if gatewayErr.Code == "rate_limited" {
+				status = http.StatusTooManyRequests
 			}
 		}
 		writeError(w, status, traceID, code, err.Error())

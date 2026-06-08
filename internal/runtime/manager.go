@@ -14,6 +14,7 @@ import (
 	"client-ai-gateway/internal/fallback"
 	"client-ai-gateway/internal/policy"
 	"client-ai-gateway/internal/providerhealth"
+	"client-ai-gateway/internal/quota"
 	"client-ai-gateway/internal/router"
 	"client-ai-gateway/internal/tools"
 	"client-ai-gateway/internal/trace"
@@ -151,6 +152,7 @@ func (m *Manager) buildSnapshot(cfg config.Config) (Snapshot, context.CancelFunc
 		Router:     router.NewWithHealth(cfg.Providers, healthStore),
 		Fallback:   fallback.NewManager(),
 		Adapters:   adapterRegistry,
+		Quota:      quota.NewLimiter(cfg.Quotas),
 		TraceStore: m.traceStore,
 	})
 	return Snapshot{

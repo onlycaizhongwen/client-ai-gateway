@@ -93,6 +93,14 @@
       }
     ]
   },
+  "quotas": {
+    "apps": [
+      {
+        "app_id": "dev-app",
+        "requests_per_minute": 120
+      }
+    ]
+  },
   "policies": [
     {
       "id": "deny-sensitive-cloud",

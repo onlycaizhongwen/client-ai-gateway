@@ -16,6 +16,7 @@ import (
 	"client-ai-gateway/internal/fallback"
 	"client-ai-gateway/internal/policy"
 	"client-ai-gateway/internal/providerhealth"
+	"client-ai-gateway/internal/quota"
 	"client-ai-gateway/internal/router"
 	gatewayruntime "client-ai-gateway/internal/runtime"
 	"client-ai-gateway/internal/trace"
@@ -117,6 +118,35 @@ func TestChatFallbackBlockedHTTPIncludesTraceID(t *testing.T) {
 	}
 	if record.Status != "failed" || len(record.Fallbacks) != 1 {
 		t.Fatalf("expected failed fallback trace, got status=%s fallbacks=%d", record.Status, len(record.Fallbacks))
+	}
+}
+
+func TestChatRateLimitedHTTP(t *testing.T) {
+	handler, store := newTestHandlerWithQuota(config.Quotas{Apps: []config.AppQuota{{
+		AppID:             "dev-app",
+		RequestsPerMinute: 1,
+	}}})
+	first := postJSON(handler, "/v1/chat/completions", "dev-token", map[string]any{
+		"model":    "local-small",
+		"messages": []map[string]string{{"role": "user", "content": "first"}},
+	})
+	if first.Code != http.StatusOK {
+		t.Fatalf("expected first request 200, got %d: %s", first.Code, first.Body.String())
+	}
+	second := postJSON(handler, "/v1/chat/completions", "dev-token", map[string]any{
+		"model":    "local-small",
+		"messages": []map[string]string{{"role": "user", "content": "second"}},
+	})
+	if second.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d: %s", second.Code, second.Body.String())
+	}
+	traceID := errorTraceID(t, second)
+	record, ok := store.Get(traceID)
+	if !ok {
+		t.Fatal("expected rate limited trace record")
+	}
+	if record.Status != "failed" || record.Error != "app request rate limit exceeded" {
+		t.Fatalf("expected quota trace failure, got %+v", record)
 	}
 }
 
@@ -2076,6 +2106,10 @@ func newTestHandler() (http.Handler, *trace.MemoryStore) {
 	return newTestHandlerWithLogger(slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)))
 }
 
+func newTestHandlerWithQuota(quotas config.Quotas) (http.Handler, *trace.MemoryStore) {
+	return newTestHandlerWithLoggerAndQuota(slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil)), quotas)
+}
+
 func writeHandlerConfig(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.json")
@@ -2086,6 +2120,10 @@ func writeHandlerConfig(t *testing.T, body string) string {
 }
 
 func newTestHandlerWithLogger(logger *slog.Logger) (http.Handler, *trace.MemoryStore) {
+	return newTestHandlerWithLoggerAndQuota(logger, config.Quotas{})
+}
+
+func newTestHandlerWithLoggerAndQuota(logger *slog.Logger, quotas config.Quotas) (http.Handler, *trace.MemoryStore) {
 	cfg := config.Config{
 		ListenAddr:     "127.0.0.1:0",
 		TraceStorePath: "memory",
@@ -2102,7 +2140,8 @@ func newTestHandlerWithLogger(logger *slog.Logger) (http.Handler, *trace.MemoryS
 			{ID: "deny-sensitive-cloud", Priority: 100, Effect: "deny_cloud_for_sensitive", Reason: "Sensitive data cannot use cloud providers", DataLabels: []string{"sensitive"}},
 			{ID: "deny-cloud-smart", Effect: "deny", Reason: "cloud-smart is disabled for this app", AppIDs: []string{"dev-app"}, Models: []string{"cloud-smart"}},
 		},
-		Tools: []config.Tool{{ID: "gateway.runtime_health", Name: "Runtime Health", Adapter: "runtime-health", ReadOnly: true, RiskLevel: "low", Scopes: []string{"runtime.read"}}},
+		Tools:  []config.Tool{{ID: "gateway.runtime_health", Name: "Runtime Health", Adapter: "runtime-health", ReadOnly: true, RiskLevel: "low", Scopes: []string{"runtime.read"}}},
+		Quotas: quotas,
 	}
 	health := providerhealth.NewStore(cfg.Providers)
 	auditStore := audit.NewMemoryStore()
@@ -2116,6 +2155,7 @@ func newTestHandlerWithLogger(logger *slog.Logger) (http.Handler, *trace.MemoryS
 		Router:     router.NewWithHealth(cfg.Providers, health),
 		Fallback:   fallback.NewManager(),
 		Adapters:   registry,
+		Quota:      quota.NewLimiter(cfg.Quotas),
 		TraceStore: store,
 	})
 	return NewHandler(cfg, pipeline, store).WithProviderHealth(health).WithAudit(auditStore).WithLogger(logger).Routes(), store

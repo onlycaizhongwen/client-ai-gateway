@@ -1,6 +1,6 @@
 # 配额、预算与速率限制设计草案
 
-本文定义客户端 AI 网关后续实现用户级配额、Provider 预算和速率限制前需要遵守的边界。当前版本尚未启用真实配额控制，仍以 App Token、Policy、Provider health 和 Trace/Audit 为主要治理手段。
+本文定义客户端 AI 网关实现用户级配额、Provider 预算和速率限制时需要遵守的边界。当前版本已实现 App 级 `requests_per_minute` 请求前限流；Provider 预算、token/day 记账和成本统计仍处于设计阶段。
 
 ## 目标
 
@@ -40,9 +40,35 @@ flowchart LR
 | Usage Collector | 从 Provider Result 读取 token usage，不可得时标记 unknown。 |
 | Audit Writer | 记录允许、拒绝、超额、记账和降级决策。 |
 
-## 配置草案
+## 当前已实现
 
-建议未来增加：
+当前支持 App 级 RPM：
+
+```json
+{
+  "quotas": {
+    "apps": [
+      {
+        "app_id": "dev-app",
+        "requests_per_minute": 120
+      }
+    ]
+  }
+}
+```
+
+约定：
+
+- `app_id` 必须引用已配置 App。
+- `requests_per_minute=0` 或不配置表示不启用该 App 限流。
+- 负数会被配置校验拒绝。
+- 同一个 App 不能重复配置 quota。
+- 命中限流时返回 `rate_limited`，HTTP 状态码为 429。
+- Trace 会写入 `quota_rejected` 事件，且不会进入 Provider 路由。
+
+## 后续配置草案
+
+后续可继续增加：
 
 ```json
 {
@@ -73,7 +99,7 @@ flowchart LR
 }
 ```
 
-当前配置中不应新增这些字段，除非同步完成校验、控制台展示和测试。
+除 `requests_per_minute` 外，其他字段不应新增到正式配置中，除非同步完成校验、控制台展示和测试。
 
 ## 决策顺序
 
@@ -110,7 +136,7 @@ Provider adapter 已返回：
 
 | 场景 | 行为 |
 | --- | --- |
-| App RPM 超限 | 请求前拒绝，返回稳定 quota 错误。 |
+| App RPM 超限 | 请求前拒绝，返回 `rate_limited`。 |
 | App 日 token 超限 | 请求前拒绝。 |
 | Provider RPM 超限 | Router 跳过该 Provider，记录 skip reason。 |
 | 云端预算超限 | 跳过云端 Provider，不自动绕过 `deny_cloud_for_sensitive`。 |
@@ -121,8 +147,8 @@ Provider adapter 已返回：
 
 | Code | 说明 |
 | --- | --- |
-| `quota_exceeded` | App、Provider 或 Tool 配额耗尽。 |
-| `rate_limited` | 网关本地限流命中。 |
+| `quota_exceeded` | App、Provider 或 Tool 非 RPM 配额耗尽，待实现。 |
+| `rate_limited` | 网关本地 RPM 限流命中，已用于 App 级请求限流。 |
 | `budget_exceeded` | Provider 或组织预算耗尽。 |
 
 ## Audit 字段
@@ -169,8 +195,8 @@ Provider adapter 已返回：
 
 当前版本保持：
 
-- 不做真实限流。
+- 只做 App 级 `requests_per_minute` 限流。
 - 不做真实预算扣减。
-- 不新增配额配置字段。
+- 不新增 Provider 预算、token/day 或成本字段。
 - 不改变 Provider fallback 顺序。
 - Usage 只随 OpenAI-compatible 响应返回给调用方。

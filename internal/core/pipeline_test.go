@@ -10,6 +10,7 @@ import (
 	"client-ai-gateway/internal/core"
 	"client-ai-gateway/internal/fallback"
 	"client-ai-gateway/internal/policy"
+	"client-ai-gateway/internal/quota"
 	"client-ai-gateway/internal/router"
 	"client-ai-gateway/internal/trace"
 )
@@ -166,6 +167,37 @@ func TestPipelineTraceSnapshotCanBeDisabled(t *testing.T) {
 	}
 }
 
+func TestPipelineAppRateLimitRejectsBeforeRouting(t *testing.T) {
+	pipeline, store := newTestPipelineWithConfig(config.Config{
+		Quotas: config.Quotas{Apps: []config.AppQuota{{AppID: "dev-app", RequestsPerMinute: 1}}},
+	})
+
+	if _, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
+		Model:    "local-small",
+		Messages: []core.Message{{Role: "user", Content: "first"}},
+	}); err != nil {
+		t.Fatalf("first chat failed: %v", err)
+	}
+	_, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
+		Model:    "local-small",
+		Messages: []core.Message{{Role: "user", Content: "second"}},
+	})
+	var gatewayErr *core.GatewayError
+	if !errors.As(err, &gatewayErr) || gatewayErr.Code != "rate_limited" {
+		t.Fatalf("expected rate_limited gateway error, got %v", err)
+	}
+	record, ok := store.Get(gatewayErr.TraceID)
+	if !ok {
+		t.Fatal("expected rate limited trace record")
+	}
+	if record.Status != "failed" || record.Error != "app request rate limit exceeded" || len(record.Routes) != 0 {
+		t.Fatalf("expected quota failure before routing, got %+v", record)
+	}
+	if len(record.Events) == 0 || record.Events[len(record.Events)-1].Type != "quota_rejected" {
+		t.Fatalf("expected quota_rejected event, got %+v", record.Events)
+	}
+}
+
 func newTestPipeline() (*core.Pipeline, *trace.MemoryStore) {
 	return newTestPipelineWithConfig(config.Config{})
 }
@@ -177,6 +209,7 @@ func newTestPipelineWithConfig(overrides config.Config) (*core.Pipeline, *trace.
 		TraceSnapshotEnabled:  overrides.TraceSnapshotEnabled,
 		TraceRedactLabels:     overrides.TraceRedactLabels,
 		TraceSnapshotMaxChars: overrides.TraceSnapshotMaxChars,
+		Quotas:                overrides.Quotas,
 		Apps:                  []config.App{{ID: "dev-app", Token: "dev-token", Grants: []string{"chat"}}},
 		Providers: []config.Provider{
 			{ID: "local-mock", Class: "local", Models: []string{"local-small"}, Healthy: true},
@@ -194,6 +227,7 @@ func newTestPipelineWithConfig(overrides config.Config) (*core.Pipeline, *trace.
 		Router:     router.New(cfg.Providers),
 		Fallback:   fallback.NewManager(),
 		Adapters:   registry,
+		Quota:      quota.NewLimiter(cfg.Quotas),
 		TraceStore: store,
 	}), store
 }
