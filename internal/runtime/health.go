@@ -13,6 +13,7 @@ type HealthView struct {
 	Config          ConfigHealth          `json:"config"`
 	Stores          StoresHealth          `json:"stores"`
 	ProviderMonitor ProviderMonitorHealth `json:"provider_monitor"`
+	QuotaRuntime    QuotaRuntimeHealth    `json:"quota_runtime"`
 	ModelRuntime    ComponentHealth       `json:"model_runtime"`
 	MCPRuntime      ComponentHealth       `json:"mcp_runtime"`
 }
@@ -49,6 +50,17 @@ type ProviderMonitorHealth struct {
 	Degraded  int    `json:"degraded"`
 	Unhealthy int    `json:"unhealthy"`
 	Disabled  int    `json:"disabled"`
+}
+
+type QuotaRuntimeHealth struct {
+	Status          string `json:"status"`
+	Mode            string `json:"mode"`
+	AppQuotaCount   int    `json:"app_quota_count"`
+	EnabledAppRPM   int    `json:"enabled_app_rpm"`
+	TotalAppRPM     int    `json:"total_app_rpm"`
+	ProviderBudgets int    `json:"provider_budgets"`
+	TokenLedgers    int    `json:"token_ledgers"`
+	Reason          string `json:"reason,omitempty"`
 }
 
 type ComponentHealth struct {
@@ -95,6 +107,7 @@ func (m *Manager) Health() HealthView {
 			Audit: StoreHealth{Status: "available", Path: snapshot.Config.AuditStorePath},
 		},
 		ProviderMonitor: providerMonitor,
+		QuotaRuntime:    quotaRuntimeHealth(snapshot.Config.Quotas),
 		ModelRuntime: ComponentHealth{
 			Status: "not_configured",
 			Reason: "model runtime management is planned for a later phase",
@@ -106,6 +119,32 @@ func (m *Manager) Health() HealthView {
 	}
 	view.MCPRuntime = mcpRuntimeHealth(snapshot.Config.MCPRuntime)
 	return view
+}
+
+func quotaRuntimeHealth(quotas config.Quotas) QuotaRuntimeHealth {
+	health := QuotaRuntimeHealth{
+		Status:        "not_configured",
+		Mode:          "app_rpm_in_memory",
+		AppQuotaCount: len(quotas.Apps),
+		Reason:        "quota runtime is not configured",
+	}
+	for _, app := range quotas.Apps {
+		if app.RequestsPerMinute > 0 {
+			health.EnabledAppRPM++
+			health.TotalAppRPM += app.RequestsPerMinute
+		}
+	}
+	if health.AppQuotaCount == 0 {
+		return health
+	}
+	if health.EnabledAppRPM == 0 {
+		health.Status = "configured"
+		health.Reason = "app quotas are configured but RPM limits are disabled"
+		return health
+	}
+	health.Status = "configured"
+	health.Reason = "App RPM is enforced before provider routing; counters reset on daemon restart or config reload"
+	return health
 }
 
 func providerMonitorHealth(snapshot Snapshot, running bool) ProviderMonitorHealth {

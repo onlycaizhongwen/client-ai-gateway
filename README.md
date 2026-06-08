@@ -480,7 +480,7 @@ curl "http://127.0.0.1:18765/gateway/v1/mcp/servers/export?scope=desktop.read" `
 }
 ```
 
-运行时健康接口会返回 `mcp_runtime.status`、`mode`、server/tool 总数和启用数量。后续接入真实 MCP 适配器前，需要先补沙箱进程模型、授权弹窗、审计字段和 Provider SDK 边界。
+运行时健康接口会返回 `mcp_runtime.status`、`mode`、server/tool 总数和启用数量，也会通过 `quota_runtime` 返回 App RPM 配额数量、已启用 App RPM 数量和总 RPM 上限。后续接入真实 MCP 适配器前，需要先补沙箱进程模型、授权弹窗、审计字段和 Provider SDK 边界。
 
 ## OpenAI-Compatible Provider
 

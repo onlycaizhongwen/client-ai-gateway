@@ -386,6 +386,10 @@ func TestRuntimeHealthHTTP(t *testing.T) {
 		ModelRuntime struct {
 			Status string `json:"status"`
 		} `json:"model_runtime"`
+		QuotaRuntime struct {
+			Status        string `json:"status"`
+			AppQuotaCount int    `json:"app_quota_count"`
+		} `json:"quota_runtime"`
 	}
 	decodeBody(t, res, &body)
 	if body.Status != "healthy" || body.ProviderMonitor.Status != "running" || body.ProviderMonitor.Total != 1 {
@@ -393,6 +397,9 @@ func TestRuntimeHealthHTTP(t *testing.T) {
 	}
 	if body.ModelRuntime.Status != "not_configured" {
 		t.Fatalf("expected model runtime placeholder, got %+v", body.ModelRuntime)
+	}
+	if body.QuotaRuntime.Status != "not_configured" || body.QuotaRuntime.AppQuotaCount != 0 {
+		t.Fatalf("expected quota runtime placeholder, got %+v", body.QuotaRuntime)
 	}
 }
 

@@ -105,7 +105,8 @@ func TestManagerHealthView(t *testing.T) {
 	  "audit_store_path": "memory",
 	  "policy_version": "v1",
 	  "apps": [{"id":"app","token":"token","grants":["chat"]}],
-	  "providers": [{"id":"local","class":"local","models":["m"],"healthy":true}]
+	  "providers": [{"id":"local","class":"local","models":["m"],"healthy":true}],
+	  "quotas": {"apps": [{"app_id":"app","requests_per_minute":2}]}
 	}`)
 	manager, err := NewManager(path, trace.NewMemoryStore())
 	if err != nil {
@@ -123,8 +124,32 @@ func TestManagerHealthView(t *testing.T) {
 	if health.ProviderMonitor.Status != "running" || health.ProviderMonitor.Total != 1 {
 		t.Fatalf("expected running provider monitor, got %+v", health.ProviderMonitor)
 	}
+	if health.QuotaRuntime.Status != "configured" || health.QuotaRuntime.AppQuotaCount != 1 || health.QuotaRuntime.EnabledAppRPM != 1 || health.QuotaRuntime.TotalAppRPM != 2 {
+		t.Fatalf("expected quota runtime metadata, got %+v", health.QuotaRuntime)
+	}
 	if health.ModelRuntime.Status != "not_configured" || health.MCPRuntime.Status != "not_configured" {
 		t.Fatalf("expected placeholder runtime statuses, got %+v", health)
+	}
+}
+
+func TestManagerHealthViewWithoutQuotaRuntime(t *testing.T) {
+	path := writeRuntimeConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "audit_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"app","token":"token","grants":["chat"]}],
+	  "providers": [{"id":"local","class":"local","models":["m"],"healthy":true}]
+	}`)
+	manager, err := NewManager(path, trace.NewMemoryStore())
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+
+	health := manager.Health()
+	if health.QuotaRuntime.Status != "not_configured" || health.QuotaRuntime.AppQuotaCount != 0 {
+		t.Fatalf("expected empty quota runtime metadata, got %+v", health.QuotaRuntime)
 	}
 }
 

@@ -1258,6 +1258,10 @@ const consoleHTML = `<!doctype html>
         config: "Config",
         stores: "Stores",
         providerMonitor: "Provider Monitor",
+        quotaRuntime: "Quota Runtime",
+        appQuotaCount: "App Quotas",
+        appRpmEnabled: "Enabled App RPM",
+        totalAppRpm: "Total App RPM",
         modelRuntime: "Model Runtime",
         mcpRuntime: "MCP Runtime",
         listenAddr: "Listen Address",
@@ -1645,8 +1649,15 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#mcp-next").addEventListener("click", () => { mcpPage += 1; loadMCPCatalog(); });
     statusFilter.addEventListener("change", () => { tracePage = 1; loadTraces(); });
 
+    const zhFallback = {
+      quotaRuntime: "\u914d\u989d\u8fd0\u884c\u65f6",
+      appQuotaCount: "\u5e94\u7528\u914d\u989d",
+      appRpmEnabled: "\u542f\u7528 App RPM",
+      totalAppRpm: "\u603b App RPM"
+    };
+
     function t(key, vars = {}) {
-      let value = (i18n[lang] && i18n[lang][key]) || i18n.zh[key] || key;
+      let value = (i18n[lang] && i18n[lang][key]) || i18n.zh[key] || zhFallback[key] || key;
       Object.entries(vars).forEach(([name, replacement]) => {
         value = value.replaceAll("{" + name + "}", replacement);
       });
@@ -1956,6 +1967,7 @@ const consoleHTML = `<!doctype html>
             "<div class=\"k\">" + t("traceStore") + "</div><div>" + esc(data.stores && data.stores.trace && data.stores.trace.path) + "</div>" +
             "<div class=\"k\">" + t("auditStore") + "</div><div>" + esc(data.stores && data.stores.audit && data.stores.audit.path) + "</div>" +
             "<div class=\"k\">" + t("providerMonitor") + "</div><div>" + renderProviderMonitor(data.provider_monitor || {}) + "</div>" +
+            "<div class=\"k\">" + t("quotaRuntime") + "</div><div>" + renderQuotaRuntime(data.quota_runtime || {}) + "</div>" +
             "<div class=\"k\">" + t("modelRuntime") + "</div><div>" + esc(labelRuntime(data.model_runtime && data.model_runtime.status)) + "</div>" +
             "<div class=\"k\">" + t("mcpRuntime") + "</div><div>" + renderComponentHealth(data.mcp_runtime || {}) + "</div>" +
           "</div>";
@@ -1964,6 +1976,14 @@ const consoleHTML = `<!doctype html>
         runtimeHealth.textContent = t("failedPrefix") + err.message;
       }
       syncIssues();
+    }
+    function renderQuotaRuntime(quota) {
+      const modeText = quota.mode ? " / " + esc(quota.mode) : "";
+      const appQuotaText = " / " + esc(t("appQuotaCount")) + ": " + esc(quota.app_quota_count || 0);
+      const appRPMText = " / " + esc(t("appRpmEnabled")) + ": " + esc(quota.enabled_app_rpm || 0);
+      const totalRPMText = quota.total_app_rpm !== undefined ? " / " + esc(t("totalAppRpm")) + ": " + esc(quota.total_app_rpm || 0) : "";
+      const reasonText = quota.reason ? " / " + esc(quota.reason) : "";
+      return esc(labelRuntime(quota.status)) + modeText + appQuotaText + appRPMText + totalRPMText + reasonText;
     }
     function renderComponentHealth(component) {
       const countText = component.server_count !== undefined

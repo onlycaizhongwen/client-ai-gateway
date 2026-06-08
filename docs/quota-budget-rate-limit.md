@@ -65,6 +65,7 @@ flowchart LR
 - 同一个 App 不能重复配置 quota。
 - 命中限流时返回 `rate_limited`，HTTP 状态码为 429。
 - Trace 会写入 `quota_rejected` 事件，且不会进入 Provider 路由。
+- 运行时健康接口会通过 `quota_runtime` 返回 App quota 数量、启用 RPM 的 App 数量、总 RPM 上限和当前模式；该视图不暴露 App Token。
 
 ## 后续配置草案
 
