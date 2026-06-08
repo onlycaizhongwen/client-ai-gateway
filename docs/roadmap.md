@@ -14,13 +14,14 @@
 | 工具调用 | 已完成只读 MVP | 支持内置只读工具、scope 校验、Trace/Audit。 |
 | MCP | Manifest MVP | 只加载 Manifest，不执行 MCP Server。 |
 | 企业部署说明 | 已补齐初版 | 已有部署、权限审计、失败降级专题文档。 |
+| 安全审查清单 | 已补齐初版 | 覆盖 token、管理 API、Trace、Audit、工具、MCP、Provider 策略。 |
 
 ## 主要缺口
 
 | 优先级 | 缺口 | 当前风险 |
 | --- | --- | --- |
 | P0 | 真实浏览器 UI 回归 | 目前只有后端 HTML 锚点测试，缺少截图级布局验证。 |
-| P0 | 安全审查清单 | Token、管理接口、工具边界已有实现约束，但缺少交付前 checklist。 |
+| P0 | 安全审查清单 | 已补齐初版，后续随真实 MCP / 插件 SDK 继续扩展。 |
 | P1 | Provider SDK 边界 | 目前适配器接口可用，但缺少独立 SDK 文档、错误约定和示例模板。 |
 | P1 | 插件 / Tool SDK | 目前只读工具能扩展，但缺少插件目录规范、签名/来源校验和沙箱模型。 |
 | P1 | 企业集中审计 | 当前 JSONL 适合单机，缺少 SIEM / 日志管道对接方案。 |
@@ -46,7 +47,7 @@ flowchart LR
 P0 阶段建议做到：
 
 - 控制台至少有 1 套真实浏览器 smoke 测试，覆盖桌面宽屏和窄屏。
-- 安全清单覆盖 token、管理 API、Trace 快照、Audit 导出、MCP、工具调用。
+- 安全清单覆盖 token、管理 API、Trace 快照、Audit 导出、MCP、工具调用，并在 README 中可直达。
 - `go test ./...`、`go build ./cmd/gateway-daemon` 和 UI smoke 在提交前可复现。
 - README 能指向部署、权限审计、失败降级、路线图和错误码文档。
 
@@ -62,4 +63,3 @@ P1 阶段建议做到：
 - 不启用真实 MCP Server 执行，直到沙箱和授权模型完成。
 - 不在控制台展示完整 App Token。
 - 不把云端 Provider 作为敏感数据的默认降级目标。
-
