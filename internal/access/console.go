@@ -1558,6 +1558,11 @@ const consoleHTML = `<!doctype html>
       filterMCPServerByID(button.dataset.mcpServerLinkId);
     });
     document.addEventListener("click", event => {
+      const button = event.target.closest("button[data-audit-metadata-key]");
+      if (!button) return;
+      filterAuditByMetadata(button.dataset.auditMetadataKey, button.dataset.auditMetadataValue || "");
+    });
+    document.addEventListener("click", event => {
       const button = event.target.closest("button[data-issue-tool-id]");
       if (!button) return;
       toolIDFilter = button.dataset.issueToolId;
@@ -2896,6 +2901,13 @@ const consoleHTML = `<!doctype html>
       auditPage = 1;
       await loadAudit();
     }
+    async function filterAuditByMetadata(key, value) {
+      if (!key) return;
+      auditMetadataKeyFilter.value = key;
+      auditMetadataValueFilter.value = value || "";
+      auditPage = 1;
+      await loadAudit();
+    }
     function filterProviderByID(providerID) {
       if (!providerID) return;
       providerIDFilter.value = providerID;
@@ -3164,6 +3176,7 @@ const consoleHTML = `<!doctype html>
           "<div class=\"k\">" + t("time") + "</div><div>" + esc(time(event.created_at)) + "</div>" +
         "</div>" +
         renderExplainChain(event.metadata && event.metadata.explain_chain) +
+        renderAuditMetadataSummary(event.metadata) +
         "<pre>" + esc(JSON.stringify(event, null, 2)) + "</pre>";
       if (traceID) {
         loadDetail(traceID);
@@ -3173,6 +3186,33 @@ const consoleHTML = `<!doctype html>
       const policyID = metadata && metadata.policy_rule_id;
       if (!policyID) return "-";
       return renderPolicyLink(policyID);
+    }
+    function renderAuditMetadataSummary(metadata) {
+      if (!metadata || !Object.keys(metadata).length) return "";
+      const keys = ["tool_id", "provider_id", "policy_rule_id", "matched_grant", "missing_grants", "required_scopes", "origin", "server_id"];
+      const cells = keys
+        .filter(key => metadata[key] !== undefined && metadata[key] !== null && metadata[key] !== "")
+        .map(key => "<div class=\"chain-cell\"><span class=\"k\">" + esc(key) + "</span><div>" + renderAuditMetadataValue(key, metadata[key]) + "</div></div>");
+      if (!cells.length) return "";
+      return "<div class=\"explain-chain\"><div class=\"chain-title\">Metadata</div><div class=\"chain-grid\">" + cells.join("") + "</div></div>";
+    }
+    function renderAuditMetadataValue(key, value) {
+      const values = Array.isArray(value) ? value : [value];
+      return values.map(item => {
+        const text = String(item);
+        const filter = renderAuditMetadataFilter(key, text);
+        let linked = esc(text);
+        if (key === "tool_id") linked = renderToolLink(text);
+        if (key === "provider_id") linked = renderProviderLink(text);
+        if (key === "policy_rule_id") linked = renderPolicyLink(text);
+        if (key === "matched_grant" || key === "missing_grants") linked = renderGrantLink(text);
+        if (key === "required_scopes") linked = renderGrantLink("tool:" + text);
+        if (key === "server_id") linked = renderMCPServerLink(text);
+        return linked + " " + filter;
+      }).join(", ");
+    }
+    function renderAuditMetadataFilter(key, value) {
+      return "<button class=\"link-button\" data-audit-metadata-key=\"" + esc(key) + "\" data-audit-metadata-value=\"" + esc(value) + "\">#</button>";
     }
     async function sendQuick(mode) {
       const body = {
