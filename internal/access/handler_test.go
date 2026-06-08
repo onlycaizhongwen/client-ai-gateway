@@ -1245,14 +1245,7 @@ func newRuntimeToolTestHandler(t *testing.T, appsJSON string) (http.Handler, *tr
 }
 
 func TestConsoleIncludesExportActions(t *testing.T) {
-	handler, _ := newTestHandler()
-	req := httptest.NewRequest(http.MethodGet, "/console", nil)
-	res := httptest.NewRecorder()
-	handler.ServeHTTP(res, req)
-	if res.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", res.Code)
-	}
-	body := res.Body.String()
+	body := consoleBody(t)
 	for _, want := range []string{
 		"id=\"trace-export\"",
 		"id=\"trace-export-message\"",
@@ -1528,6 +1521,77 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 			t.Fatalf("expected console html to contain %q", want)
 		}
 	}
+}
+
+func TestConsoleUIPolishRegressionAnchors(t *testing.T) {
+	body := consoleBody(t)
+	groups := map[string][]string{
+		"zh-first-screen": {
+			"客户端 AI 网关控制台",
+			"本地模型/工具网关 · 追踪 · 策略 · 降级",
+			">English</button>",
+			">筛选</button>",
+			">清空</button>",
+		},
+		"en-toggle-copy": {
+			"title: \"Client AI Gateway Console\"",
+			"subtitle: \"Local model/tool gateway",
+			"trace",
+			"policy",
+			"fallback",
+			"clearFilter: \"Clear\"",
+			"noFilterResults: \"No data matches the current filters.\"",
+			"document.querySelector(\"#lang-toggle\").textContent = lang === \"zh\" ? \"English\" : \"中文\"",
+		},
+		"empty-state-and-pagination": {
+			"noFilterResults: \"\\u6ca1\\u6709\\u5339\\u914d\\u5f53\\u524d\\u7b5b\\u9009\\u6761\\u4ef6\\u7684\\u6570\\u636e\\u3002\"",
+			"function emptyText",
+			"if (key !== \"limit\" && key !== \"offset\") return true;",
+			"emptyText(\"noTraces\", traceQuery())",
+			"emptyText(\"noAuditEvents\", auditQuery())",
+		},
+		"clear-filter-actions": {
+			"clearTraceFilters",
+			"clearAuditFilters",
+			"clearToolFilters",
+			"clearMCPFilters",
+			"clearAppFilters",
+			"clearGrantFilters",
+			"clearProviderFilters",
+			"clearModelFilters",
+			"clearPolicyFilters",
+		},
+		"linked-object-navigation": {
+			"data-provider-link-id",
+			"data-model-link-id",
+			"data-app-link-id",
+			"data-grant-link-id",
+			"data-tool-link-id",
+			"data-mcp-server-link-id",
+			"data-trace-link-id",
+			"data-policy-filter-key",
+			"filterAuditByMetadata",
+		},
+	}
+	for group, wants := range groups {
+		for _, want := range wants {
+			if !strings.Contains(body, want) {
+				t.Fatalf("expected console UI group %s to contain %q", group, want)
+			}
+		}
+	}
+}
+
+func consoleBody(t *testing.T) string {
+	t.Helper()
+	handler, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/console", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.Code)
+	}
+	return res.Body.String()
 }
 
 func TestRoutingExplainHTTP(t *testing.T) {
