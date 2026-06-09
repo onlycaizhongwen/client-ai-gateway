@@ -164,6 +164,10 @@ const consoleHTML = `<!doctype html>
       <div class="card"><div class="muted" data-i18n="completed">已完成</div><div class="metric" id="m-completed">0</div></div>
       <div class="card"><div class="muted" data-i18n="failed">失败</div><div class="metric" id="m-failed">0</div></div>
       <div class="card"><div class="muted" data-i18n="fallbackAttempts">降级次数</div><div class="metric" id="m-fallbacks">0</div></div>
+      <div class="card"><div class="muted" data-i18n="quotaRejectedMetric">配额拒绝</div><div class="metric" id="m-quota-rejected">0</div></div>
+      <div class="card"><div class="muted" data-i18n="appQuotaRejectedMetric">App 配额拒绝</div><div class="metric" id="m-app-quota-rejected">0</div></div>
+      <div class="card"><div class="muted" data-i18n="providerQuotaRejectedMetric">Provider 配额拒绝</div><div class="metric" id="m-provider-quota-rejected">0</div></div>
+      <div class="card"><div class="muted" data-i18n="quotaCheckedMetric">配额检查</div><div class="metric" id="m-quota-checked">0</div></div>
     </section>
     <div class="layout">
       <div class="main-stack">
@@ -885,7 +889,7 @@ const consoleHTML = `<!doctype html>
     const mcpEnabledFilter = document.querySelector("#mcp-enabled-filter");
     let allTraces = [];
     let traceTotal = 0;
-    let traceStats = { total: 0, completed: 0, failed: 0, fallbacks: 0 };
+    let traceStats = { total: 0, completed: 0, failed: 0, fallbacks: 0, quotaRejected: 0, appQuotaRejected: 0, providerQuotaRejected: 0, quotaChecked: 0 };
     let tracePage = 1;
     const tracePageSize = 20;
     let allAuditEvents = [];
@@ -944,6 +948,10 @@ const consoleHTML = `<!doctype html>
         completed: "已完成",
         failed: "失败",
         fallbackAttempts: "降级次数",
+        quotaRejectedMetric: "配额拒绝",
+        appQuotaRejectedMetric: "App 配额拒绝",
+        providerQuotaRejectedMetric: "Provider 配额拒绝",
+        quotaCheckedMetric: "配额检查",
         requestTraces: "请求追踪",
         allStatus: "全部状态",
         traceExportSafety: "Trace \u5bfc\u51fa\u5df2\u6309\u5f53\u524d\u7b5b\u9009\u6761\u4ef6\u751f\u6210\uff0c\u8bf7\u6c42\u5feb\u7167\u590d\u7528\u5df2\u4fdd\u5b58\u7684\u8131\u654f/\u622a\u65ad\u7248\u672c\uff0c\u4e0d\u5305\u542b\u5e94\u7528 Token\u3002",
@@ -1233,6 +1241,10 @@ const consoleHTML = `<!doctype html>
         completed: "Completed",
         failed: "Failed",
         fallbackAttempts: "Fallback Attempts",
+        quotaRejectedMetric: "Quota Rejected",
+        appQuotaRejectedMetric: "App Quota Rejected",
+        providerQuotaRejectedMetric: "Provider Quota Rejected",
+        quotaCheckedMetric: "Quota Checked",
         requestTraces: "Request Traces",
         allStatus: "All status",
         traceExportSafety: "Trace export uses the current filters and the stored safe request snapshot. Redacted or truncated values stay redacted, and app tokens are not included.",
@@ -1820,18 +1832,45 @@ const consoleHTML = `<!doctype html>
       allTraces = data.traces || [];
       traceTotal = data.total || allTraces.length;
       const statsTraces = statsData.traces || [];
-      traceStats = {
-        total: statsData.total ?? statsTraces.length,
-        completed: statsTraces.filter(item => item.status === "completed").length,
-        failed: statsTraces.filter(item => item.status === "failed").length,
-        fallbacks: statsTraces.reduce((sum, item) => sum + ((item.fallbacks || []).length), 0)
-      };
+      traceStats = buildTraceStats(statsData, statsTraces);
       document.querySelector("#m-total").textContent = traceStats.total;
       document.querySelector("#m-completed").textContent = traceStats.completed;
       document.querySelector("#m-failed").textContent = traceStats.failed;
       document.querySelector("#m-fallbacks").textContent = traceStats.fallbacks;
+      document.querySelector("#m-quota-rejected").textContent = traceStats.quotaRejected;
+      document.querySelector("#m-app-quota-rejected").textContent = traceStats.appQuotaRejected;
+      document.querySelector("#m-provider-quota-rejected").textContent = traceStats.providerQuotaRejected;
+      document.querySelector("#m-quota-checked").textContent = traceStats.quotaChecked;
       renderTraces();
       syncIssues();
+    }
+    function buildTraceStats(statsData, traces) {
+      const stats = {
+        total: statsData.total ?? traces.length,
+        completed: traces.filter(item => item.status === "completed").length,
+        failed: traces.filter(item => item.status === "failed").length,
+        fallbacks: traces.reduce((sum, item) => sum + ((item.fallbacks || []).length), 0),
+        quotaRejected: 0,
+        appQuotaRejected: 0,
+        providerQuotaRejected: 0,
+        quotaChecked: 0
+      };
+      traces.forEach(trace => {
+        (trace.events || []).forEach(event => {
+          if (event.type === "quota_checked") stats.quotaChecked += 1;
+          if (event.type !== "quota_rejected") return;
+          stats.quotaRejected += 1;
+          if (isProviderQuotaEvent(event)) {
+            stats.providerQuotaRejected += 1;
+          } else {
+            stats.appQuotaRejected += 1;
+          }
+        });
+      });
+      return stats;
+    }
+    function isProviderQuotaEvent(event) {
+      return !!event && /provider/i.test(event.message || "");
     }
     function downloadURL(url, filename = "") {
       const link = document.createElement("a");
