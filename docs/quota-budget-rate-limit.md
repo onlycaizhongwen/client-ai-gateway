@@ -81,6 +81,7 @@ flowchart LR
 - 应用列表支持 `quota_enabled=true|false` 筛选，便于快速找出未配置 RPM 限流的 App。
 - 控制台运行问题汇总会以 info 级别提示具备 `chat` grant 但未启用 App RPM 的应用，点击后联动到应用列表并筛选未启用配额项。
 - 成功的聊天 Trace 会保存 Provider 返回的 usage，字段为 `prompt_tokens`、`completion_tokens`、`total_tokens` 和 `source`；Provider 未返回 usage 时 token 计数保持 `0`，`source=unknown`。
+- `GET /gateway/v1/usage/summary` 会基于 Trace usage 做只读聚合，支持 `group_by=app|provider|model`，并可沿用 `status`、`app_id`、`provider_id`、`event_type` 过滤；该接口不执行预算扣减。
 
 ## 后续配置草案
 
@@ -193,7 +194,7 @@ Provider adapter 已返回：
 - App 配额视图。
 - Provider 预算视图。
 - 最近超限事件。
-- 按 app/provider/model 聚合的 token 使用趋势。
+- 基于 usage summary API 的 app/provider/model token 使用趋势。
 - 云端预算临近耗尽提示。
 - 导出到 JSONL 或企业审计管道。
 

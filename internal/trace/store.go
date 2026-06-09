@@ -100,6 +100,7 @@ type Store interface {
 	Get(traceID string) (Record, bool)
 	List(query ListQuery) []Record
 	Page(query ListQuery) Page
+	UsageSummary(query UsageSummaryQuery) UsageSummary
 }
 
 type ListQuery struct {
@@ -116,6 +117,30 @@ type Page struct {
 	Total  int
 	Offset int
 	Limit  int
+}
+
+type UsageSummaryQuery struct {
+	ListQuery
+	GroupBy string
+}
+
+type UsageSummary struct {
+	GroupBy          string             `json:"group_by"`
+	Items            []UsageSummaryItem `json:"items"`
+	TotalRecords     int                `json:"total_records"`
+	UsageRecords     int                `json:"usage_records"`
+	PromptTokens     int                `json:"prompt_tokens"`
+	CompletionTokens int                `json:"completion_tokens"`
+	TotalTokens      int                `json:"total_tokens"`
+}
+
+type UsageSummaryItem struct {
+	Key              string `json:"key"`
+	Records          int    `json:"records"`
+	PromptTokens     int    `json:"prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens"`
+	TotalTokens      int    `json:"total_tokens"`
+	UnknownUsage     int    `json:"unknown_usage"`
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -144,6 +169,12 @@ func (s *MemoryStore) Page(query ListQuery) Page {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return pageRecords(s.records, query)
+}
+
+func (s *MemoryStore) UsageSummary(query UsageSummaryQuery) UsageSummary {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return summarizeUsage(s.records, query)
 }
 
 type JSONLStore struct {
@@ -214,6 +245,12 @@ func (s *JSONLStore) Page(query ListQuery) Page {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return pageRecords(s.records, query)
+}
+
+func (s *JSONLStore) UsageSummary(query UsageSummaryQuery) UsageSummary {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return summarizeUsage(s.records, query)
 }
 
 func (s *JSONLStore) load() error {
@@ -293,16 +330,7 @@ func pageRecords(records map[string]Record, query ListQuery) Page {
 	}
 	out := make([]Record, 0, len(records))
 	for _, record := range records {
-		if query.Status != "" && record.Status != query.Status {
-			continue
-		}
-		if query.AppID != "" && record.AppID != query.AppID {
-			continue
-		}
-		if query.ProviderID != "" && record.ProviderID != query.ProviderID {
-			continue
-		}
-		if query.EventType != "" && !recordHasEventType(record, query.EventType) {
+		if !recordMatchesListQuery(record, query) {
 			continue
 		}
 		out = append(out, record)
@@ -328,6 +356,95 @@ func recordHasEventType(record Record, eventType string) bool {
 		}
 	}
 	return false
+}
+
+func summarizeUsage(records map[string]Record, query UsageSummaryQuery) UsageSummary {
+	groupBy := normalizedUsageGroup(query.GroupBy)
+	summary := UsageSummary{GroupBy: groupBy}
+	byKey := map[string]*UsageSummaryItem{}
+	for _, record := range records {
+		if !recordMatchesListQuery(record, query.ListQuery) {
+			continue
+		}
+		summary.TotalRecords++
+		if record.Usage == nil {
+			continue
+		}
+		summary.UsageRecords++
+		key := usageGroupKey(record, groupBy)
+		item := byKey[key]
+		if item == nil {
+			item = &UsageSummaryItem{Key: key}
+			byKey[key] = item
+		}
+		item.Records++
+		item.PromptTokens += record.Usage.PromptTokens
+		item.CompletionTokens += record.Usage.CompletionTokens
+		item.TotalTokens += record.Usage.TotalTokens
+		if record.Usage.Source == "unknown" {
+			item.UnknownUsage++
+		}
+		summary.PromptTokens += record.Usage.PromptTokens
+		summary.CompletionTokens += record.Usage.CompletionTokens
+		summary.TotalTokens += record.Usage.TotalTokens
+	}
+	summary.Items = make([]UsageSummaryItem, 0, len(byKey))
+	for _, item := range byKey {
+		summary.Items = append(summary.Items, *item)
+	}
+	sort.Slice(summary.Items, func(i, j int) bool {
+		if summary.Items[i].TotalTokens != summary.Items[j].TotalTokens {
+			return summary.Items[i].TotalTokens > summary.Items[j].TotalTokens
+		}
+		return summary.Items[i].Key < summary.Items[j].Key
+	})
+	return summary
+}
+
+func recordMatchesListQuery(record Record, query ListQuery) bool {
+	if query.Status != "" && record.Status != query.Status {
+		return false
+	}
+	if query.AppID != "" && record.AppID != query.AppID {
+		return false
+	}
+	if query.ProviderID != "" && record.ProviderID != query.ProviderID {
+		return false
+	}
+	if query.EventType != "" && !recordHasEventType(record, query.EventType) {
+		return false
+	}
+	return true
+}
+
+func normalizedUsageGroup(groupBy string) string {
+	switch groupBy {
+	case "app", "provider", "model":
+		return groupBy
+	default:
+		return "provider"
+	}
+}
+
+func usageGroupKey(record Record, groupBy string) string {
+	switch groupBy {
+	case "app":
+		if record.AppID != "" {
+			return record.AppID
+		}
+	case "model":
+		if record.FinalModel != "" {
+			return record.FinalModel
+		}
+		if record.Model != "" {
+			return record.Model
+		}
+	default:
+		if record.ProviderID != "" {
+			return record.ProviderID
+		}
+	}
+	return "unknown"
 }
 
 func sortedRecordsBySequence(records map[string]Record, sequences map[string]int64) []Record {

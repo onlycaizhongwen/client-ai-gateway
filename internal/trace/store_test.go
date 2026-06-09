@@ -138,3 +138,72 @@ func TestMemoryStorePageOffsetPastEnd(t *testing.T) {
 		t.Fatalf("expected empty page past end, got %+v", page)
 	}
 }
+
+func TestUsageSummaryGroupsAndFilters(t *testing.T) {
+	store := NewMemoryStore()
+	records := []Record{
+		{
+			TraceID:    "trace-local",
+			AppID:      "dev-app",
+			Model:      "local-small",
+			FinalModel: "local-small",
+			ProviderID: "local-mock",
+			Status:     "completed",
+			Usage:      &Usage{PromptTokens: 2, CompletionTokens: 3, TotalTokens: 5, Source: "provider"},
+			StartedAt:  time.Now().UTC(),
+		},
+		{
+			TraceID:    "trace-cloud",
+			AppID:      "dev-app",
+			Model:      "local-small",
+			FinalModel: "local-small",
+			ProviderID: "cloud-mock",
+			Status:     "completed",
+			Usage:      &Usage{PromptTokens: 4, CompletionTokens: 6, TotalTokens: 10, Source: "provider"},
+			StartedAt:  time.Now().UTC(),
+		},
+		{
+			TraceID:    "trace-unknown",
+			AppID:      "admin-app",
+			Model:      "cloud-smart",
+			ProviderID: "cloud-mock",
+			Status:     "completed",
+			Usage:      &Usage{Source: "unknown"},
+			StartedAt:  time.Now().UTC(),
+		},
+		{
+			TraceID:    "trace-failed",
+			AppID:      "dev-app",
+			ProviderID: "local-mock",
+			Status:     "failed",
+			StartedAt:  time.Now().UTC(),
+		},
+	}
+	for _, record := range records {
+		if err := store.Save(record); err != nil {
+			t.Fatalf("save: %v", err)
+		}
+	}
+
+	summary := store.UsageSummary(UsageSummaryQuery{
+		ListQuery: ListQuery{Status: "completed"},
+		GroupBy:   "provider",
+	})
+	if summary.GroupBy != "provider" || summary.TotalRecords != 3 || summary.UsageRecords != 3 || summary.TotalTokens != 15 {
+		t.Fatalf("unexpected usage summary: %+v", summary)
+	}
+	if len(summary.Items) != 2 || summary.Items[0].Key != "cloud-mock" || summary.Items[0].TotalTokens != 10 || summary.Items[0].UnknownUsage != 1 {
+		t.Fatalf("expected cloud provider first with unknown usage count, got %+v", summary.Items)
+	}
+	if summary.Items[1].Key != "local-mock" || summary.Items[1].TotalTokens != 5 {
+		t.Fatalf("expected local provider second, got %+v", summary.Items)
+	}
+
+	appSummary := store.UsageSummary(UsageSummaryQuery{
+		ListQuery: ListQuery{AppID: "dev-app"},
+		GroupBy:   "app",
+	})
+	if len(appSummary.Items) != 1 || appSummary.Items[0].Key != "dev-app" || appSummary.Items[0].TotalTokens != 15 || appSummary.TotalRecords != 3 || appSummary.UsageRecords != 2 {
+		t.Fatalf("unexpected app usage summary: %+v", appSummary)
+	}
+}

@@ -274,6 +274,60 @@ func TestTraceExportUsesSafeRequestSnapshot(t *testing.T) {
 	}
 }
 
+func TestUsageSummaryHTTP(t *testing.T) {
+	handler, _ := newTestHandler()
+	postJSON(handler, "/v1/chat/completions", "dev-token", map[string]any{
+		"model":    "local-small",
+		"messages": []map[string]string{{"role": "user", "content": "hello usage"}},
+	})
+	postJSON(handler, "/v1/chat/completions", "dev-token", map[string]any{
+		"model":    "local-small",
+		"messages": []map[string]string{{"role": "user", "content": "cloud usage"}},
+		"metadata": map[string]string{"fail_provider": "local-mock"},
+	})
+	postJSON(handler, "/v1/chat/completions", "bad-token", map[string]any{
+		"model":    "local-small",
+		"messages": []map[string]string{{"role": "user", "content": "ignored"}},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/usage/summary?status=completed&group_by=provider", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var body struct {
+		Summary trace.UsageSummary       `json:"summary"`
+		Items   []trace.UsageSummaryItem `json:"items"`
+		Filters map[string]string        `json:"filters"`
+	}
+	decodeBody(t, res, &body)
+	if body.Summary.GroupBy != "provider" || body.Summary.TotalRecords != 2 || body.Summary.UsageRecords != 2 || body.Summary.TotalTokens == 0 {
+		t.Fatalf("unexpected provider usage summary: %+v", body)
+	}
+	if len(body.Items) != 2 || body.Filters["status"] != "completed" {
+		t.Fatalf("expected two provider groups and filters, got %+v", body)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/usage/summary?group_by=model&provider_id=cloud-mock", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", res.Code, res.Body.String())
+	}
+	decodeBody(t, res, &body)
+	if body.Summary.GroupBy != "model" || len(body.Items) != 1 || body.Items[0].Key != "local-small" || body.Filters["provider_id"] != "cloud-mock" {
+		t.Fatalf("unexpected model usage summary: %+v", body)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/usage/summary?group_by=tenant", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid group_by, got %d", res.Code)
+	}
+}
+
 func TestAccessLogIncludesTraceID(t *testing.T) {
 	var logs bytes.Buffer
 	handler, _ := newTestHandlerWithLogger(slog.New(slog.NewJSONHandler(&logs, nil)))

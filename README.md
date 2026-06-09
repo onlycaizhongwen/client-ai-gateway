@@ -145,11 +145,14 @@ curl http://127.0.0.1:18765/gateway/v1/traces
 curl "http://127.0.0.1:18765/gateway/v1/traces?limit=20&offset=0&status=completed"
 curl http://127.0.0.1:18765/gateway/v1/traces/{trace_id}
 curl "http://127.0.0.1:18765/gateway/v1/traces/export?limit=500&status=failed" -o traces.jsonl
+curl "http://127.0.0.1:18765/gateway/v1/usage/summary?group_by=provider&status=completed"
 ```
 
 Trace 列表返回 `traces`、`total`、`offset`、`limit`。支持按 `status`、`app_id`、`provider_id` 过滤。控制台的 Trace 列表筛选和导出会复用同一组条件。
 
 成功的聊天 Trace 会保存 Provider 返回的 `usage`，包含 `prompt_tokens`、`completion_tokens`、`total_tokens` 和 `source`。当 Provider 未返回 usage 时 token 保持 `0`，`source` 标记为 `unknown`；当前阶段只做可观测记录，不做预算扣减或成本估算。
+
+`GET /gateway/v1/usage/summary` 会基于 Trace usage 做只读聚合，支持 `group_by=app|provider|model`，并可沿用 `status`、`app_id`、`provider_id`、`event_type` 过滤。该接口用于后续控制台趋势报表和 token/day 账本，不会反向修改 Trace 或执行预算扣减。
 
 默认 Trace 存储为 `data/traces.jsonl`。可通过配置项 `trace_retention_max` 控制最多保留条数；`0` 或不配置表示不裁剪。
 

@@ -72,6 +72,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /gateway/v1/traces", h.traceList)
 	mux.HandleFunc("GET /gateway/v1/traces/export", h.traceExport)
 	mux.HandleFunc("GET /gateway/v1/traces/", h.traceByID)
+	mux.HandleFunc("GET /gateway/v1/usage/summary", h.usageSummary)
 	mux.HandleFunc("GET /gateway/v1/providers", h.providers)
 	mux.HandleFunc("GET /gateway/v1/providers/export", h.providersExport)
 	mux.HandleFunc("GET /gateway/v1/models", h.models)
@@ -207,6 +208,38 @@ func (h *Handler) traceExport(w http.ResponseWriter, r *http.Request) {
 		EventType:  r.URL.Query().Get("event_type"),
 	})
 	writeJSONL(w, "traces.jsonl", page.Items)
+}
+
+func (h *Handler) usageSummary(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	groupBy := query.Get("group_by")
+	if groupBy == "" {
+		groupBy = "provider"
+	}
+	if groupBy != "app" && groupBy != "provider" && groupBy != "model" {
+		writeError(w, http.StatusBadRequest, "", "invalid_request", "group_by must be app, provider, or model")
+		return
+	}
+	summary := h.traces.UsageSummary(trace.UsageSummaryQuery{
+		ListQuery: trace.ListQuery{
+			Status:     query.Get("status"),
+			AppID:      query.Get("app_id"),
+			ProviderID: query.Get("provider_id"),
+			EventType:  query.Get("event_type"),
+		},
+		GroupBy: groupBy,
+	})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"summary": summary,
+		"items":   summary.Items,
+		"filters": map[string]string{
+			"group_by":    summary.GroupBy,
+			"status":      query.Get("status"),
+			"app_id":      query.Get("app_id"),
+			"provider_id": query.Get("provider_id"),
+			"event_type":  query.Get("event_type"),
+		},
+	})
 }
 
 func (h *Handler) providers(w http.ResponseWriter, r *http.Request) {
