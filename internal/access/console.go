@@ -45,6 +45,7 @@ const consoleHTML = `<!doctype html>
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .trace-table { min-width: 1280px; }
     .audit-table { min-width: 760px; font-size: 13px; }
+    .usage-table { min-width: 920px; }
     .tool-table, .mcp-table { min-width: 980px; }
     .issue-table { min-width: 980px; }
     .app-table { min-width: 1040px; }
@@ -65,6 +66,12 @@ const consoleHTML = `<!doctype html>
     .trace-table th:nth-child(8), .trace-table td:nth-child(8) { width: 90px; }
     .trace-table th:nth-child(9), .trace-table td:nth-child(9) { width: 180px; }
     .trace-table th:nth-child(10), .trace-table td:nth-child(10) { width: 240px; }
+    .usage-table th:nth-child(1), .usage-table td:nth-child(1) { width: 240px; }
+    .usage-table th:nth-child(2), .usage-table td:nth-child(2) { width: 120px; }
+    .usage-table th:nth-child(3), .usage-table td:nth-child(3) { width: 150px; }
+    .usage-table th:nth-child(4), .usage-table td:nth-child(4) { width: 150px; }
+    .usage-table th:nth-child(5), .usage-table td:nth-child(5) { width: 150px; }
+    .usage-table th:nth-child(6), .usage-table td:nth-child(6) { width: 130px; }
     .audit-table th:nth-child(1), .audit-table td:nth-child(1) { width: 150px; }
     .audit-table th:nth-child(2), .audit-table td:nth-child(2) { width: 90px; }
     .audit-table th:nth-child(3), .audit-table td:nth-child(3) { width: 130px; }
@@ -523,6 +530,40 @@ const consoleHTML = `<!doctype html>
         <section class="panel">
           <div class="panel-head">
             <div>
+              <h2 data-i18n="usageSummary">使用量汇总</h2>
+              <div class="muted" id="usage-summary">0 token</div>
+            </div>
+            <div class="actions">
+              <select id="usage-group" style="max-width: 180px;">
+                <option value="provider" data-i18n="groupByProvider">按 Provider</option>
+                <option value="app" data-i18n="groupByApp">按应用</option>
+                <option value="model" data-i18n="groupByModel">按模型</option>
+              </select>
+              <button class="secondary" id="usage-refresh" data-i18n="refresh">刷新</button>
+            </div>
+          </div>
+          <div class="panel-body" style="padding-top: 8px; padding-bottom: 8px;">
+            <div class="muted" id="usage-message" data-i18n="loadingUsage">正在加载使用量...</div>
+          </div>
+          <div class="table-wrap" style="height: 240px;">
+            <table class="usage-table">
+              <thead>
+                <tr>
+                  <th data-i18n="usageGroup">分组</th>
+                  <th data-i18n="usageRecords">记录数</th>
+                  <th data-i18n="promptTokens">输入 token</th>
+                  <th data-i18n="completionTokens">输出 token</th>
+                  <th data-i18n="totalTokens">总 token</th>
+                  <th data-i18n="unknownUsage">未知 usage</th>
+                </tr>
+              </thead>
+              <tbody id="usage-rows"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
               <h2 data-i18n="requestTraces">请求追踪</h2>
               <div class="muted" id="summary">正在加载追踪...</div>
             </div>
@@ -889,9 +930,14 @@ const consoleHTML = `<!doctype html>
     const mcpServerFilter = document.querySelector("#mcp-server-filter");
     const mcpScopeFilter = document.querySelector("#mcp-scope-filter");
     const mcpEnabledFilter = document.querySelector("#mcp-enabled-filter");
+    const usageRows = document.querySelector("#usage-rows");
+    const usageMessage = document.querySelector("#usage-message");
+    const usageSummary = document.querySelector("#usage-summary");
+    const usageGroup = document.querySelector("#usage-group");
     let allTraces = [];
     let traceTotal = 0;
     let traceStats = { total: 0, completed: 0, failed: 0, fallbacks: 0, quotaRejected: 0, appQuotaRejected: 0, providerQuotaRejected: 0, quotaChecked: 0 };
+    let usageData = { summary: { total_tokens: 0, usage_records: 0, total_records: 0 }, items: [] };
     let tracePage = 1;
     const tracePageSize = 20;
     let allAuditEvents = [];
@@ -954,6 +1000,20 @@ const consoleHTML = `<!doctype html>
         appQuotaRejectedMetric: "App 配额拒绝",
         providerQuotaRejectedMetric: "Provider 配额拒绝",
         quotaCheckedMetric: "配额检查",
+        usageSummary: "使用量汇总",
+        usageSummaryText: "{tokens} token | {usageRecords} 条 usage / {totalRecords} 条 Trace",
+        usageHint: "基于当前 Trace 筛选条件聚合，不做预算扣减。",
+        loadingUsage: "正在加载使用量...",
+        noUsage: "暂无使用量数据。",
+        groupByProvider: "按 Provider",
+        groupByApp: "按应用",
+        groupByModel: "按模型",
+        usageGroup: "分组",
+        usageRecords: "记录数",
+        promptTokens: "输入 token",
+        completionTokens: "输出 token",
+        totalTokens: "总 token",
+        unknownUsage: "未知 usage",
         requestTraces: "请求追踪",
         allStatus: "全部状态",
         traceExportSafety: "Trace \u5bfc\u51fa\u5df2\u6309\u5f53\u524d\u7b5b\u9009\u6761\u4ef6\u751f\u6210\uff0c\u8bf7\u6c42\u5feb\u7167\u590d\u7528\u5df2\u4fdd\u5b58\u7684\u8131\u654f/\u622a\u65ad\u7248\u672c\uff0c\u4e0d\u5305\u542b\u5e94\u7528 Token\u3002",
@@ -1257,6 +1317,20 @@ const consoleHTML = `<!doctype html>
         appQuotaRejectedMetric: "App Quota Rejected",
         providerQuotaRejectedMetric: "Provider Quota Rejected",
         quotaCheckedMetric: "Quota Checked",
+        usageSummary: "Usage Summary",
+        usageSummaryText: "{tokens} tokens | {usageRecords} usage records / {totalRecords} traces",
+        usageHint: "Aggregated from current Trace filters; budgets are not deducted.",
+        loadingUsage: "Loading usage...",
+        noUsage: "No usage data.",
+        groupByProvider: "By Provider",
+        groupByApp: "By App",
+        groupByModel: "By Model",
+        usageGroup: "Group",
+        usageRecords: "Records",
+        promptTokens: "Prompt tokens",
+        completionTokens: "Completion tokens",
+        totalTokens: "Total tokens",
+        unknownUsage: "Unknown usage",
         requestTraces: "Request Traces",
         allStatus: "All status",
         traceExportSafety: "Trace export uses the current filters and the stored safe request snapshot. Redacted or truncated values stay redacted, and app tokens are not included.",
@@ -1561,7 +1635,9 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#refresh").addEventListener("click", loadAll);
     document.querySelector("#issue-refresh").addEventListener("click", loadAll);
     document.querySelector("#audit-refresh").addEventListener("click", loadAudit);
-    document.querySelector("#trace-filter-apply").addEventListener("click", () => { tracePage = 1; loadTraces(); });
+    document.querySelector("#usage-refresh").addEventListener("click", loadUsageSummary);
+    usageGroup.addEventListener("change", loadUsageSummary);
+    document.querySelector("#trace-filter-apply").addEventListener("click", () => { tracePage = 1; loadTraces(); loadUsageSummary(); });
     document.querySelector("#trace-filter-clear").addEventListener("click", clearTraceFilters);
     document.querySelector("#audit-filter-apply").addEventListener("click", () => { auditPage = 1; loadAudit(); });
     document.querySelector("#audit-filter-clear").addEventListener("click", clearAuditFilters);
@@ -1733,8 +1809,8 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#issue-next").addEventListener("click", () => { issuePage += 1; renderIssues(); });
     document.querySelector("#mcp-prev").addEventListener("click", () => { mcpPage = Math.max(1, mcpPage - 1); loadMCPCatalog(); });
     document.querySelector("#mcp-next").addEventListener("click", () => { mcpPage += 1; loadMCPCatalog(); });
-    statusFilter.addEventListener("change", () => { tracePage = 1; loadTraces(); });
-    traceEventFilter.addEventListener("change", () => { tracePage = 1; loadTraces(); });
+    statusFilter.addEventListener("change", () => { tracePage = 1; loadTraces(); loadUsageSummary(); });
+    traceEventFilter.addEventListener("change", () => { tracePage = 1; loadTraces(); loadUsageSummary(); });
 
     const zhFallback = {
       quotaRuntime: "\u914d\u989d\u8fd0\u884c\u65f6",
@@ -1797,6 +1873,9 @@ const consoleHTML = `<!doctype html>
       if (!value) return "";
       return new Date(value).toLocaleString();
     }
+    function formatNumber(value) {
+      return Number(value || 0).toLocaleString();
+    }
     function shortTraceID(value) {
       if (!value) return "-";
       return value.length > 16 ? value.slice(0, 16) + "..." : value;
@@ -1843,7 +1922,7 @@ const consoleHTML = `<!doctype html>
       return hasQueryParams(query) ? t("noFilterResults") : t(defaultKey);
     }
     async function loadAll() {
-      await Promise.all([loadTraces(), loadRuntimeHealth(), loadProviders(), loadModels(), loadProviderCatalog(), loadModelCatalog(), loadPolicyCatalog(), loadAudit(), loadApps(), loadGrants(), loadTools(), loadMCPCatalog()]);
+      await Promise.all([loadTraces(), loadUsageSummary(), loadRuntimeHealth(), loadProviders(), loadModels(), loadProviderCatalog(), loadModelCatalog(), loadPolicyCatalog(), loadAudit(), loadApps(), loadGrants(), loadTools(), loadMCPCatalog()]);
     }
     function traceQuery(limit = tracePageSize, offset = (tracePage - 1) * tracePageSize) {
       const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
@@ -1852,6 +1931,21 @@ const consoleHTML = `<!doctype html>
       if (traceAppFilter.value.trim()) query.set("app_id", traceAppFilter.value.trim());
       if (traceProviderFilter.value.trim()) query.set("provider_id", traceProviderFilter.value.trim());
       return query;
+    }
+    function usageQuery() {
+      const query = new URLSearchParams({ group_by: usageGroup.value || "provider" });
+      if (statusFilter.value) query.set("status", statusFilter.value);
+      if (traceEventFilter.value) query.set("event_type", traceEventFilter.value);
+      if (traceAppFilter.value.trim()) query.set("app_id", traceAppFilter.value.trim());
+      if (traceProviderFilter.value.trim()) query.set("provider_id", traceProviderFilter.value.trim());
+      return query;
+    }
+    async function loadUsageSummary() {
+      usageMessage.textContent = t("loadingUsage");
+      const res = await fetch("/gateway/v1/usage/summary?" + usageQuery().toString());
+      const data = await res.json();
+      usageData = data || { summary: {}, items: [] };
+      renderUsageSummary();
     }
     async function loadTraces() {
       const [pageRes, statsRes] = await Promise.all([
@@ -1945,6 +2039,29 @@ const consoleHTML = `<!doctype html>
       }));
       if (!allTraces.length) {
         rows.innerHTML = "<tr><td colspan=\"10\" class=\"muted\">" + emptyText("noTraces", traceQuery()) + "</td></tr>";
+      }
+    }
+    function renderUsageSummary() {
+      const summaryData = usageData.summary || {};
+      const items = usageData.items || [];
+      usageSummary.textContent = t("usageSummaryText", {
+        tokens: formatNumber(summaryData.total_tokens || 0),
+        usageRecords: formatNumber(summaryData.usage_records || 0),
+        totalRecords: formatNumber(summaryData.total_records || 0)
+      });
+      usageMessage.textContent = items.length ? t("usageHint") : emptyText("noUsage", usageQuery());
+      usageRows.innerHTML = items.map(item =>
+        "<tr title=\"" + esc(item.key || "") + "\">" +
+          "<td>" + esc(item.key || "unknown") + "</td>" +
+          "<td>" + formatNumber(item.records || 0) + "</td>" +
+          "<td>" + formatNumber(item.prompt_tokens || 0) + "</td>" +
+          "<td>" + formatNumber(item.completion_tokens || 0) + "</td>" +
+          "<td>" + formatNumber(item.total_tokens || 0) + "</td>" +
+          "<td>" + formatNumber(item.unknown_usage || 0) + "</td>" +
+        "</tr>"
+      ).join("");
+      if (!items.length) {
+        usageRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + emptyText("noUsage", usageQuery()) + "</td></tr>";
       }
     }
     function pageCount(total, size) {
@@ -3282,6 +3399,7 @@ const consoleHTML = `<!doctype html>
       traceEventFilter.value = "";
       tracePage = 1;
       loadTraces();
+      loadUsageSummary();
     }
     function clearAuditFilters() {
       auditActionFilter.value = "";

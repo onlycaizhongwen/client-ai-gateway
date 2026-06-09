@@ -183,6 +183,7 @@ try {
   $zhTraces = New-Text @(0x8bf7, 0x6c42, 0x8ffd, 0x8e2a)
   $zhAudit = New-Text @(0x5ba1, 0x8ba1, 0x4e8b, 0x4ef6)
   $zhQuotaRejected = New-Text @(0x914d, 0x989d, 0x62d2, 0x7edd)
+  $zhUsageSummary = New-Text @(0x4f7f, 0x7528, 0x91cf, 0x6c47, 0x603b)
   $zhPrev = New-Text @(0x4e0a, 0x4e00, 0x9875)
   $zhNext = New-Text @(0x4e0b, 0x4e00, 0x9875)
 
@@ -194,6 +195,7 @@ try {
     $zhTraces,
     $zhAudit,
     $zhQuotaRejected,
+    $zhUsageSummary,
     $zhPrev,
     $zhNext,
     "English"
@@ -204,6 +206,7 @@ try {
     $zhApps,
     $zhTraces,
     $zhAudit,
+    $zhUsageSummary,
     $zhPrev,
     $zhNext
   )
