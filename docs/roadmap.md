@@ -15,7 +15,7 @@
 | MCP | Manifest MVP | 只加载 Manifest，不执行 MCP Server。 |
 | 企业部署说明 | 已补齐初版 | 已有部署、权限审计、失败降级专题文档。 |
 | 安全审查清单 | 已补齐初版 | 覆盖 token、管理 API、Trace、Audit、工具、MCP、Provider 策略。 |
-| Provider SDK 边界 | 已补齐初版 | 已有接口、配置、凭证、健康检查、错误码和测试要求。 |
+| Provider SDK 边界 | 已补齐文档版 | 已有接口、配置、凭证、健康检查、错误码、能力矩阵、Adapter 模板和测试模板。 |
 | Tool / Plugin SDK 边界 | 已补齐初版 | 已有 Manifest、scope、只读边界、输入输出 schema、Trace/Audit 和测试要求。 |
 | 企业集中审计 | 已补齐初版 | 已有 JSONL 到 SIEM / SOC 的字段映射、脱敏、采集和告警建议。 |
 | MCP 真实运行时设计 | 已补齐草案 | 已有进程模型、沙箱、授权、审计字段和失败关闭门槛。 |
@@ -28,7 +28,7 @@
 | --- | --- | --- |
 | P0 | 真实浏览器 UI 回归 | 已补 headless 桌面/窄屏截图和 DOM 关键内容断言，后续需要 Playwright 级交互断言和像素回归。 |
 | P0 | 安全审查清单 | 已补齐初版，后续随真实 MCP / 插件 SDK 继续扩展。 |
-| P1 | Provider SDK 边界 | 已补齐初版，后续需要示例模板和能力矩阵。 |
+| P1 | Provider SDK 边界 | 已补齐文档版，后续需要外部 SDK 包、运行时 capability 字段和真实第三方 Provider 示例。 |
 | P1 | 插件 / Tool SDK | 已补齐初版，后续需要签名/来源校验、示例模板和真实沙箱模型。 |
 | P1 | 企业集中审计 | 已补齐初版，后续需要内置 exporter、时间游标和企业租户字段。 |
 | P2 | MCP 真实运行时 | 已补设计草案，当前仍禁止执行外部 MCP；后续进入沙箱运行时实现。 |

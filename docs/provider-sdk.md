@@ -11,6 +11,24 @@ Provider Adapter 位于 `internal/adapters`。当前已有：
 
 配置入口位于 `configs/*.json` 的 `providers[]`。
 
+## 能力矩阵
+
+当前 Provider SDK 仍是仓库内部接口，能力以“声明 + 运行时探测”为主，不做自动推断。新增 Provider 前建议先按下表确认适配范围：
+
+| 能力 | 当前契约 | 控制面影响 | 新 Provider 要求 |
+| --- | --- | --- | --- |
+| Chat Completions | 已支持 | `/v1/chat/completions`、Trace、路由解释 | 必须实现 `Provider.Chat`。 |
+| Streaming | 未支持 | API 固定非流式 | 不要向上游开启 `stream=true`。 |
+| Embeddings | 未支持 | 暂无入口和 grant | 不要在 `models` 中承诺 embedding-only 能力。 |
+| Vision / 多模态 | 未支持 | 请求模型只有文本 messages | 如上游支持，也只能按文本 chat 接入。 |
+| Tool Calling | 未支持 | 工具由网关内置 Tool runtime 管理 | Provider 不应自行执行工具。 |
+| Health Check | 可选但推荐 | Provider health、模型目录、路由可用性 | 企业/云端 Provider 应实现 `HealthChecker`。 |
+| Credential | 已支持 env 引用 | Trace/Audit 不暴露密钥 | 使用 `api_key_env`，不要把密钥写入配置。 |
+| Rate Limit | 已支持 Provider RPM | 路由候选超限跳过 | 配额由网关控制，Provider 不要自行改全局状态。 |
+| Cost / Budget | 未支持 | 暂无成本报表 | 可返回 token usage，不要伪造成本金额。 |
+
+Provider 配置中的 `models` 目前只表示“该 Provider 可被路由候选选中”，不等同于完整模型能力清单。后续如果引入 vision、embedding、tool-call 等能力，应扩展独立 capability 字段，而不是复用 `models` 字符串做隐式约定。
+
 ## 核心接口
 
 ```go
@@ -82,6 +100,22 @@ OpenAI-compatible 示例：
 }
 ```
 
+自定义 Provider 配置模板：
+
+```json
+{
+  "id": "enterprise-llm",
+  "name": "Enterprise LLM",
+  "class": "cloud",
+  "adapter": "enterprise-compatible",
+  "base_url": "https://llm.example.internal",
+  "api_key_env": "ENTERPRISE_LLM_API_KEY",
+  "models": ["enterprise-chat"],
+  "healthy": true,
+  "enabled": true
+}
+```
+
 ## 凭证约定
 
 - 使用 `api_key_env` 从环境变量读取密钥。
@@ -128,6 +162,96 @@ Provider adapter 应尽量返回 `ProviderError`，并使用稳定错误码：
 5. 在 `docs/error-codes.md` 中补充新增稳定错误码。
 6. 在 README 或本文件中增加配置示例。
 
+最小 Adapter 模板：
+
+```go
+package adapters
+
+import (
+    "context"
+    "fmt"
+    "net/http"
+    "strings"
+)
+
+type EnterpriseCompatibleConfig struct {
+    ID        string
+    BaseURL   string
+    APIKey    string
+    APIKeyEnv string
+    Client    *http.Client
+}
+
+type EnterpriseCompatibleProvider struct {
+    id        string
+    baseURL   string
+    apiKey    string
+    apiKeyEnv string
+    client    *http.Client
+}
+
+func NewEnterpriseCompatibleProvider(cfg EnterpriseCompatibleConfig) (*EnterpriseCompatibleProvider, error) {
+    if strings.TrimSpace(cfg.ID) == "" {
+        return nil, fmt.Errorf("provider id is required")
+    }
+    if strings.TrimSpace(cfg.BaseURL) == "" {
+        return nil, fmt.Errorf("base url is required")
+    }
+    client := cfg.Client
+    if client == nil {
+        client = http.DefaultClient
+    }
+    return &EnterpriseCompatibleProvider{
+        id:        cfg.ID,
+        baseURL:   strings.TrimRight(cfg.BaseURL, "/"),
+        apiKey:    cfg.APIKey,
+        apiKeyEnv: strings.TrimSpace(cfg.APIKeyEnv),
+        client:    client,
+    }, nil
+}
+
+func (p *EnterpriseCompatibleProvider) ID() string {
+    return p.id
+}
+
+func (p *EnterpriseCompatibleProvider) Chat(ctx context.Context, input ChatInput) (Result, error) {
+    if p.apiKeyEnv != "" && strings.TrimSpace(p.apiKey) == "" {
+        return Result{}, &ProviderError{
+            ProviderID: p.id,
+            Code:       ErrorMissingCredential,
+            Message:    "api key environment variable " + p.apiKeyEnv + " is not set",
+        }
+    }
+    // 1. Translate ChatInput into the upstream request.
+    // 2. Set Authorization from p.apiKey when present.
+    // 3. Classify upstream errors as ProviderError with stable codes.
+    // 4. Return actual ProviderID, final model and usage from upstream.
+    return Result{}, &ProviderError{ProviderID: p.id, Code: ErrorUpstreamStatus, Message: "not implemented"}
+}
+
+func (p *EnterpriseCompatibleProvider) CheckHealth(ctx context.Context) error {
+    // Use a cheap health endpoint, never an expensive inference request.
+    return nil
+}
+```
+
+`NewProvider` 注册分支模板：
+
+```go
+case "enterprise-compatible":
+    apiKey := ""
+    if provider.APIKeyEnv != "" {
+        apiKey = os.Getenv(provider.APIKeyEnv)
+    }
+    return NewEnterpriseCompatibleProvider(EnterpriseCompatibleConfig{
+        ID:        provider.ID,
+        BaseURL:   provider.BaseURL,
+        APIKey:    apiKey,
+        APIKeyEnv: provider.APIKeyEnv,
+        Client:    &http.Client{Timeout: 60 * time.Second},
+    })
+```
+
 ## 测试要求
 
 至少补充：
@@ -148,10 +272,57 @@ go test ./...
 go build ./cmd/gateway-daemon
 ```
 
+Adapter 测试模板：
+
+```go
+func TestEnterpriseCompatibleChatSuccess(t *testing.T) {
+    upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if r.URL.Path != "/v1/chat/completions" {
+            t.Fatalf("unexpected path %s", r.URL.Path)
+        }
+        w.Header().Set("Content-Type", "application/json")
+        _, _ = w.Write([]byte(`{
+          "model":"enterprise-chat",
+          "choices":[{"message":{"role":"assistant","content":"ok"}}],
+          "usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}
+        }`))
+    }))
+    defer upstream.Close()
+
+    provider, err := NewEnterpriseCompatibleProvider(EnterpriseCompatibleConfig{
+        ID:      "enterprise",
+        BaseURL: upstream.URL,
+        Client:  upstream.Client(),
+    })
+    if err != nil {
+        t.Fatalf("new provider: %v", err)
+    }
+    result, err := provider.Chat(context.Background(), ChatInput{
+        TraceID: "trace-test",
+        Model:   "enterprise-chat",
+        Messages: []Message{{Role: "user", Content: "hello"}},
+    })
+    if err != nil {
+        t.Fatalf("chat: %v", err)
+    }
+    if result.ProviderID != "enterprise" || result.Model != "enterprise-chat" || result.Content != "ok" {
+        t.Fatalf("unexpected result: %+v", result)
+    }
+}
+```
+
+上线检查清单：
+
+- Adapter 名称稳定，配置示例和 `NewProvider` 分支一致。
+- 所有上游错误都归一为 `ProviderError` 或明确可接受的普通错误。
+- Trace/Audit、日志和错误消息不包含 API Key、Authorization header 或完整请求体。
+- `CheckHealth` 使用低成本探测，不触发真实推理账单。
+- `go test ./internal/adapters ./internal/providerhealth ./internal/access` 覆盖成功、认证失败、限流、超时和无效响应。
+- README 或部署文档说明环境变量、Provider `class` 和敏感数据策略影响。
+
 ## 当前限制
 
 - 还没有独立发布的外部 Provider SDK 包，当前以仓库内部接口为准。
 - 未实现流式响应。
-- 未实现 Provider 级预算、配额或速率限制。
-- 未实现模型能力矩阵，例如 vision、embedding、tool-call capability。
-
+- 已实现 Provider RPM 配额，但未实现 Provider 级预算、token/day 记账和成本统计。
+- 已补文档级能力矩阵，但未实现运行时 capability 字段，例如 vision、embedding、tool-call capability。
