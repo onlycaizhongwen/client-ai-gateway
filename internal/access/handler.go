@@ -632,12 +632,14 @@ func (h *Handler) appAction(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "", "invalid_request", err.Error())
 			return
 		}
-		if err := h.runtime.SetAppRPMQuota(appID, req.RequestsPerMinute); err != nil {
-			h.saveAudit(audit.Event{AppID: app.ID, Action: "app.quota", Target: appID, Result: audit.ResultFailed, Error: err.Error(), Metadata: map[string]any{"requests_per_minute": req.RequestsPerMinute}})
+		change, err := h.runtime.SetAppRPMQuota(appID, req.RequestsPerMinute)
+		metadata := quotaChangeAuditMetadata(change, req.RequestsPerMinute)
+		if err != nil {
+			h.saveAudit(audit.Event{AppID: app.ID, Action: "app.quota", Target: appID, Result: audit.ResultFailed, Error: err.Error(), Metadata: metadata})
 			writeError(w, http.StatusBadRequest, "", "app_quota_update_failed", err.Error())
 			return
 		}
-		h.saveAudit(audit.Event{AppID: app.ID, Action: "app.quota", Target: appID, Result: audit.ResultSuccess, Metadata: map[string]any{"requests_per_minute": req.RequestsPerMinute}})
+		h.saveAudit(audit.Event{AppID: app.ID, Action: "app.quota", Target: appID, Result: audit.ResultSuccess, Metadata: metadata})
 		writeJSON(w, http.StatusOK, map[string]any{"status": "updated", "app_id": appID, "requests_per_minute": req.RequestsPerMinute})
 	default:
 		writeError(w, http.StatusNotFound, "", "not_found", "app action not found")
@@ -1572,12 +1574,14 @@ func (h *Handler) providerAction(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "", "invalid_request", err.Error())
 			return
 		}
-		if err := h.runtime.SetProviderRPMQuota(providerID, req.RequestsPerMinute); err != nil {
-			h.saveAudit(audit.Event{AppID: app.ID, Action: "provider.quota", Target: providerID, Result: audit.ResultFailed, Error: err.Error(), Metadata: map[string]any{"requests_per_minute": req.RequestsPerMinute}})
+		change, err := h.runtime.SetProviderRPMQuota(providerID, req.RequestsPerMinute)
+		metadata := quotaChangeAuditMetadata(change, req.RequestsPerMinute)
+		if err != nil {
+			h.saveAudit(audit.Event{AppID: app.ID, Action: "provider.quota", Target: providerID, Result: audit.ResultFailed, Error: err.Error(), Metadata: metadata})
 			writeError(w, http.StatusBadRequest, "", "provider_quota_update_failed", err.Error())
 			return
 		}
-		h.saveAudit(audit.Event{AppID: app.ID, Action: "provider.quota", Target: providerID, Result: audit.ResultSuccess, Metadata: map[string]any{"requests_per_minute": req.RequestsPerMinute}})
+		h.saveAudit(audit.Event{AppID: app.ID, Action: "provider.quota", Target: providerID, Result: audit.ResultSuccess, Metadata: metadata})
 		writeJSON(w, http.StatusOK, map[string]any{"status": "updated", "provider_id": providerID, "requests_per_minute": req.RequestsPerMinute})
 	case "probe":
 		view, err := h.runtime.ProbeProvider(r.Context(), providerID)
@@ -1713,6 +1717,13 @@ func parseAppAction(path string) (string, string, bool) {
 		return "", "", false
 	}
 	return parts[0], parts[1], true
+}
+
+func quotaChangeAuditMetadata(change gatewayruntime.RPMQuotaChange, requestedRPM int) map[string]any {
+	return map[string]any{
+		"old_requests_per_minute": change.OldRequestsPerMinute,
+		"requests_per_minute":     requestedRPM,
+	}
 }
 
 func findTool(cfg config.Config, toolID string) (toolConfigRef, bool) {

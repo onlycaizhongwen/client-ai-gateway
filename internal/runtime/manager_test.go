@@ -114,30 +114,42 @@ func TestManagerSetProviderRPMQuota(t *testing.T) {
 	}
 	defer manager.Close()
 
-	if err := manager.SetProviderRPMQuota("local", 9); err != nil {
+	change, err := manager.SetProviderRPMQuota("local", 9)
+	if err != nil {
 		t.Fatalf("set provider rpm quota: %v", err)
+	}
+	if change.OldRequestsPerMinute != 0 || change.RequestsPerMinute != 9 {
+		t.Fatalf("expected provider quota change 0 -> 9, got %+v", change)
 	}
 	quotas := manager.Snapshot().Config.Quotas.Providers
 	if len(quotas) != 1 || quotas[0].ProviderID != "local" || quotas[0].RequestsPerMinute != 9 {
 		t.Fatalf("expected provider quota after reload, got %+v", quotas)
 	}
 
-	if err := manager.SetProviderRPMQuota("local", 3); err != nil {
+	change, err = manager.SetProviderRPMQuota("local", 3)
+	if err != nil {
 		t.Fatalf("update provider rpm quota: %v", err)
+	}
+	if change.OldRequestsPerMinute != 9 || change.RequestsPerMinute != 3 {
+		t.Fatalf("expected provider quota change 9 -> 3, got %+v", change)
 	}
 	quotas = manager.Snapshot().Config.Quotas.Providers
 	if len(quotas) != 1 || quotas[0].RequestsPerMinute != 3 {
 		t.Fatalf("expected updated provider quota, got %+v", quotas)
 	}
 
-	if err := manager.SetProviderRPMQuota("local", 0); err != nil {
+	change, err = manager.SetProviderRPMQuota("local", 0)
+	if err != nil {
 		t.Fatalf("disable provider rpm quota: %v", err)
+	}
+	if change.OldRequestsPerMinute != 3 || change.RequestsPerMinute != 0 {
+		t.Fatalf("expected provider quota change 3 -> 0, got %+v", change)
 	}
 	if got := manager.Snapshot().Config.Quotas.Providers; len(got) != 0 {
 		t.Fatalf("expected provider quota to be removed, got %+v", got)
 	}
 
-	if err := manager.SetProviderRPMQuota("local", -1); err == nil {
+	if _, err := manager.SetProviderRPMQuota("local", -1); err == nil {
 		t.Fatal("expected negative provider rpm quota to fail")
 	}
 }
@@ -156,30 +168,42 @@ func TestManagerSetAppRPMQuota(t *testing.T) {
 	}
 	defer manager.Close()
 
-	if err := manager.SetAppRPMQuota("app", 11); err != nil {
+	change, err := manager.SetAppRPMQuota("app", 11)
+	if err != nil {
 		t.Fatalf("set app rpm quota: %v", err)
+	}
+	if change.OldRequestsPerMinute != 0 || change.RequestsPerMinute != 11 {
+		t.Fatalf("expected app quota change 0 -> 11, got %+v", change)
 	}
 	quotas := manager.Snapshot().Config.Quotas.Apps
 	if len(quotas) != 1 || quotas[0].AppID != "app" || quotas[0].RequestsPerMinute != 11 {
 		t.Fatalf("expected app quota after reload, got %+v", quotas)
 	}
 
-	if err := manager.SetAppRPMQuota("app", 4); err != nil {
+	change, err = manager.SetAppRPMQuota("app", 4)
+	if err != nil {
 		t.Fatalf("update app rpm quota: %v", err)
+	}
+	if change.OldRequestsPerMinute != 11 || change.RequestsPerMinute != 4 {
+		t.Fatalf("expected app quota change 11 -> 4, got %+v", change)
 	}
 	quotas = manager.Snapshot().Config.Quotas.Apps
 	if len(quotas) != 1 || quotas[0].RequestsPerMinute != 4 {
 		t.Fatalf("expected updated app quota, got %+v", quotas)
 	}
 
-	if err := manager.SetAppRPMQuota("app", 0); err != nil {
+	change, err = manager.SetAppRPMQuota("app", 0)
+	if err != nil {
 		t.Fatalf("disable app rpm quota: %v", err)
+	}
+	if change.OldRequestsPerMinute != 4 || change.RequestsPerMinute != 0 {
+		t.Fatalf("expected app quota change 4 -> 0, got %+v", change)
 	}
 	if got := manager.Snapshot().Config.Quotas.Apps; len(got) != 0 {
 		t.Fatalf("expected app quota to be removed, got %+v", got)
 	}
 
-	if err := manager.SetAppRPMQuota("app", -1); err == nil {
+	if _, err := manager.SetAppRPMQuota("app", -1); err == nil {
 		t.Fatal("expected negative app rpm quota to fail")
 	}
 }
@@ -203,7 +227,8 @@ func TestManagerConfigUpdatesAreSerialized(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		errs <- manager.SetAppRPMQuota("app", 13)
+		_, err := manager.SetAppRPMQuota("app", 13)
+		errs <- err
 	}()
 	go func() {
 		defer wg.Done()

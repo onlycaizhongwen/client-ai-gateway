@@ -572,6 +572,12 @@ func TestAppQuotaManagementHTTP(t *testing.T) {
 	if len(quotaEvents) < 2 || quotaEvents[0].Result != audit.ResultFailed || quotaEvents[1].Result != audit.ResultSuccess {
 		t.Fatalf("expected app.quota audit success and failure, got %+v", quotaEvents)
 	}
+	if quotaEvents[1].Metadata["old_requests_per_minute"] != 0 || quotaEvents[1].Metadata["requests_per_minute"] != 7 {
+		t.Fatalf("expected app.quota old/new metadata, got %+v", quotaEvents[1].Metadata)
+	}
+	if quotaEvents[0].Metadata["requests_per_minute"] != -1 {
+		t.Fatalf("expected failed app.quota requested rpm metadata, got %+v", quotaEvents[0].Metadata)
+	}
 }
 
 func TestAppsExportMasksTokens(t *testing.T) {
@@ -2137,6 +2143,12 @@ func TestProviderManagementHTTP(t *testing.T) {
 	quotaEvents := auditStore.List(audit.ListQuery{Action: "provider.quota"})
 	if len(quotaEvents) < 2 || quotaEvents[0].Result != audit.ResultFailed || quotaEvents[1].Result != audit.ResultSuccess {
 		t.Fatalf("expected provider.quota audit success and failure, got %+v", quotaEvents)
+	}
+	if quotaEvents[1].Metadata["old_requests_per_minute"] != 0 || quotaEvents[1].Metadata["requests_per_minute"] != 5 {
+		t.Fatalf("expected provider.quota old/new metadata, got %+v", quotaEvents[1].Metadata)
+	}
+	if quotaEvents[0].Metadata["requests_per_minute"] != -1 {
+		t.Fatalf("expected failed provider.quota requested rpm metadata, got %+v", quotaEvents[0].Metadata)
 	}
 }
 

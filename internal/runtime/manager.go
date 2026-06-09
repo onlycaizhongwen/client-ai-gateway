@@ -40,6 +40,11 @@ type Manager struct {
 	reloadCount   int
 }
 
+type RPMQuotaChange struct {
+	OldRequestsPerMinute int
+	RequestsPerMinute    int
+}
+
 func NewManager(configPath string, traceStore trace.Store) (*Manager, error) {
 	manager := &Manager{configPath: configPath, traceStore: traceStore, startedAt: time.Now().UTC()}
 	if err := manager.Reload(); err != nil {
@@ -95,30 +100,36 @@ func (m *Manager) SetProviderEnabled(providerID string, enabled bool) error {
 	})
 }
 
-func (m *Manager) SetProviderRPMQuota(providerID string, requestsPerMinute int) error {
+func (m *Manager) SetProviderRPMQuota(providerID string, requestsPerMinute int) (RPMQuotaChange, error) {
 	if requestsPerMinute < 0 {
-		return fmt.Errorf("provider %q requests_per_minute must be >= 0", providerID)
+		return RPMQuotaChange{}, fmt.Errorf("provider %q requests_per_minute must be >= 0", providerID)
 	}
-	return m.updateConfigAndReload(func(cfg *config.Config) error {
+	change := RPMQuotaChange{RequestsPerMinute: requestsPerMinute}
+	err := m.updateConfigAndReload(func(cfg *config.Config) error {
 		if !providerExists(cfg.Providers, providerID) {
 			return fmt.Errorf("provider %q not found", providerID)
 		}
+		change.OldRequestsPerMinute = providerQuotaRPM(cfg.Quotas.Providers, providerID)
 		cfg.Quotas.Providers = setProviderQuotaRPM(cfg.Quotas.Providers, providerID, requestsPerMinute)
 		return nil
 	})
+	return change, err
 }
 
-func (m *Manager) SetAppRPMQuota(appID string, requestsPerMinute int) error {
+func (m *Manager) SetAppRPMQuota(appID string, requestsPerMinute int) (RPMQuotaChange, error) {
 	if requestsPerMinute < 0 {
-		return fmt.Errorf("app %q requests_per_minute must be >= 0", appID)
+		return RPMQuotaChange{}, fmt.Errorf("app %q requests_per_minute must be >= 0", appID)
 	}
-	return m.updateConfigAndReload(func(cfg *config.Config) error {
+	change := RPMQuotaChange{RequestsPerMinute: requestsPerMinute}
+	err := m.updateConfigAndReload(func(cfg *config.Config) error {
 		if !appExists(cfg.Apps, appID) {
 			return fmt.Errorf("app %q not found", appID)
 		}
+		change.OldRequestsPerMinute = appQuotaRPM(cfg.Quotas.Apps, appID)
 		cfg.Quotas.Apps = setAppQuotaRPM(cfg.Quotas.Apps, appID, requestsPerMinute)
 		return nil
 	})
+	return change, err
 }
 
 func (m *Manager) updateConfigAndReload(update func(*config.Config) error) error {
@@ -151,6 +162,24 @@ func providerExists(providers []config.Provider, providerID string) bool {
 		}
 	}
 	return false
+}
+
+func appQuotaRPM(quotas []config.AppQuota, appID string) int {
+	for _, quota := range quotas {
+		if quota.AppID == appID {
+			return quota.RequestsPerMinute
+		}
+	}
+	return 0
+}
+
+func providerQuotaRPM(quotas []config.ProviderQuota, providerID string) int {
+	for _, quota := range quotas {
+		if quota.ProviderID == providerID {
+			return quota.RequestsPerMinute
+		}
+	}
+	return 0
 }
 
 func setAppQuotaRPM(quotas []config.AppQuota, appID string, requestsPerMinute int) []config.AppQuota {
