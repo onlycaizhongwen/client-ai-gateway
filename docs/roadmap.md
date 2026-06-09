@@ -20,7 +20,7 @@
 | 企业集中审计 | 已补齐设计版 | 已有 JSONL 到 SIEM / SOC 的字段映射、脱敏、采集、告警、exporter、游标、租户字段和背压设计。 |
 | MCP 真实运行时设计 | 已补齐设计版 | 已有进程模型、状态机、Broker API、JSON-RPC 边界、沙箱、授权缓存、审计字段、错误码和分阶段路线。 |
 | 配额预算与限流 | 已完成 App + Provider RPM 管理闭环 | 已有 App 请求前 RPM 限流、Provider 候选级 RPM 跳过、控制台/API 配额管理、Trace 事件筛选、运行健康摘要和 Audit old/new。 |
-| 安装包与服务管理设计 | 已补齐草案 | 已有 Windows Service、macOS launchd、目录布局、升级回滚和验收门槛。 |
+| 安装包与服务管理设计 | 已补齐设计版 | 已有交付包结构、Windows Service、macOS launchd、Linux user service、目录布局、升级状态机、配置迁移、健康检查和验收矩阵。 |
 
 ## 主要缺口
 
@@ -33,7 +33,7 @@
 | P1 | 企业集中审计 | 已补齐设计版，后续需要实现内置 exporter、ACK 游标状态和企业部署配置。 |
 | P2 | MCP 真实运行时 | 已补设计版，当前仍禁止执行外部 MCP；后续从 Broker 空实现和 sandbox PoC 开始。 |
 | P2 | 配额 / 预算 / 速率限制 | 已完成 App + Provider RPM 管理闭环，后续补 Provider 预算、token/day 记账和趋势报表。 |
-| P2 | 安装包与服务管理 | 已补设计草案，当前仍未提供正式安装器或系统服务安装脚本。 |
+| P2 | 安装包与服务管理 | 已补设计版，当前仍未提供正式安装器或系统服务安装脚本。 |
 
 ## 建议迭代顺序
 
