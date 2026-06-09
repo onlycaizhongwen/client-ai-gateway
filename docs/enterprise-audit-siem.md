@@ -27,6 +27,102 @@ flowchart LR
 
 推荐优先使用终端日志 Agent 采集 `audit.jsonl`，API 导出适合补偿、抽样和人工复盘。
 
+## 内置 Exporter 设计草案
+
+后续如果在 daemon 内置集中审计 exporter，建议保持“本地 Audit 写入优先，远端发送异步”的原则，避免 SIEM 故障阻塞模型和工具调用。
+
+```mermaid
+flowchart LR
+  AuditStore[(audit.jsonl)] --> Cursor[Exporter Cursor]
+  Cursor --> Redact[字段 allowlist / 脱敏]
+  Redact --> Batch[批量封装]
+  Batch --> Sink{Sink}
+  Sink --> Kafka[Kafka]
+  Sink --> Syslog[Syslog]
+  Sink --> OTLP[OpenTelemetry Logs]
+  Sink --> HTTPS[HTTPS Collector]
+  Batch --> Retry[本地重试队列]
+  Retry --> Batch
+  Cursor --> State[(exporter-state.json)]
+```
+
+推荐配置形态：
+
+```json
+{
+  "audit_exporter": {
+    "enabled": false,
+    "sink": "https",
+    "endpoint": "https://siem.example.internal/ingest",
+    "tenant_id": "tenant-a",
+    "site_id": "cn-shanghai-office",
+    "asset_id_env": "DEVICE_ASSET_ID",
+    "batch_size": 100,
+    "flush_interval_ms": 5000,
+    "max_retry_queue": 10000,
+    "state_path": "data/audit-exporter-state.json",
+    "metadata_allowlist": [
+      "required_scopes",
+      "matched_grant",
+      "missing_grants",
+      "origin",
+      "server_id",
+      "sandbox_required",
+      "policy_rule_id",
+      "provider_id",
+      "old_requests_per_minute",
+      "requests_per_minute",
+      "old_enabled",
+      "enabled",
+      "explain_chain.stage",
+      "explain_chain.decision",
+      "explain_chain.reason",
+      "explain_chain.next_action"
+    ]
+  }
+}
+```
+
+当前版本未实现该配置。它用于约束后续实现，不应被现有 daemon 读取或执行。
+
+## 游标与增量语义
+
+当前 API 只有 `limit` / `offset`，适合人工分页，不适合作为生产增量游标。内置 exporter 或外部采集器建议使用文件 offset + event id 双游标：
+
+| 游标 | 用途 | 说明 |
+| --- | --- | --- |
+| `file_path` | 定位审计文件 | 配置变更或轮转后需要重新确认。 |
+| `byte_offset` | 增量读取 | tail JSONL 时记录最后成功 ACK 的字节位置。 |
+| `event_id` | 去重 | SIEM 侧按 `event.id` 幂等写入。 |
+| `created_at` | 排序和延迟统计 | 不作为唯一游标，避免时钟回拨和同毫秒事件。 |
+| `config_hash` | 源上下文 | 配置变化后辅助排障字段含义变化。 |
+
+推荐 ACK 语义：
+
+- 写入本地 `audit.jsonl` 成功即视为网关主流程完成。
+- exporter 只有在远端 sink 返回成功后才推进 `byte_offset`。
+- 远端失败时保留本地游标并指数退避重试。
+- 如果本地文件因 retention 被裁剪而游标落后，应记录 `audit_exporter_gap` 运维事件，并从当前文件起点恢复。
+- SIEM 侧应按 `event.id + host.id + tenant.id` 做幂等，允许至少一次投递。
+
+## 企业租户字段
+
+单机 Audit 事件不内置租户字段，企业采集层或未来 exporter 应补齐：
+
+| 字段 | 必填 | 来源建议 |
+| --- | --- | --- |
+| `tenant.id` | 是 | 企业部署配置或 MDM 下发。 |
+| `org.id` | 可选 | 集团 / 子公司组织树。 |
+| `site.id` | 可选 | 办公区、区域或网络域。 |
+| `host.id` | 是 | 终端资产 ID，优先来自 MDM / EDR。 |
+| `host.name` | 是 | 主机名。 |
+| `user.id` | 可选 | 当前登录用户，注意隐私合规。 |
+| `gateway.instance_id` | 是 | 本机网关实例 ID，安装时生成。 |
+| `gateway.version` | 是 | 构建版本。 |
+| `gateway.config_hash` | 推荐 | 配置摘要，不上传完整配置。 |
+
+租户字段不得从 App Token 推断，也不应把用户姓名、邮箱等个人信息作为唯一主键直接外发；需要时使用企业侧已批准的标识。
+
 ## 字段映射
 
 | Audit 字段 | SIEM 字段建议 | 说明 |
@@ -93,7 +189,21 @@ explain_chain.stage
 explain_chain.decision
 explain_chain.reason
 explain_chain.next_action
+old_requests_per_minute
+requests_per_minute
+old_enabled
+enabled
 ```
+
+禁止默认展开：
+
+| 字段 | 原因 |
+| --- | --- |
+| 完整 `request` / prompt | 应只通过 Trace 安全快照复盘。 |
+| Authorization / token / api_key | 明确敏感凭证。 |
+| 任意未知 metadata 对象 | 可能包含大对象或敏感上下文。 |
+| 原始工具输出 | 可能包含本地环境信息，应由工具自行最小化。 |
+| 完整配置文件 | 可能包含路径、内网地址或环境变量名。 |
 
 ## 告警规则建议
 
@@ -124,6 +234,37 @@ curl "http://127.0.0.1:18765/gateway/v1/audit/events/export?limit=500&offset=0" 
 - 设置 `audit_retention_max`，避免端侧无限增长。
 - 采集端应支持断点续传和本地缓冲。
 - 采集失败时不影响网关主流程，但应产生终端运维告警。
+
+## 失败、背压与降级
+
+集中审计不可用时，网关行为建议如下：
+
+| 场景 | 网关主流程 | Exporter 行为 | 告警建议 |
+| --- | --- | --- | --- |
+| SIEM endpoint 超时 | 不阻塞 | 指数退避，保留游标 | Medium |
+| 远端 4xx | 不阻塞 | 停止当前 sink，保留失败样本 | High |
+| 远端 5xx | 不阻塞 | 重试并限制队列 | Medium |
+| 本地重试队列满 | 不阻塞 | 丢弃最旧未发送批次或暂停读取 | High |
+| audit 文件被裁剪 | 不阻塞 | 记录 gap，从文件起点恢复 | High |
+| metadata 脱敏失败 | 不发送该事件 | 记录本地 exporter error | High |
+
+推荐背压上限：
+
+- 单批最大事件数：`100` 到 `500`。
+- 单事件序列化后大小：建议不超过 `32KB`。
+- 本地重试队列：按事件数和磁盘大小双限制。
+- flush 超时：建议 `3s` 到 `10s`。
+- exporter 不应持有 Audit Store 写锁执行网络请求。
+
+## Sink 映射建议
+
+| Sink | 适用场景 | 注意事项 |
+| --- | --- | --- |
+| Endpoint Agent tail | 当前首选 | 复用企业现有日志采集，不改 daemon。 |
+| HTTPS Collector | 轻量企业接入 | 需要 mTLS 或设备证书，避免只靠共享 token。 |
+| Syslog | 传统 SOC | 注意 JSON 转义、消息大小和 TLS。 |
+| Kafka | 大规模企业 | 需要本地缓冲、分区键和 ACK 策略。 |
+| OpenTelemetry Logs | 云原生日志 | 需要明确 resource attributes 和重试策略。 |
 
 ## 验收标准
 
