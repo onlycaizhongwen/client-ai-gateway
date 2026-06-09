@@ -1001,6 +1001,7 @@ const consoleHTML = `<!doctype html>
         action: "动作",
         result: "结果",
         appTarget: "应用 / 目标",
+        quotaChange: "配额变更",
         time: "时间",
         duration: "\u8017\u65f6",
         runtimeStatus: "运行时状态",
@@ -1306,6 +1307,7 @@ const consoleHTML = `<!doctype html>
         action: "Action",
         result: "Result",
         appTarget: "App / Target",
+        quotaChange: "Quota Change",
         time: "Time",
         duration: "Duration",
         runtimeStatus: "Runtime Status",
@@ -3604,7 +3606,7 @@ const consoleHTML = `<!doctype html>
           "<td>" + esc(labelAction(item.action)) + "</td>" +
           "<td><span class=\"status " + esc(item.result) + "\">" + esc(labelResult(item.result)) + "</span></td>" +
           "<td class=\"trace-id\">" + renderTraceLink(item.trace_id, shortTraceID(item.trace_id)) + "</td>" +
-          "<td>" + renderAppLink(item.app_id) + " / " + renderAuditTarget(item) + "</td>" +
+          "<td>" + renderAppLink(item.app_id) + " / " + renderAuditTarget(item) + renderAuditChangeSummary(item) + "</td>" +
           "<td>" + esc(time(item.created_at)) + "</td>" +
           "<td>" + esc(item.duration_ms == null ? "-" : item.duration_ms + "ms") + "</td>" +
         "</tr>"
@@ -3631,6 +3633,7 @@ const consoleHTML = `<!doctype html>
           "<div class=\"k\">" + t("result") + "</div><div><span class=\"status " + esc(event.result) + "\">" + esc(labelResult(event.result)) + "</span></div>" +
           "<div class=\"k\">" + t("traceId") + "</div><div class=\"trace-id\">" + renderTraceLink(event.trace_id) + "</div>" +
           "<div class=\"k\">" + t("appTarget") + "</div><div>" + renderAppLink(event.app_id) + " / " + renderAuditTarget(event) + "</div>" +
+          "<div class=\"k\">" + t("quotaChange") + "</div><div>" + renderAuditChangeValue(event) + "</div>" +
           "<div class=\"k\">" + t("policyRule") + "</div><div>" + renderAuditPolicy(event.metadata) + "</div>" +
           "<div class=\"k\">" + t("time") + "</div><div>" + esc(time(event.created_at)) + "</div>" +
         "</div>" +
@@ -3646,9 +3649,22 @@ const consoleHTML = `<!doctype html>
       if (!policyID) return "-";
       return renderPolicyLink(policyID);
     }
+    function renderAuditChangeSummary(event) {
+      const value = renderAuditChangeValue(event);
+      if (value === "-") return "";
+      return "<div class=\"muted\">" + value + "</div>";
+    }
+    function renderAuditChangeValue(event) {
+      const metadata = event && event.metadata || {};
+      if (!["app.quota", "provider.quota"].includes(event && event.action)) return "-";
+      if (metadata.old_requests_per_minute === undefined || metadata.requests_per_minute === undefined) return "-";
+      const oldValue = String(metadata.old_requests_per_minute);
+      const newValue = String(metadata.requests_per_minute);
+      return "RPM " + renderAuditMetadataValue("old_requests_per_minute", oldValue) + " -> " + renderAuditMetadataValue("requests_per_minute", newValue);
+    }
     function renderAuditMetadataSummary(metadata) {
       if (!metadata || !Object.keys(metadata).length) return "";
-      const keys = ["tool_id", "provider_id", "policy_rule_id", "matched_grant", "missing_grants", "required_scopes", "origin", "server_id"];
+      const keys = ["tool_id", "provider_id", "policy_rule_id", "matched_grant", "missing_grants", "required_scopes", "origin", "server_id", "old_requests_per_minute", "requests_per_minute"];
       const cells = keys
         .filter(key => metadata[key] !== undefined && metadata[key] !== null && metadata[key] !== "")
         .map(key => "<div class=\"chain-cell\"><span class=\"k\">" + esc(key) + "</span><div>" + renderAuditMetadataValue(key, metadata[key]) + "</div></div>");
