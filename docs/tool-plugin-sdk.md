@@ -12,6 +12,18 @@ Tool / Plugin SDK 面向三类扩展：
 
 当前真实可执行 adapter 只有 `runtime-health`。新增可执行工具必须先进入仓库内部实现，不能通过配置加载任意二进制或脚本。
 
+## 能力矩阵
+
+| 扩展形态 | 当前状态 | 是否可执行 | 来源约束 | 适用场景 |
+| --- | --- | --- | --- | --- |
+| 内置只读工具 | 已支持 | 是 | 仓库代码编译进 daemon | 读取网关运行状态、低风险本地上下文。 |
+| MCP Manifest 工具 | 已支持目录化 | 否 | 配置文件声明，只加载 manifest | 提前梳理企业桌面工具目录、scope 和审计边界。 |
+| 外部插件包 | 设计约定 | 否 | 未来要求签名、checksum、来源 allowlist | 企业分发、第三方工具生态。 |
+| 可写工具 | 未支持 | 否 | 必须先有沙箱、授权弹窗和回滚 | 文件写入、系统设置、自动化修复等高风险动作。 |
+| 任意本地命令 | 明确禁止 | 否 | 不允许通过配置开放 | 避免客户端网关变成无边界命令执行器。 |
+
+当前工具能力只覆盖 read-only、request/response、JSON 输入输出。流式工具输出、长任务、后台任务、可取消任务队列和用户交互式授权仍属于后续设计范围。
+
 ## 插件目录建议
 
 未来外部插件包建议使用如下结构：
@@ -30,6 +42,72 @@ plugins/
 ```
 
 当前 MVP 不读取该目录。它只作为后续企业分发和签名校验的目录约定。
+
+外部插件包 `plugin.json` 建议模板：
+
+```json
+{
+  "id": "vendor.desktop-context",
+  "name": "Desktop Context",
+  "version": "0.1.0",
+  "publisher": "Vendor Inc.",
+  "homepage": "https://example.com/plugins/desktop-context",
+  "entry": {
+    "type": "native",
+    "path": "bin/plugin.exe"
+  },
+  "tools": [
+    {
+      "id": "vendor.desktop_context.list",
+      "name": "List Desktop Context",
+      "description": "Read a summarized desktop context.",
+      "read_only": true,
+      "risk_level": "low",
+      "scopes": ["desktop.read"],
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "sandbox_required": true,
+      "enabled": true
+    }
+  ],
+  "signature": {
+    "algorithm": "ed25519",
+    "key_id": "vendor-2026-01",
+    "value": "<base64-signature>"
+  }
+}
+```
+
+注意：上述模板是未来插件包格式，不代表当前 daemon 会加载或执行 `entry.path`。
+
+## 来源、签名与校验设计
+
+未来启用外部插件前，建议按以下顺序失败关闭：
+
+1. 只扫描管理员配置的插件目录，不递归任意用户目录。
+2. 校验 `plugin.json` schema、插件 `id`、工具 `id`、版本号和 publisher。
+3. 校验 `checksums.txt`，确认 `plugin.json`、schemas 和二进制文件未被篡改。
+4. 校验签名，签名主体应覆盖 manifest、checksum 文件和入口文件摘要。
+5. 校验来源 allowlist，例如 `publisher`、`key_id`、插件 `id` 前缀。
+6. 校验权限：所有工具必须有 scope，且 scope 不得越过企业策略允许范围。
+7. 校验沙箱：凡是外部二进制或 MCP 真实执行，必须 `sandbox_required=true`。
+8. 任一环节失败时不注册工具，并写入 Audit / runtime health issue。
+
+建议的信任模型：
+
+| 级别 | 来源 | 默认策略 |
+| --- | --- | --- |
+| `builtin` | 随 daemon 编译 | 可注册，只读工具可执行。 |
+| `enterprise_signed` | 企业签名和 allowlist | 可进入目录，是否执行取决于沙箱能力。 |
+| `vendor_signed` | 第三方签名 | 默认只进入待审批状态。 |
+| `unsigned` | 无签名或校验失败 | 不注册，不执行。 |
+
+当前版本没有实现签名校验，因此所有外部插件都应视为不可加载。
 
 ## Manifest 字段
 
@@ -142,6 +220,19 @@ type Result struct {
 
 如果未来引入可写工具，必须先完成沙箱进程模型、授权弹窗、签名校验、审计扩展和回滚机制。
 
+## 沙箱阶段模型
+
+沙箱能力建议分阶段交付：
+
+| 阶段 | 能力 | 允许动作 | 退出条件 |
+| --- | --- | --- | --- |
+| `manifest_only` | 只加载目录 | 不执行 | 当前已采用，MCP 占位工具返回 `tool_unavailable`。 |
+| `builtin_readonly` | 编译进 daemon 的只读工具 | 执行低风险读取 | 当前 `runtime-health` 使用该模式。 |
+| `external_readonly_sandbox` | 外部只读插件 + 沙箱 | 只读、限时、限资源 | 需要签名、checksum、进程隔离和审计字段。 |
+| `write_with_approval` | 可写工具 + 用户/企业授权 | 白名单写操作 | 需要授权弹窗、回滚、审批记录和更强审计。 |
+
+在 `external_readonly_sandbox` 前，不应通过配置引入 `command`、`args`、脚本路径或任意本地二进制执行。
+
 ## 错误约定
 
 工具错误应返回 `tools.Error`：
@@ -198,6 +289,85 @@ Audit 事件使用：
 6. 如新增稳定错误码，同步更新 `docs/error-codes.md`。
 7. 在 README 或本文补充调用示例。
 
+最小内置工具模板：
+
+```go
+package tools
+
+import (
+    "context"
+    "strings"
+)
+
+type DesktopSummaryTool struct {
+    manifest Manifest
+    readSummary func(context.Context) (map[string]any, error)
+}
+
+func NewDesktopSummaryTool(manifest Manifest, readSummary func(context.Context) (map[string]any, error)) *DesktopSummaryTool {
+    return &DesktopSummaryTool{manifest: manifest, readSummary: readSummary}
+}
+
+func (t *DesktopSummaryTool) ID() string {
+    return t.manifest.ID
+}
+
+func (t *DesktopSummaryTool) Manifest() Manifest {
+    return t.manifest
+}
+
+func (t *DesktopSummaryTool) Invoke(ctx context.Context, input Input) (Result, error) {
+    if input.ToolID != t.manifest.ID {
+        return Result{}, NewError(ErrCodeFailed, "tool id mismatch", nil)
+    }
+    if t.readSummary == nil {
+        return Result{}, NewError(ErrCodeUnavailable, "desktop summary reader is unavailable", nil)
+    }
+    summary, err := t.readSummary(ctx)
+    if err != nil {
+        return Result{}, NewError(ErrCodeFailed, "read desktop summary failed", err)
+    }
+    if raw, ok := summary["authorization"].(string); ok && strings.TrimSpace(raw) != "" {
+        delete(summary, "authorization")
+    }
+    return Result{
+        ToolID: input.ToolID,
+        AppID:  input.AppID,
+        Output: summary,
+    }, nil
+}
+```
+
+`NewRegistryFromConfig` 注册分支模板：
+
+```go
+case "desktop-summary":
+    registry.Register(NewDesktopSummaryTool(ManifestFromConfig(toolCfg), readDesktopSummary))
+```
+
+配置模板：
+
+```json
+{
+  "id": "gateway.desktop_summary",
+  "name": "Desktop Summary",
+  "adapter": "desktop-summary",
+  "description": "Read a sanitized desktop summary.",
+  "read_only": true,
+  "risk_level": "medium",
+  "scopes": ["desktop.read"],
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object"
+  },
+  "sandbox_required": false,
+  "enabled": true
+}
+```
+
 ## 测试要求
 
 至少补充：
@@ -218,10 +388,53 @@ go test ./...
 go build ./cmd/gateway-daemon
 ```
 
+Registry 测试模板：
+
+```go
+func TestDesktopSummaryToolManifestAndInvoke(t *testing.T) {
+    tool := NewDesktopSummaryTool(Manifest{
+        ID:        "gateway.desktop_summary",
+        Adapter:   "desktop-summary",
+        ReadOnly:  true,
+        RiskLevel: "medium",
+        Scopes:    []string{"desktop.read"},
+    }, func(context.Context) (map[string]any, error) {
+        return map[string]any{
+            "active_app": "IDE",
+            "authorization": "Bearer secret",
+        }, nil
+    })
+
+    result, err := tool.Invoke(context.Background(), Input{
+        AppID:  "dev-app",
+        ToolID: "gateway.desktop_summary",
+    })
+    if err != nil {
+        t.Fatalf("invoke: %v", err)
+    }
+    output := result.Output.(map[string]any)
+    if output["active_app"] != "IDE" {
+        t.Fatalf("unexpected output: %+v", output)
+    }
+    if _, ok := output["authorization"]; ok {
+        t.Fatalf("sensitive field leaked: %+v", output)
+    }
+}
+```
+
+上线检查清单：
+
+- Manifest `read_only=true`、`sandbox_required=false`、`scopes` 非空且最小化。
+- 工具只返回必要字段，不返回 token、API Key、Authorization header、完整路径或大体积原始内容。
+- `Invoke` 尊重 `context.Context`，依赖不可用时返回 `tool_unavailable`。
+- 新 adapter 已补 Config、Registry、Access、Trace/Audit 测试。
+- README 或本文有调用示例、scope 说明和失败模式说明。
+- 如工具来自外部插件包，当前版本必须保持不可执行，直到签名与沙箱实现完成。
+
 ## 当前限制
 
 - 没有独立发布的外部插件 SDK 包。
-- 没有插件签名、来源校验和 checksum enforcement。
-- 没有真实沙箱进程模型。
+- 已补签名、来源校验和 checksum enforcement 设计，但尚未实现。
+- 已补沙箱阶段模型，但尚未实现真实沙箱进程。
 - 没有可写工具授权和回滚机制。
 - MCP 仍是 Manifest-only，占位工具不可执行。
