@@ -3,8 +3,10 @@ package runtime
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
+	"client-ai-gateway/internal/config"
 	"client-ai-gateway/internal/providerhealth"
 	"client-ai-gateway/internal/trace"
 )
@@ -179,6 +181,51 @@ func TestManagerSetAppRPMQuota(t *testing.T) {
 
 	if err := manager.SetAppRPMQuota("app", -1); err == nil {
 		t.Fatal("expected negative app rpm quota to fail")
+	}
+}
+
+func TestManagerConfigUpdatesAreSerialized(t *testing.T) {
+	path := writeRuntimeConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"app","token":"token","grants":["chat"]}],
+	  "providers": [{"id":"local","class":"local","models":["m"],"healthy":true}]
+	}`)
+	manager, err := NewManager(path, trace.NewMemoryStore())
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		errs <- manager.SetAppRPMQuota("app", 13)
+	}()
+	go func() {
+		defer wg.Done()
+		errs <- manager.SetProviderEnabled("local", false)
+	}()
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent config update: %v", err)
+		}
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if len(cfg.Quotas.Apps) != 1 || cfg.Quotas.Apps[0].AppID != "app" || cfg.Quotas.Apps[0].RequestsPerMinute != 13 {
+		t.Fatalf("expected app quota to survive concurrent update, got %+v", cfg.Quotas.Apps)
+	}
+	if len(cfg.Providers) != 1 || cfg.Providers[0].Enabled == nil || *cfg.Providers[0].Enabled {
+		t.Fatalf("expected provider enabled update to survive concurrent update, got %+v", cfg.Providers)
 	}
 }
 

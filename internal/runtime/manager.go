@@ -29,14 +29,15 @@ type Snapshot struct {
 }
 
 type Manager struct {
-	mu          sync.RWMutex
-	configPath  string
-	traceStore  trace.Store
-	current     Snapshot
-	stopHealth  context.CancelFunc
-	startedAt   time.Time
-	reloadedAt  time.Time
-	reloadCount int
+	mu            sync.RWMutex
+	configWriteMu sync.Mutex
+	configPath    string
+	traceStore    trace.Store
+	current       Snapshot
+	stopHealth    context.CancelFunc
+	startedAt     time.Time
+	reloadedAt    time.Time
+	reloadCount   int
 }
 
 func NewManager(configPath string, traceStore trace.Store) (*Manager, error) {
@@ -54,6 +55,12 @@ func (m *Manager) Snapshot() Snapshot {
 }
 
 func (m *Manager) Reload() error {
+	m.configWriteMu.Lock()
+	defer m.configWriteMu.Unlock()
+	return m.reloadLocked()
+}
+
+func (m *Manager) reloadLocked() error {
 	cfg, err := config.Load(m.configPath)
 	if err != nil {
 		return err
@@ -77,102 +84,113 @@ func (m *Manager) Reload() error {
 }
 
 func (m *Manager) SetProviderEnabled(providerID string, enabled bool) error {
-	cfg, err := config.Load(m.configPath)
-	if err != nil {
-		return err
-	}
-	found := false
-	for i := range cfg.Providers {
-		if cfg.Providers[i].ID == providerID {
-			cfg.Providers[i].Enabled = &enabled
-			found = true
-			break
+	return m.updateConfigAndReload(func(cfg *config.Config) error {
+		for i := range cfg.Providers {
+			if cfg.Providers[i].ID == providerID {
+				cfg.Providers[i].Enabled = &enabled
+				return nil
+			}
 		}
-	}
-	if !found {
 		return fmt.Errorf("provider %q not found", providerID)
-	}
-	return m.writeConfigAndReload(cfg)
+	})
 }
 
 func (m *Manager) SetProviderRPMQuota(providerID string, requestsPerMinute int) error {
 	if requestsPerMinute < 0 {
 		return fmt.Errorf("provider %q requests_per_minute must be >= 0", providerID)
 	}
-	cfg, err := config.Load(m.configPath)
-	if err != nil {
-		return err
-	}
-	foundProvider := false
-	for _, provider := range cfg.Providers {
-		if provider.ID == providerID {
-			foundProvider = true
-			break
+	return m.updateConfigAndReload(func(cfg *config.Config) error {
+		if !providerExists(cfg.Providers, providerID) {
+			return fmt.Errorf("provider %q not found", providerID)
 		}
-	}
-	if !foundProvider {
-		return fmt.Errorf("provider %q not found", providerID)
-	}
-	foundQuota := false
-	for i := range cfg.Quotas.Providers {
-		if cfg.Quotas.Providers[i].ProviderID != providerID {
-			continue
-		}
-		foundQuota = true
-		if requestsPerMinute == 0 {
-			cfg.Quotas.Providers = append(cfg.Quotas.Providers[:i], cfg.Quotas.Providers[i+1:]...)
-		} else {
-			cfg.Quotas.Providers[i].RequestsPerMinute = requestsPerMinute
-		}
-		break
-	}
-	if !foundQuota && requestsPerMinute > 0 {
-		cfg.Quotas.Providers = append(cfg.Quotas.Providers, config.ProviderQuota{
-			ProviderID:        providerID,
-			RequestsPerMinute: requestsPerMinute,
-		})
-	}
-	return m.writeConfigAndReload(cfg)
+		cfg.Quotas.Providers = setProviderQuotaRPM(cfg.Quotas.Providers, providerID, requestsPerMinute)
+		return nil
+	})
 }
 
 func (m *Manager) SetAppRPMQuota(appID string, requestsPerMinute int) error {
 	if requestsPerMinute < 0 {
 		return fmt.Errorf("app %q requests_per_minute must be >= 0", appID)
 	}
+	return m.updateConfigAndReload(func(cfg *config.Config) error {
+		if !appExists(cfg.Apps, appID) {
+			return fmt.Errorf("app %q not found", appID)
+		}
+		cfg.Quotas.Apps = setAppQuotaRPM(cfg.Quotas.Apps, appID, requestsPerMinute)
+		return nil
+	})
+}
+
+func (m *Manager) updateConfigAndReload(update func(*config.Config) error) error {
+	m.configWriteMu.Lock()
+	defer m.configWriteMu.Unlock()
+
 	cfg, err := config.Load(m.configPath)
 	if err != nil {
 		return err
 	}
-	foundApp := false
-	for _, app := range cfg.Apps {
+	if err := update(&cfg); err != nil {
+		return err
+	}
+	return m.writeConfigAndReload(cfg)
+}
+
+func appExists(apps []config.App, appID string) bool {
+	for _, app := range apps {
 		if app.ID == appID {
-			foundApp = true
-			break
+			return true
 		}
 	}
-	if !foundApp {
-		return fmt.Errorf("app %q not found", appID)
+	return false
+}
+
+func providerExists(providers []config.Provider, providerID string) bool {
+	for _, provider := range providers {
+		if provider.ID == providerID {
+			return true
+		}
 	}
-	foundQuota := false
-	for i := range cfg.Quotas.Apps {
-		if cfg.Quotas.Apps[i].AppID != appID {
+	return false
+}
+
+func setAppQuotaRPM(quotas []config.AppQuota, appID string, requestsPerMinute int) []config.AppQuota {
+	for i := range quotas {
+		if quotas[i].AppID != appID {
 			continue
 		}
-		foundQuota = true
 		if requestsPerMinute == 0 {
-			cfg.Quotas.Apps = append(cfg.Quotas.Apps[:i], cfg.Quotas.Apps[i+1:]...)
-		} else {
-			cfg.Quotas.Apps[i].RequestsPerMinute = requestsPerMinute
+			return append(quotas[:i], quotas[i+1:]...)
 		}
-		break
+		quotas[i].RequestsPerMinute = requestsPerMinute
+		return quotas
 	}
-	if !foundQuota && requestsPerMinute > 0 {
-		cfg.Quotas.Apps = append(cfg.Quotas.Apps, config.AppQuota{
+	if requestsPerMinute > 0 {
+		return append(quotas, config.AppQuota{
 			AppID:             appID,
 			RequestsPerMinute: requestsPerMinute,
 		})
 	}
-	return m.writeConfigAndReload(cfg)
+	return quotas
+}
+
+func setProviderQuotaRPM(quotas []config.ProviderQuota, providerID string, requestsPerMinute int) []config.ProviderQuota {
+	for i := range quotas {
+		if quotas[i].ProviderID != providerID {
+			continue
+		}
+		if requestsPerMinute == 0 {
+			return append(quotas[:i], quotas[i+1:]...)
+		}
+		quotas[i].RequestsPerMinute = requestsPerMinute
+		return quotas
+	}
+	if requestsPerMinute > 0 {
+		return append(quotas, config.ProviderQuota{
+			ProviderID:        providerID,
+			RequestsPerMinute: requestsPerMinute,
+		})
+	}
+	return quotas
 }
 
 func (m *Manager) ProbeProvider(ctx context.Context, providerID string) (providerhealth.View, error) {
@@ -199,7 +217,7 @@ func (m *Manager) writeConfigAndReload(cfg config.Config) error {
 	if err := os.WriteFile(m.configPath, append(encoded, '\n'), 0644); err != nil {
 		return err
 	}
-	return m.Reload()
+	return m.reloadLocked()
 }
 
 func (m *Manager) Close() {
