@@ -1860,7 +1860,8 @@ const consoleHTML = `<!doctype html>
           if (event.type === "quota_checked") stats.quotaChecked += 1;
           if (event.type !== "quota_rejected") return;
           stats.quotaRejected += 1;
-          if (isProviderQuotaEvent(event)) {
+          const subject = quotaEventSubject(event);
+          if (subject === "provider") {
             stats.providerQuotaRejected += 1;
           } else {
             stats.appQuotaRejected += 1;
@@ -1869,8 +1870,9 @@ const consoleHTML = `<!doctype html>
       });
       return stats;
     }
-    function isProviderQuotaEvent(event) {
-      return !!event && /provider/i.test(event.message || "");
+    function quotaEventSubject(event) {
+      if (event && event.quota && event.quota.subject) return event.quota.subject;
+      return event && /provider/i.test(event.message || "") ? "provider" : "app";
     }
     function downloadURL(url, filename = "") {
       const link = document.createElement("a");

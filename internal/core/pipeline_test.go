@@ -196,6 +196,10 @@ func TestPipelineAppRateLimitRejectsBeforeRouting(t *testing.T) {
 	if len(record.Events) == 0 || record.Events[len(record.Events)-1].Type != "quota_rejected" {
 		t.Fatalf("expected quota_rejected event, got %+v", record.Events)
 	}
+	quotaEvent := record.Events[len(record.Events)-1]
+	if quotaEvent.Quota == nil || quotaEvent.Quota.Subject != "app" || quotaEvent.Quota.ID != "dev-app" || quotaEvent.Quota.Limit != 1 {
+		t.Fatalf("expected structured app quota event, got %+v", quotaEvent)
+	}
 }
 
 func TestPipelineProviderRateLimitSkipsCandidateAndFallbacks(t *testing.T) {
@@ -231,6 +235,10 @@ func TestPipelineProviderRateLimitSkipsCandidateAndFallbacks(t *testing.T) {
 	}
 	if !hasTraceEvent(record.Events, "quota_rejected") {
 		t.Fatalf("expected provider quota_rejected event, got %+v", record.Events)
+	}
+	quotaEvent, ok := firstTraceEvent(record.Events, "quota_rejected")
+	if !ok || quotaEvent.Quota == nil || quotaEvent.Quota.Subject != "provider" || quotaEvent.Quota.ID != "local-mock" || quotaEvent.Quota.Limit != 1 {
+		t.Fatalf("expected structured provider quota event, got %+v", quotaEvent)
 	}
 }
 
@@ -268,12 +276,17 @@ func TestPipelineProviderRateLimitReturnsRateLimitedWhenNoCandidateRemains(t *te
 }
 
 func hasTraceEvent(events []trace.Event, eventType string) bool {
+	_, ok := firstTraceEvent(events, eventType)
+	return ok
+}
+
+func firstTraceEvent(events []trace.Event, eventType string) (trace.Event, bool) {
 	for _, event := range events {
 		if event.Type == eventType {
-			return true
+			return event, true
 		}
 	}
-	return false
+	return trace.Event{}, false
 }
 
 func newTestPipeline() (*core.Pipeline, *trace.MemoryStore) {

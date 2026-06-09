@@ -106,12 +106,12 @@ func (p *Pipeline) Chat(ctx context.Context, token string, req ChatRequest) (Cha
 			record.Status = "failed"
 			record.Error = quotaDecision.Reason
 			record.FinishedAt = time.Now().UTC()
-			record.Events = append(record.Events, trace.Event{Type: "quota_rejected", Message: quotaDecision.Reason, At: record.FinishedAt})
+			record.Events = append(record.Events, quotaTraceEvent("quota_rejected", quotaDecision.Reason, "app", app.ID, quotaDecision, record.FinishedAt))
 			_ = p.deps.TraceStore.Save(record)
 			return ChatResponse{}, gatewayError(traceID, env.AppID, "rate_limited", quotaDecision.Reason, nil)
 		}
 		if quotaDecision.Limit > 0 {
-			record.Events = append(record.Events, trace.Event{Type: "quota_checked", Message: fmt.Sprintf("app rpm remaining %d/%d", quotaDecision.Remaining, quotaDecision.Limit), At: time.Now().UTC()})
+			record.Events = append(record.Events, quotaTraceEvent("quota_checked", fmt.Sprintf("app rpm remaining %d/%d", quotaDecision.Remaining, quotaDecision.Limit), "app", app.ID, quotaDecision, time.Now().UTC()))
 		}
 	}
 
@@ -136,11 +136,11 @@ func (p *Pipeline) Chat(ctx context.Context, token string, req ChatRequest) (Cha
 			quotaDecision := p.deps.Quota.AllowProviderRequest(candidate.Provider.ID)
 			if !quotaDecision.Allowed {
 				quotaRejectErr = errors.New(quotaDecision.Reason)
-				record.Events = append(record.Events, trace.Event{Type: "quota_rejected", Message: fmt.Sprintf("provider %s skipped: %s", candidate.Provider.ID, quotaDecision.Reason), At: time.Now().UTC()})
+				record.Events = append(record.Events, quotaTraceEvent("quota_rejected", fmt.Sprintf("provider %s skipped: %s", candidate.Provider.ID, quotaDecision.Reason), "provider", candidate.Provider.ID, quotaDecision, time.Now().UTC()))
 				continue
 			}
 			if quotaDecision.Limit > 0 {
-				record.Events = append(record.Events, trace.Event{Type: "quota_checked", Message: fmt.Sprintf("provider %s rpm remaining %d/%d", candidate.Provider.ID, quotaDecision.Remaining, quotaDecision.Limit), At: time.Now().UTC()})
+				record.Events = append(record.Events, quotaTraceEvent("quota_checked", fmt.Sprintf("provider %s rpm remaining %d/%d", candidate.Provider.ID, quotaDecision.Remaining, quotaDecision.Limit), "provider", candidate.Provider.ID, quotaDecision, time.Now().UTC()))
 			}
 		}
 		record.Routes = append(record.Routes, trace.RouteAttempt{
@@ -217,6 +217,22 @@ func providerErrorCode(err error) string {
 		return "provider_" + providerErr.Code
 	}
 	return "provider_failed"
+}
+
+func quotaTraceEvent(eventType, message, subject, id string, decision quota.Decision, at time.Time) trace.Event {
+	return trace.Event{
+		Type:    eventType,
+		Message: message,
+		At:      at,
+		Quota: &trace.QuotaEvent{
+			Subject:   subject,
+			ID:        id,
+			Window:    "minute",
+			Limit:     decision.Limit,
+			Remaining: decision.Remaining,
+			ResetAt:   decision.ResetAt,
+		},
+	}
 }
 
 func hasGrant(grants []string, want string) bool {

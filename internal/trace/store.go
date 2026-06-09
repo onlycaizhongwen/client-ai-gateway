@@ -67,9 +67,19 @@ type FallbackAttempt struct {
 }
 
 type Event struct {
-	Type    string    `json:"type"`
-	Message string    `json:"message"`
-	At      time.Time `json:"at"`
+	Type    string      `json:"type"`
+	Message string      `json:"message"`
+	At      time.Time   `json:"at"`
+	Quota   *QuotaEvent `json:"quota,omitempty"`
+}
+
+type QuotaEvent struct {
+	Subject   string    `json:"subject"`
+	ID        string    `json:"id"`
+	Window    string    `json:"window,omitempty"`
+	Limit     int       `json:"limit,omitempty"`
+	Remaining int       `json:"remaining,omitempty"`
+	ResetAt   time.Time `json:"reset_at,omitempty"`
 }
 
 type MemoryStore struct {

@@ -196,6 +196,10 @@ func TestTraceListFiltersHTTP(t *testing.T) {
 	if len(body.Traces) != 1 || !hasTraceEvent(body.Traces[0].Events, "quota_rejected") {
 		t.Fatalf("expected one quota rejected trace, got %+v", body.Traces)
 	}
+	quotaEvent, ok := firstTraceEvent(body.Traces[0].Events, "quota_rejected")
+	if !ok || quotaEvent.Quota == nil || quotaEvent.Quota.Subject != "app" || quotaEvent.Quota.ID != "dev-app" {
+		t.Fatalf("expected structured quota event in trace response, got %+v", quotaEvent)
+	}
 }
 
 func TestTraceListPaginationHTTP(t *testing.T) {
@@ -1491,7 +1495,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function exportMCPCatalog()",
 		"function exportTraces()",
 		"function buildTraceStats",
-		"function isProviderQuotaEvent",
+		"function quotaEventSubject",
 		"function exportAudit()",
 		"traceExportSafety",
 		"auditExportSafety",
@@ -2299,10 +2303,15 @@ func errorTraceID(t *testing.T, res *httptest.ResponseRecorder) string {
 }
 
 func hasTraceEvent(events []trace.Event, eventType string) bool {
+	_, ok := firstTraceEvent(events, eventType)
+	return ok
+}
+
+func firstTraceEvent(events []trace.Event, eventType string) (trace.Event, bool) {
 	for _, event := range events {
 		if event.Type == eventType {
-			return true
+			return event, true
 		}
 	}
-	return false
+	return trace.Event{}, false
 }

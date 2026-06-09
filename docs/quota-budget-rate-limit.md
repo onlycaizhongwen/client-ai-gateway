@@ -72,7 +72,7 @@ flowchart LR
 - 同一个 App 或 Provider 不能重复配置 quota。
 - App RPM 命中限流时返回 `rate_limited`，HTTP 状态码为 429，且不会进入 Provider 路由。
 - Provider RPM 命中限流时跳过该 Provider 候选，继续尝试下一个符合 Policy/Router 的候选；如果所有候选都不可用，则返回 `rate_limited`。
-- Trace 会写入 `quota_checked` 或 `quota_rejected` 事件。
+- Trace 会写入 `quota_checked` 或 `quota_rejected` 事件，并在事件中携带结构化 `quota` 字段：`subject`、`id`、`window`、`limit`、`remaining`、`reset_at`。
 - 运行时健康接口会通过 `quota_runtime` 返回 App/Provider quota 数量、启用 RPM 数量、总 RPM 上限和当前模式；该视图不暴露 App Token。
 - 应用列表接口和控制台“应用与授权”面板会展示 App quota 摘要，仅包含是否启用和 `requests_per_minute`。
 - 应用列表支持 `quota_enabled=true|false` 筛选，便于快速找出未配置 RPM 限流的 App。
