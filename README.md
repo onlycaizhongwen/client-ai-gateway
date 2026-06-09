@@ -29,14 +29,16 @@
 - OpenAI 兼容接口：`POST /v1/chat/completions`
 - 本地控制台：`GET /console`
 - Trace 查询、详情、导出和保留策略
-- Audit 查询、分页、导出、按 `trace_id` 关联
-- Provider 健康监控、启停、探测、模型目录
+- Audit 查询、分页、导出、按 `trace_id` 关联，并支持管理操作 before/after 排障
+- Provider 健康监控、启停、探测、模型目录和 Provider RPM 配额管理
+- App RPM 配额管理、Provider 候选级 RPM 跳过、配额 Trace 事件筛选
 - Runtime Health 状态接口
 - Policy dry-run 和 Routing explain
 - Access dry-run 权限试算
 - OpenAI-compatible Provider 适配器
 - 只读工具运行时 MVP
 - 工具调用 Trace 化、Audit 关联、权限 scope 校验
+- 配额事件指标、运行问题汇总和审计 old/new 友好展示
 - 中文优先、中英文切换控制台
 
 ## 总体架构

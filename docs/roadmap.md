@@ -9,7 +9,7 @@
 | OpenAI 兼容聊天入口 | 已完成 MVP | 支持 `/v1/chat/completions`、App Token、Trace。 |
 | Provider 路由 | 已完成 MVP | 支持本地/云端 Provider、健康状态、启停、探测、模型目录。 |
 | Policy Engine | 已完成 MVP | 支持 allow、deny、force_local、deny_cloud_for_sensitive 和 dry-run。 |
-| Trace / Audit | 已完成 MVP | 支持 JSONL 持久化、分页、筛选、导出、Trace 关联。 |
+| Trace / Audit | 已完成 MVP | 支持 JSONL 持久化、分页、筛选、导出、Trace 关联，并展示配额和 Provider 启停 before/after。 |
 | 控制台 | 已完成 MVP | 中文优先、中英文切换、分页、筛选、清空、对象联动、空状态，并有 headless 浏览器 smoke。 |
 | 工具调用 | 已完成只读 MVP | 支持内置只读工具、scope 校验、Trace/Audit。 |
 | MCP | Manifest MVP | 只加载 Manifest，不执行 MCP Server。 |
@@ -19,7 +19,7 @@
 | Tool / Plugin SDK 边界 | 已补齐初版 | 已有 Manifest、scope、只读边界、输入输出 schema、Trace/Audit 和测试要求。 |
 | 企业集中审计 | 已补齐初版 | 已有 JSONL 到 SIEM / SOC 的字段映射、脱敏、采集和告警建议。 |
 | MCP 真实运行时设计 | 已补齐草案 | 已有进程模型、沙箱、授权、审计字段和失败关闭门槛。 |
-| 配额预算与限流 | 已完成 App + Provider RPM MVP | 已有 App 请求前 requests_per_minute 限流和 Provider 候选级 RPM 跳过；Provider 预算、token/day 和成本统计仍是设计草案。 |
+| 配额预算与限流 | 已完成 App + Provider RPM 管理闭环 | 已有 App 请求前 RPM 限流、Provider 候选级 RPM 跳过、控制台/API 配额管理、Trace 事件筛选、运行健康摘要和 Audit old/new。 |
 | 安装包与服务管理设计 | 已补齐草案 | 已有 Windows Service、macOS launchd、目录布局、升级回滚和验收门槛。 |
 
 ## 主要缺口
@@ -32,7 +32,7 @@
 | P1 | 插件 / Tool SDK | 已补齐初版，后续需要签名/来源校验、示例模板和真实沙箱模型。 |
 | P1 | 企业集中审计 | 已补齐初版，后续需要内置 exporter、时间游标和企业租户字段。 |
 | P2 | MCP 真实运行时 | 已补设计草案，当前仍禁止执行外部 MCP；后续进入沙箱运行时实现。 |
-| P2 | 配额 / 预算 / 速率限制 | 已完成 App + Provider RPM MVP，后续补 Provider 预算、token/day 记账和控制台配额面板。 |
+| P2 | 配额 / 预算 / 速率限制 | 已完成 App + Provider RPM 管理闭环，后续补 Provider 预算、token/day 记账和趋势报表。 |
 | P2 | 安装包与服务管理 | 已补设计草案，当前仍未提供正式安装器或系统服务安装脚本。 |
 
 ## 建议迭代顺序
