@@ -273,7 +273,7 @@ func TestAccessLogIncludesTraceID(t *testing.T) {
 }
 
 func TestProvidersHTTPIncludesRuntimeHealth(t *testing.T) {
-	handler, _ := newTestHandler()
+	handler, _ := newTestHandlerWithQuota(config.Quotas{Providers: []config.ProviderQuota{{ProviderID: "cloud-mock", RequestsPerMinute: 7}}})
 	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/providers?class=cloud&limit=1&offset=0", nil)
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
@@ -281,10 +281,16 @@ func TestProvidersHTTPIncludesRuntimeHealth(t *testing.T) {
 		t.Fatalf("expected 200, got %d", res.Code)
 	}
 	var body struct {
-		Providers []providerhealth.View `json:"providers"`
-		Total     int                   `json:"total"`
-		Offset    int                   `json:"offset"`
-		Limit     int                   `json:"limit"`
+		Providers []struct {
+			providerhealth.View
+			Quota struct {
+				RequestsPerMinute int  `json:"requests_per_minute"`
+				Enabled           bool `json:"enabled"`
+			} `json:"quota"`
+		} `json:"providers"`
+		Total  int `json:"total"`
+		Offset int `json:"offset"`
+		Limit  int `json:"limit"`
 	}
 	decodeBody(t, res, &body)
 	if body.Total != 1 || body.Offset != 0 || body.Limit != 1 || len(body.Providers) != 1 {
@@ -292,6 +298,25 @@ func TestProvidersHTTPIncludesRuntimeHealth(t *testing.T) {
 	}
 	if body.Providers[0].ID != "cloud-mock" || body.Providers[0].RuntimeStatus == "" || body.Providers[0].Adapter == "" {
 		t.Fatalf("expected runtime health view, got %+v", body.Providers[0])
+	}
+	if !body.Providers[0].Quota.Enabled || body.Providers[0].Quota.RequestsPerMinute != 7 {
+		t.Fatalf("expected provider quota summary, got %+v", body.Providers[0].Quota)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/providers?quota_enabled=true", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	decodeBody(t, res, &body)
+	if body.Total != 1 || len(body.Providers) != 1 || body.Providers[0].ID != "cloud-mock" {
+		t.Fatalf("unexpected quota enabled provider body: %+v", body)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/providers?quota_enabled=false", nil)
+	res = httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	decodeBody(t, res, &body)
+	if body.Total != 1 || len(body.Providers) != 1 || body.Providers[0].ID != "local-mock" {
+		t.Fatalf("unexpected quota disabled provider body: %+v", body)
 	}
 }
 
@@ -1369,6 +1394,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"id=\"provider-class-filter\"",
 		"id=\"provider-enabled-filter\"",
 		"id=\"provider-runtime-filter\"",
+		"id=\"provider-quota-filter\"",
 		"id=\"provider-filter-apply\"",
 		"id=\"provider-filter-clear\"",
 		"id=\"provider-export\"",
@@ -1450,6 +1476,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function renderChainValue",
 		"function renderPolicyLink",
 		"function renderProviderLink",
+		"function renderProviderQuota",
 		"function renderModelLink",
 		"function renderModelLinks",
 		"function renderProviderClassLink",
@@ -1515,12 +1542,14 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"data-issue-app-id",
 		"data-issue-app-quota-enabled",
 		"data-issue-provider-id",
+		"data-issue-provider-quota-enabled",
 		"data-issue-model",
 		"data-issue-model-provider",
 		"data-issue-tool-id",
 		"data-issue-mcp-server-id",
 		"data-issue-mcp-runtime",
 		"issueAppQuotaDisabled",
+		"issueProviderQuotaDisabled",
 		"function labelSeverity",
 		"function renderTracePolicy",
 		"function renderTraceSummary",

@@ -17,30 +17,37 @@ type Decision struct {
 }
 
 type Limiter struct {
-	mu     sync.Mutex
-	clock  func() time.Time
-	apps   map[string]appLimit
-	bucket map[string]appWindow
+	mu        sync.Mutex
+	clock     func() time.Time
+	apps      map[string]limit
+	providers map[string]limit
+	buckets   map[string]window
 }
 
-type appLimit struct {
+type limit struct {
 	requestsPerMinute int
 }
 
-type appWindow struct {
+type window struct {
 	start time.Time
 	used  int
 }
 
 func NewLimiter(cfg config.Quotas) *Limiter {
 	limiter := &Limiter{
-		clock:  time.Now,
-		apps:   map[string]appLimit{},
-		bucket: map[string]appWindow{},
+		clock:     time.Now,
+		apps:      map[string]limit{},
+		providers: map[string]limit{},
+		buckets:   map[string]window{},
 	}
 	for _, app := range cfg.Apps {
 		if app.RequestsPerMinute > 0 {
-			limiter.apps[app.AppID] = appLimit{requestsPerMinute: app.RequestsPerMinute}
+			limiter.apps[app.AppID] = limit{requestsPerMinute: app.RequestsPerMinute}
+		}
+	}
+	for _, provider := range cfg.Providers {
+		if provider.RequestsPerMinute > 0 {
+			limiter.providers[provider.ProviderID] = limit{requestsPerMinute: provider.RequestsPerMinute}
 		}
 	}
 	return limiter
@@ -58,35 +65,47 @@ func (l *Limiter) AllowAppRequest(appID string) Decision {
 	if l == nil {
 		return Decision{Allowed: true}
 	}
+	return l.allow("app", appID, l.apps, "app request rate limit exceeded")
+}
+
+func (l *Limiter) AllowProviderRequest(providerID string) Decision {
+	if l == nil {
+		return Decision{Allowed: true}
+	}
+	return l.allow("provider", providerID, l.providers, "provider request rate limit exceeded")
+}
+
+func (l *Limiter) allow(subjectType, subjectID string, limits map[string]limit, reason string) Decision {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	limit, ok := l.apps[appID]
-	if !ok || limit.requestsPerMinute <= 0 {
-		return Decision{Allowed: true, Subject: appID}
+	quotaLimit, ok := limits[subjectID]
+	if !ok || quotaLimit.requestsPerMinute <= 0 {
+		return Decision{Allowed: true, Subject: subjectID}
 	}
 	now := l.clock().UTC()
-	window := l.bucket[appID]
-	if window.start.IsZero() || now.Sub(window.start) >= time.Minute {
-		window = appWindow{start: now}
+	key := subjectType + ":" + subjectID
+	current := l.buckets[key]
+	if current.start.IsZero() || now.Sub(current.start) >= time.Minute {
+		current = window{start: now}
 	}
-	if window.used >= limit.requestsPerMinute {
+	if current.used >= quotaLimit.requestsPerMinute {
 		return Decision{
 			Allowed:   false,
-			Subject:   appID,
-			Limit:     limit.requestsPerMinute,
+			Subject:   subjectID,
+			Limit:     quotaLimit.requestsPerMinute,
 			Remaining: 0,
-			ResetAt:   window.start.Add(time.Minute),
-			Reason:    "app request rate limit exceeded",
+			ResetAt:   current.start.Add(time.Minute),
+			Reason:    reason,
 		}
 	}
-	window.used++
-	l.bucket[appID] = window
+	current.used++
+	l.buckets[key] = current
 	return Decision{
 		Allowed:   true,
-		Subject:   appID,
-		Limit:     limit.requestsPerMinute,
-		Remaining: limit.requestsPerMinute - window.used,
-		ResetAt:   window.start.Add(time.Minute),
+		Subject:   subjectID,
+		Limit:     quotaLimit.requestsPerMinute,
+		Remaining: quotaLimit.requestsPerMinute - current.used,
+		ResetAt:   current.start.Add(time.Minute),
 	}
 }

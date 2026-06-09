@@ -198,6 +198,84 @@ func TestPipelineAppRateLimitRejectsBeforeRouting(t *testing.T) {
 	}
 }
 
+func TestPipelineProviderRateLimitSkipsCandidateAndFallbacks(t *testing.T) {
+	pipeline, store := newTestPipelineWithConfig(config.Config{
+		Quotas: config.Quotas{Providers: []config.ProviderQuota{{ProviderID: "local-mock", RequestsPerMinute: 1}}},
+	})
+
+	if _, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
+		Model:    "local-small",
+		Messages: []core.Message{{Role: "user", Content: "first"}},
+	}); err != nil {
+		t.Fatalf("first chat failed: %v", err)
+	}
+	resp, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
+		Model:    "local-small",
+		Messages: []core.Message{{Role: "user", Content: "second"}},
+	})
+	if err != nil {
+		t.Fatalf("second chat should fall back to cloud provider: %v", err)
+	}
+	if resp.Choices[0].Message.Content == "" {
+		t.Fatal("expected response content")
+	}
+	record, ok := store.Get(resp.TraceID)
+	if !ok {
+		t.Fatal("expected trace record")
+	}
+	if record.ProviderID != "cloud-mock" {
+		t.Fatalf("expected cloud provider after local quota skip, got %+v", record)
+	}
+	if len(record.Routes) != 1 || record.Routes[0].ProviderID != "cloud-mock" {
+		t.Fatalf("expected only attempted route to be cloud provider, got %+v", record.Routes)
+	}
+	if !hasTraceEvent(record.Events, "quota_rejected") {
+		t.Fatalf("expected provider quota_rejected event, got %+v", record.Events)
+	}
+}
+
+func TestPipelineProviderRateLimitReturnsRateLimitedWhenNoCandidateRemains(t *testing.T) {
+	pipeline, store := newTestPipelineWithConfig(config.Config{
+		Quotas: config.Quotas{Providers: []config.ProviderQuota{
+			{ProviderID: "local-mock", RequestsPerMinute: 1},
+			{ProviderID: "cloud-mock", RequestsPerMinute: 1},
+		}},
+	})
+
+	for i := 0; i < 2; i++ {
+		if _, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
+			Model:    "local-small",
+			Messages: []core.Message{{Role: "user", Content: "warmup"}},
+		}); err != nil {
+			t.Fatalf("warmup chat %d failed: %v", i, err)
+		}
+	}
+	_, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
+		Model:    "local-small",
+		Messages: []core.Message{{Role: "user", Content: "blocked"}},
+	})
+	var gatewayErr *core.GatewayError
+	if !errors.As(err, &gatewayErr) || gatewayErr.Code != "rate_limited" {
+		t.Fatalf("expected rate_limited gateway error, got %v", err)
+	}
+	record, ok := store.Get(gatewayErr.TraceID)
+	if !ok {
+		t.Fatal("expected rate limited trace record")
+	}
+	if record.Status != "failed" || record.Error != "provider request rate limit exceeded" || len(record.Routes) != 0 {
+		t.Fatalf("expected provider quota failure without route attempts, got %+v", record)
+	}
+}
+
+func hasTraceEvent(events []trace.Event, eventType string) bool {
+	for _, event := range events {
+		if event.Type == eventType {
+			return true
+		}
+	}
+	return false
+}
+
 func newTestPipeline() (*core.Pipeline, *trace.MemoryStore) {
 	return newTestPipelineWithConfig(config.Config{})
 }

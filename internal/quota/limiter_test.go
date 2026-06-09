@@ -50,3 +50,36 @@ func TestLimiterIgnoresUnconfiguredApps(t *testing.T) {
 		t.Fatalf("expected unconfigured app allowed, got %+v", decision)
 	}
 }
+
+func TestLimiterAllowsProviderWithinWindowAndRejectsOverflow(t *testing.T) {
+	now := time.Date(2026, 6, 8, 10, 0, 0, 0, time.UTC)
+	limiter := NewLimiterWithClock(config.Quotas{Providers: []config.ProviderQuota{{
+		ProviderID:        "provider",
+		RequestsPerMinute: 1,
+	}}}, func() time.Time { return now })
+
+	if decision := limiter.AllowProviderRequest("provider"); !decision.Allowed || decision.Remaining != 0 {
+		t.Fatalf("expected first provider request allowed, got %+v", decision)
+	}
+	if decision := limiter.AllowProviderRequest("provider"); decision.Allowed || decision.Limit != 1 || decision.Reason != "provider request rate limit exceeded" {
+		t.Fatalf("expected second provider request rejected, got %+v", decision)
+	}
+	now = now.Add(time.Minute)
+	if decision := limiter.AllowProviderRequest("provider"); !decision.Allowed || decision.Remaining != 0 {
+		t.Fatalf("expected provider request after reset allowed, got %+v", decision)
+	}
+}
+
+func TestLimiterKeepsAppAndProviderBucketsSeparate(t *testing.T) {
+	limiter := NewLimiter(config.Quotas{
+		Apps:      []config.AppQuota{{AppID: "same", RequestsPerMinute: 1}},
+		Providers: []config.ProviderQuota{{ProviderID: "same", RequestsPerMinute: 1}},
+	})
+
+	if decision := limiter.AllowAppRequest("same"); !decision.Allowed {
+		t.Fatalf("expected app request allowed, got %+v", decision)
+	}
+	if decision := limiter.AllowProviderRequest("same"); !decision.Allowed {
+		t.Fatalf("expected provider request to use separate bucket, got %+v", decision)
+	}
+}

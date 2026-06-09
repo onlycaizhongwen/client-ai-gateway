@@ -130,7 +130,19 @@ func (p *Pipeline) Chat(ctx context.Context, token string, req ChatRequest) (Cha
 
 	var lastErr error
 	var result adapters.Result
+	var quotaRejectErr error
 	for idx, candidate := range routePlan.Candidates {
+		if p.deps.Quota != nil {
+			quotaDecision := p.deps.Quota.AllowProviderRequest(candidate.Provider.ID)
+			if !quotaDecision.Allowed {
+				quotaRejectErr = errors.New(quotaDecision.Reason)
+				record.Events = append(record.Events, trace.Event{Type: "quota_rejected", Message: fmt.Sprintf("provider %s skipped: %s", candidate.Provider.ID, quotaDecision.Reason), At: time.Now().UTC()})
+				continue
+			}
+			if quotaDecision.Limit > 0 {
+				record.Events = append(record.Events, trace.Event{Type: "quota_checked", Message: fmt.Sprintf("provider %s rpm remaining %d/%d", candidate.Provider.ID, quotaDecision.Remaining, quotaDecision.Limit), At: time.Now().UTC()})
+			}
+		}
 		record.Routes = append(record.Routes, trace.RouteAttempt{
 			ProviderID: candidate.Provider.ID,
 			Model:      candidate.Model,
@@ -179,6 +191,13 @@ func (p *Pipeline) Chat(ctx context.Context, token string, req ChatRequest) (Cha
 	}
 
 	record.Status = "failed"
+	if lastErr == nil && quotaRejectErr != nil {
+		lastErr = quotaRejectErr
+		record.Error = lastErr.Error()
+		record.FinishedAt = time.Now().UTC()
+		_ = p.deps.TraceStore.Save(record)
+		return ChatResponse{}, gatewayError(traceID, env.AppID, "rate_limited", lastErr.Error(), lastErr)
+	}
 	record.Error = lastErr.Error()
 	record.FinishedAt = time.Now().UTC()
 	_ = p.deps.TraceStore.Save(record)

@@ -99,6 +99,12 @@
         "app_id": "dev-app",
         "requests_per_minute": 120
       }
+    ],
+    "providers": [
+      {
+        "provider_id": "cloud-mock",
+        "requests_per_minute": 60
+      }
     ]
   },
   "policies": [

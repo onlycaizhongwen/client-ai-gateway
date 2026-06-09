@@ -53,14 +53,17 @@ type ProviderMonitorHealth struct {
 }
 
 type QuotaRuntimeHealth struct {
-	Status          string `json:"status"`
-	Mode            string `json:"mode"`
-	AppQuotaCount   int    `json:"app_quota_count"`
-	EnabledAppRPM   int    `json:"enabled_app_rpm"`
-	TotalAppRPM     int    `json:"total_app_rpm"`
-	ProviderBudgets int    `json:"provider_budgets"`
-	TokenLedgers    int    `json:"token_ledgers"`
-	Reason          string `json:"reason,omitempty"`
+	Status             string `json:"status"`
+	Mode               string `json:"mode"`
+	AppQuotaCount      int    `json:"app_quota_count"`
+	EnabledAppRPM      int    `json:"enabled_app_rpm"`
+	TotalAppRPM        int    `json:"total_app_rpm"`
+	ProviderQuotaCount int    `json:"provider_quota_count"`
+	EnabledProviderRPM int    `json:"enabled_provider_rpm"`
+	TotalProviderRPM   int    `json:"total_provider_rpm"`
+	ProviderBudgets    int    `json:"provider_budgets"`
+	TokenLedgers       int    `json:"token_ledgers"`
+	Reason             string `json:"reason,omitempty"`
 }
 
 type ComponentHealth struct {
@@ -123,10 +126,11 @@ func (m *Manager) Health() HealthView {
 
 func quotaRuntimeHealth(quotas config.Quotas) QuotaRuntimeHealth {
 	health := QuotaRuntimeHealth{
-		Status:        "not_configured",
-		Mode:          "app_rpm_in_memory",
-		AppQuotaCount: len(quotas.Apps),
-		Reason:        "quota runtime is not configured",
+		Status:             "not_configured",
+		Mode:               "app_provider_rpm_in_memory",
+		AppQuotaCount:      len(quotas.Apps),
+		ProviderQuotaCount: len(quotas.Providers),
+		Reason:             "quota runtime is not configured",
 	}
 	for _, app := range quotas.Apps {
 		if app.RequestsPerMinute > 0 {
@@ -134,16 +138,22 @@ func quotaRuntimeHealth(quotas config.Quotas) QuotaRuntimeHealth {
 			health.TotalAppRPM += app.RequestsPerMinute
 		}
 	}
-	if health.AppQuotaCount == 0 {
+	for _, provider := range quotas.Providers {
+		if provider.RequestsPerMinute > 0 {
+			health.EnabledProviderRPM++
+			health.TotalProviderRPM += provider.RequestsPerMinute
+		}
+	}
+	if health.AppQuotaCount == 0 && health.ProviderQuotaCount == 0 {
 		return health
 	}
-	if health.EnabledAppRPM == 0 {
+	if health.EnabledAppRPM == 0 && health.EnabledProviderRPM == 0 {
 		health.Status = "configured"
-		health.Reason = "app quotas are configured but RPM limits are disabled"
+		health.Reason = "quotas are configured but RPM limits are disabled"
 		return health
 	}
 	health.Status = "configured"
-	health.Reason = "App RPM is enforced before provider routing; counters reset on daemon restart or config reload"
+	health.Reason = "App RPM is enforced before provider routing; Provider RPM skips over-limit candidates; counters reset on daemon restart or config reload"
 	return health
 }
 

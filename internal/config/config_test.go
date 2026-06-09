@@ -73,7 +73,10 @@ func TestLoadValidAppRequestQuota(t *testing.T) {
 	  "listen_addr": "127.0.0.1:18765",
 	  "apps": [{"id":"dev-app","token":"dev-token","grants":["chat"]}],
 	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}],
-	  "quotas": {"apps": [{"app_id":"dev-app","requests_per_minute":2}]}
+	  "quotas": {
+	    "apps": [{"app_id":"dev-app","requests_per_minute":2}],
+	    "providers": [{"provider_id":"local-mock","requests_per_minute":3}]
+	  }
 	}`)
 
 	cfg, err := Load(path)
@@ -81,6 +84,9 @@ func TestLoadValidAppRequestQuota(t *testing.T) {
 		t.Fatalf("load valid app quota: %v", err)
 	}
 	if len(cfg.Quotas.Apps) != 1 || cfg.Quotas.Apps[0].RequestsPerMinute != 2 {
+		t.Fatalf("unexpected app quotas: %+v", cfg.Quotas)
+	}
+	if len(cfg.Quotas.Providers) != 1 || cfg.Quotas.Providers[0].RequestsPerMinute != 3 {
 		t.Fatalf("unexpected quotas: %+v", cfg.Quotas)
 	}
 }
@@ -383,6 +389,46 @@ func TestLoadRejectsInvalidConfig(t *testing.T) {
 			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
 			  "providers": [{"id":"p","class":"local","models":["m"]}],
 			  "quotas": {"apps": [{"app_id":"a","requests_per_minute":-1}]}
+			}`,
+			want: "requests_per_minute",
+		},
+		{
+			name: "quota provider id required",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "quotas": {"providers": [{"requests_per_minute":1}]}
+			}`,
+			want: "provider_id is required",
+		},
+		{
+			name: "quota references unknown provider",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "quotas": {"providers": [{"provider_id":"missing","requests_per_minute":1}]}
+			}`,
+			want: "does not reference",
+		},
+		{
+			name: "duplicate provider quota",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "quotas": {"providers": [{"provider_id":"p","requests_per_minute":1},{"provider_id":"p","requests_per_minute":2}]}
+			}`,
+			want: "duplicate provider quota",
+		},
+		{
+			name: "negative provider rpm quota",
+			body: `{
+			  "listen_addr": "127.0.0.1:18765",
+			  "apps": [{"id":"a","token":"t","grants":["chat"]}],
+			  "providers": [{"id":"p","class":"local","models":["m"]}],
+			  "quotas": {"providers": [{"provider_id":"p","requests_per_minute":-1}]}
 			}`,
 			want: "requests_per_minute",
 		},

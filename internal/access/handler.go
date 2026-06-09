@@ -218,7 +218,7 @@ func (h *Handler) providers(w http.ResponseWriter, r *http.Request) {
 	views := h.providerViews(r)
 	total := len(views)
 	offset, limit = normalizePage(offset, limit)
-	pagedProviders := []providerhealth.View{}
+	pagedProviders := []providerView{}
 	if offset < total {
 		end := offset + limit
 		if end > total {
@@ -237,11 +237,22 @@ func (h *Handler) providers(w http.ResponseWriter, r *http.Request) {
 			"class":          query.Get("class"),
 			"enabled":        query.Get("enabled"),
 			"runtime_status": query.Get("runtime_status"),
+			"quota_enabled":  query.Get("quota_enabled"),
 		},
 	})
 }
 
-func (h *Handler) providerViews(r *http.Request) []providerhealth.View {
+type providerView struct {
+	providerhealth.View
+	Quota providerQuota `json:"quota,omitempty"`
+}
+
+type providerQuota struct {
+	RequestsPerMinute int  `json:"requests_per_minute,omitempty"`
+	Enabled           bool `json:"enabled"`
+}
+
+func (h *Handler) providerViews(r *http.Request) []providerView {
 	snapshot := h.snapshot()
 	var views []providerhealth.View
 	if snapshot.Health != nil {
@@ -254,8 +265,11 @@ func (h *Handler) providerViews(r *http.Request) []providerhealth.View {
 	classFilter := query.Get("class")
 	enabledFilter := query.Get("enabled")
 	statusFilter := query.Get("runtime_status")
-	filtered := make([]providerhealth.View, 0, len(views))
+	quotaEnabledFilter := query.Get("quota_enabled")
+	quotas := providerQuotaMap(snapshot.Config.Quotas)
+	filtered := make([]providerView, 0, len(views))
 	for _, view := range views {
+		quotaView := quotas[view.ID]
 		if providerFilter != "" && view.ID != providerFilter {
 			continue
 		}
@@ -268,7 +282,16 @@ func (h *Handler) providerViews(r *http.Request) []providerhealth.View {
 		if statusFilter != "" && view.RuntimeStatus != statusFilter {
 			continue
 		}
-		filtered = append(filtered, view)
+		if quotaEnabledFilter == "true" && !quotaView.Enabled {
+			continue
+		}
+		if quotaEnabledFilter == "false" && quotaView.Enabled {
+			continue
+		}
+		filtered = append(filtered, providerView{
+			View:  view,
+			Quota: quotaView,
+		})
 	}
 	return filtered
 }
@@ -546,6 +569,17 @@ func appQuotaMap(quotas config.Quotas) map[string]appQuota {
 	views := make(map[string]appQuota, len(quotas.Apps))
 	for _, quota := range quotas.Apps {
 		views[quota.AppID] = appQuota{
+			RequestsPerMinute: quota.RequestsPerMinute,
+			Enabled:           quota.RequestsPerMinute > 0,
+		}
+	}
+	return views
+}
+
+func providerQuotaMap(quotas config.Quotas) map[string]providerQuota {
+	views := make(map[string]providerQuota, len(quotas.Providers))
+	for _, quota := range quotas.Providers {
+		views[quota.ProviderID] = providerQuota{
 			RequestsPerMinute: quota.RequestsPerMinute,
 			Enabled:           quota.RequestsPerMinute > 0,
 		}
@@ -2007,6 +2041,10 @@ func writeJSONL(w http.ResponseWriter, filename string, items any) {
 			_ = json.NewEncoder(w).Encode(item)
 		}
 	case []providerhealth.View:
+		for _, item := range values {
+			_ = json.NewEncoder(w).Encode(item)
+		}
+	case []providerView:
 		for _, item := range values {
 			_ = json.NewEncoder(w).Encode(item)
 		}

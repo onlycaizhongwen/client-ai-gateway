@@ -322,6 +322,11 @@ const consoleHTML = `<!doctype html>
                 <option value="unhealthy" data-i18n="runtimeUnhealthy">Unhealthy</option>
                 <option value="disabled" data-i18n="runtimeDisabled">Disabled</option>
               </select>
+              <select id="provider-quota-filter">
+                <option value="" data-i18n="allQuotaStates">All quota states</option>
+                <option value="true" data-i18n="quotaEnabled">Quota enabled</option>
+                <option value="false" data-i18n="quotaDisabled">Quota disabled</option>
+              </select>
               <button class="secondary" id="provider-filter-apply" data-i18n="applyFilter">Apply</button>
               <button class="secondary" id="provider-filter-clear" data-i18n="clearFilter">Clear</button>
             </div>
@@ -335,6 +340,7 @@ const consoleHTML = `<!doctype html>
                   <th data-i18n="type">Type</th>
                   <th data-i18n="adapter">Adapter</th>
                   <th data-i18n="models">Models</th>
+                  <th data-i18n="quota">Quota</th>
                   <th data-i18n="status">Status</th>
                   <th data-i18n="action">Action</th>
                 </tr>
@@ -836,6 +842,7 @@ const consoleHTML = `<!doctype html>
     const providerClassFilter = document.querySelector("#provider-class-filter");
     const providerEnabledFilter = document.querySelector("#provider-enabled-filter");
     const providerRuntimeFilter = document.querySelector("#provider-runtime-filter");
+    const providerQuotaFilter = document.querySelector("#provider-quota-filter");
     const modelRows = document.querySelector("#model-rows");
     const modelMessage = document.querySelector("#model-message");
     const modelNameFilter = document.querySelector("#model-name-filter");
@@ -1049,6 +1056,7 @@ const consoleHTML = `<!doctype html>
         issueModelUnavailable: "\u6a21\u578b\u5f53\u524d\u4e0d\u53ef\u7528\uff0cProvider={provider}\uff0c\u72b6\u6001={status}",
         issueToolDisabled: "\u5de5\u5177\u5df2\u7981\u7528\uff0cScope={scopes}",
         issueAppQuotaDisabled: "\u5e94\u7528\u5177\u5907 chat \u80fd\u529b\uff0c\u4f46\u672a\u542f\u7528 App RPM \u914d\u989d",
+        issueProviderQuotaDisabled: "Provider \u5df2\u542f\u7528\u4e14\u53ef\u8def\u7531\uff0c\u4f46\u672a\u542f\u7528 Provider RPM \u914d\u989d",
         issueMCPServerDisabled: "MCP Server \u5df2\u7981\u7528\uff0c\u5df2\u542f\u7528\u5de5\u5177 {enabled}/{total}",
         issueMCPRuntime: "MCP \u8fd0\u884c\u65f6\u72b6\u6001\u4e3a {status}{reason}",
         issueTraceFailed: "\u6700\u8fd1\u8bf7\u6c42\u5931\u8d25\uff1a{error}",
@@ -1275,6 +1283,9 @@ const consoleHTML = `<!doctype html>
         quotaRuntime: "Quota Runtime",
         appQuotaCount: "App Quotas",
         appRpmEnabled: "Enabled App RPM",
+        providerQuotaCount: "Provider Quotas",
+        providerRpmEnabled: "Enabled Provider RPM",
+        totalProviderRpm: "Total Provider RPM",
         totalAppRpm: "Total App RPM",
         modelRuntime: "Model Runtime",
         mcpRuntime: "MCP Runtime",
@@ -1340,6 +1351,7 @@ const consoleHTML = `<!doctype html>
         issueModelUnavailable: "Model is unavailable, provider={provider}, status={status}",
         issueToolDisabled: "Tool is disabled, scopes={scopes}",
         issueAppQuotaDisabled: "App has chat capability but App RPM quota is not enabled",
+        issueProviderQuotaDisabled: "Provider is enabled and routable but Provider RPM quota is not enabled",
         issueMCPServerDisabled: "MCP server is disabled, enabled tools {enabled}/{total}",
         issueMCPRuntime: "MCP runtime status is {status}{reason}",
         issueTraceFailed: "Recent request failed: {error}",
@@ -1572,7 +1584,7 @@ const consoleHTML = `<!doctype html>
     document.addEventListener("click", event => {
       const button = event.target.closest("button[data-issue-provider-id]");
       if (!button) return;
-      filterProviderByID(button.dataset.issueProviderId);
+      filterProviderByID(button.dataset.issueProviderId, button.dataset.issueProviderQuotaEnabled || "");
     });
     document.addEventListener("click", event => {
       const button = event.target.closest("button[data-issue-app-id]");
@@ -1681,7 +1693,10 @@ const consoleHTML = `<!doctype html>
       quotaDisabled: "\u672a\u542f\u7528\u914d\u989d",
       appQuotaCount: "\u5e94\u7528\u914d\u989d",
       appRpmEnabled: "\u542f\u7528 App RPM",
-      totalAppRpm: "\u603b App RPM"
+      totalAppRpm: "\u603b App RPM",
+      providerQuotaCount: "Provider \u914d\u989d",
+      providerRpmEnabled: "\u542f\u7528 Provider RPM",
+      totalProviderRpm: "\u603b Provider RPM"
     };
 
     function t(key, vars = {}) {
@@ -1877,6 +1892,9 @@ const consoleHTML = `<!doctype html>
             reason: item.degraded_reason ? " / " + item.degraded_reason : ""
           }), item.updated_at, { provider_id: item.id });
         }
+        if (item.enabled !== false && ["healthy", "degraded"].includes(status) && !(item.quota && item.quota.enabled)) {
+          addIssue("info", "provider", item.id, t("issueProviderQuotaDisabled"), item.updated_at, { provider_id: item.id, quota_enabled: "false" });
+        }
       });
       issueModels.forEach(item => {
         if (!item.available) {
@@ -1959,7 +1977,7 @@ const consoleHTML = `<!doctype html>
         return "<button class=\"link-button\" data-issue-audit-trace-id=\"" + esc(item.ref.trace_id || "") + "\" data-issue-audit-target=\"" + esc(item.ref.target || "") + "\">" + esc(item.target) + "</button>";
       }
       if (item.source === "provider" && item.ref && item.ref.provider_id) {
-        return "<button class=\"link-button\" data-issue-provider-id=\"" + esc(item.ref.provider_id) + "\">" + esc(item.target) + "</button>";
+        return "<button class=\"link-button\" data-issue-provider-id=\"" + esc(item.ref.provider_id) + "\" data-issue-provider-quota-enabled=\"" + esc(item.ref.quota_enabled || "") + "\">" + esc(item.target) + "</button>";
       }
       if (item.source === "app" && item.ref && item.ref.app_id) {
         return "<button class=\"link-button\" data-issue-app-id=\"" + esc(item.ref.app_id) + "\" data-issue-app-quota-enabled=\"" + esc(item.ref.quota_enabled || "") + "\">" + esc(item.target) + "</button>";
@@ -2018,8 +2036,11 @@ const consoleHTML = `<!doctype html>
       const appQuotaText = " / " + esc(t("appQuotaCount")) + ": " + esc(quota.app_quota_count || 0);
       const appRPMText = " / " + esc(t("appRpmEnabled")) + ": " + esc(quota.enabled_app_rpm || 0);
       const totalRPMText = quota.total_app_rpm !== undefined ? " / " + esc(t("totalAppRpm")) + ": " + esc(quota.total_app_rpm || 0) : "";
+      const providerQuotaText = quota.provider_quota_count !== undefined ? " / " + esc(t("providerQuotaCount")) + ": " + esc(quota.provider_quota_count || 0) : "";
+      const providerRPMText = quota.enabled_provider_rpm !== undefined ? " / " + esc(t("providerRpmEnabled")) + ": " + esc(quota.enabled_provider_rpm || 0) : "";
+      const totalProviderRPMText = quota.total_provider_rpm !== undefined ? " / " + esc(t("totalProviderRpm")) + ": " + esc(quota.total_provider_rpm || 0) : "";
       const reasonText = quota.reason ? " / " + esc(quota.reason) : "";
-      return esc(labelRuntime(quota.status)) + modeText + appQuotaText + appRPMText + totalRPMText + reasonText;
+      return esc(labelRuntime(quota.status)) + modeText + appQuotaText + appRPMText + totalRPMText + providerQuotaText + providerRPMText + totalProviderRPMText + reasonText;
     }
     function renderComponentHealth(component) {
       const countText = component.server_count !== undefined
@@ -2337,6 +2358,12 @@ const consoleHTML = `<!doctype html>
       }
       return "<span class=\"status healthy\">" + esc(t("enabled")) + "</span><div class=\"muted\">RPM " + esc(quota.requests_per_minute || 0) + "</div>";
     }
+    function renderProviderQuota(quota) {
+      if (!quota || !quota.enabled) {
+        return "<span class=\"status disabled\">" + esc(t("disabled")) + "</span>";
+      }
+      return "<span class=\"status healthy\">" + esc(t("enabled")) + "</span><div class=\"muted\">RPM " + esc(quota.requests_per_minute || 0) + "</div>";
+    }
     function exportGrants() {
       const query = grantCatalogQuery();
       exportAdminJSONL("/gateway/v1/grants/export", query, "grants.jsonl", grantMessage);
@@ -2384,6 +2411,7 @@ const consoleHTML = `<!doctype html>
       if (providerClassFilter.value) query.set("class", providerClassFilter.value);
       if (providerEnabledFilter.value) query.set("enabled", providerEnabledFilter.value);
       if (providerRuntimeFilter.value) query.set("runtime_status", providerRuntimeFilter.value);
+      if (providerQuotaFilter.value) query.set("quota_enabled", providerQuotaFilter.value);
       return query;
     }
     function renderProviderCatalog() {
@@ -2401,6 +2429,7 @@ const consoleHTML = `<!doctype html>
           "<td>" + renderProviderClassLink(item.class) + "</td>" +
           "<td>" + esc(item.adapter || "mock") + "</td>" +
           "<td title=\"" + esc((item.models || []).join(", ")) + "\">" + renderModelLinks(item.models || [], item.id) + "</td>" +
+          "<td>" + renderProviderQuota(item.quota || {}) + "</td>" +
           "<td><span class=\"status " + esc(runtimeStatus) + "\">" + esc(labelRuntime(runtimeStatus)) + "</span><div class=\"muted\">" + (item.enabled === false ? t("disabled") : t("enabled")) + "</div></td>" +
           "<td><div class=\"provider-actions\">" +
             "<button class=\"secondary\" data-provider=\"" + esc(item.id) + "\" data-action=\"probe\">" + t("probe") + "</button>" +
@@ -2411,7 +2440,7 @@ const consoleHTML = `<!doctype html>
       providerRows.querySelectorAll("[data-action='probe']").forEach(button => button.addEventListener("click", () => probeProvider(button.dataset.provider)));
       providerRows.querySelectorAll("[data-action='toggle']").forEach(button => button.addEventListener("click", () => setProviderEnabled(button.dataset.provider, button.dataset.enabled === "true")));
       if (!allProviders.length) {
-        providerRows.innerHTML = "<tr><td colspan=\"6\" class=\"muted\">" + emptyText("noProviders", providerCatalogQuery()) + "</td></tr>";
+        providerRows.innerHTML = "<tr><td colspan=\"7\" class=\"muted\">" + emptyText("noProviders", providerCatalogQuery()) + "</td></tr>";
       }
     }
     function exportProviderCatalog() {
@@ -3144,6 +3173,7 @@ const consoleHTML = `<!doctype html>
       providerClassFilter.value = "";
       providerEnabledFilter.value = "";
       providerRuntimeFilter.value = "";
+      providerQuotaFilter.value = "";
       providerPage = 1;
       loadProviderCatalog();
     }
@@ -3166,9 +3196,10 @@ const consoleHTML = `<!doctype html>
       policyPage = 1;
       loadPolicyCatalog();
     }
-    function filterProviderByID(providerID) {
+    function filterProviderByID(providerID, quotaEnabled = "") {
       if (!providerID) return;
       providerIDFilter.value = providerID;
+      providerQuotaFilter.value = quotaEnabled || "";
       providerPage = 1;
       loadProviderCatalog();
     }

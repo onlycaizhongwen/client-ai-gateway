@@ -86,11 +86,17 @@ type MCPTool struct {
 }
 
 type Quotas struct {
-	Apps []AppQuota `json:"apps,omitempty"`
+	Apps      []AppQuota      `json:"apps,omitempty"`
+	Providers []ProviderQuota `json:"providers,omitempty"`
 }
 
 type AppQuota struct {
 	AppID             string `json:"app_id"`
+	RequestsPerMinute int    `json:"requests_per_minute,omitempty"`
+}
+
+type ProviderQuota struct {
+	ProviderID        string `json:"provider_id"`
 	RequestsPerMinute int    `json:"requests_per_minute,omitempty"`
 }
 
@@ -282,7 +288,7 @@ func (c Config) Validate() error {
 	if err := validateMCPRuntime(c.MCPRuntime); err != nil {
 		return err
 	}
-	if err := validateQuotas(c.Quotas, appIDs); err != nil {
+	if err := validateQuotas(c.Quotas, appIDs, providerIDs); err != nil {
 		return err
 	}
 	policyIDs := map[string]struct{}{}
@@ -307,7 +313,7 @@ func (c Config) Validate() error {
 	return nil
 }
 
-func validateQuotas(quotas Quotas, appIDs map[string]struct{}) error {
+func validateQuotas(quotas Quotas, appIDs map[string]struct{}, providerIDs map[string]struct{}) error {
 	seenApps := map[string]struct{}{}
 	for i, quota := range quotas.Apps {
 		if quota.AppID == "" {
@@ -322,6 +328,22 @@ func validateQuotas(quotas Quotas, appIDs map[string]struct{}) error {
 		seenApps[quota.AppID] = struct{}{}
 		if quota.RequestsPerMinute < 0 {
 			return fmt.Errorf("quotas.apps[%d].requests_per_minute must be >= 0", i)
+		}
+	}
+	seenProviders := map[string]struct{}{}
+	for i, quota := range quotas.Providers {
+		if quota.ProviderID == "" {
+			return fmt.Errorf("quotas.providers[%d].provider_id is required", i)
+		}
+		if _, ok := providerIDs[quota.ProviderID]; !ok {
+			return fmt.Errorf("quotas.providers[%d].provider_id %q does not reference a configured provider", i, quota.ProviderID)
+		}
+		if _, ok := seenProviders[quota.ProviderID]; ok {
+			return fmt.Errorf("duplicate provider quota for provider %q", quota.ProviderID)
+		}
+		seenProviders[quota.ProviderID] = struct{}{}
+		if quota.RequestsPerMinute < 0 {
+			return fmt.Errorf("quotas.providers[%d].requests_per_minute must be >= 0", i)
 		}
 	}
 	return nil

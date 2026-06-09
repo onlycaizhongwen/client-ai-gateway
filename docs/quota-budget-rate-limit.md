@@ -1,6 +1,6 @@
 # 配额、预算与速率限制设计草案
 
-本文定义客户端 AI 网关实现用户级配额、Provider 预算和速率限制时需要遵守的边界。当前版本已实现 App 级 `requests_per_minute` 请求前限流；Provider 预算、token/day 记账和成本统计仍处于设计阶段。
+本文定义客户端 AI 网关实现用户级配额、Provider 预算和速率限制时需要遵守的边界。当前版本已实现 App 级和 Provider 级 `requests_per_minute` 内存限流；Provider 预算、token/day 记账和成本统计仍处于设计阶段。
 
 ## 目标
 
@@ -42,7 +42,7 @@ flowchart LR
 
 ## 当前已实现
 
-当前支持 App 级 RPM：
+当前支持 App 级和 Provider 级 RPM：
 
 ```json
 {
@@ -52,6 +52,12 @@ flowchart LR
         "app_id": "dev-app",
         "requests_per_minute": 120
       }
+    ],
+    "providers": [
+      {
+        "provider_id": "cloud-openai",
+        "requests_per_minute": 60
+      }
     ]
   }
 }
@@ -60,19 +66,21 @@ flowchart LR
 约定：
 
 - `app_id` 必须引用已配置 App。
-- `requests_per_minute=0` 或不配置表示不启用该 App 限流。
+- `provider_id` 必须引用已配置 Provider。
+- `requests_per_minute=0` 或不配置表示不启用该 App 或 Provider 限流。
 - 负数会被配置校验拒绝。
-- 同一个 App 不能重复配置 quota。
-- 命中限流时返回 `rate_limited`，HTTP 状态码为 429。
-- Trace 会写入 `quota_rejected` 事件，且不会进入 Provider 路由。
-- 运行时健康接口会通过 `quota_runtime` 返回 App quota 数量、启用 RPM 的 App 数量、总 RPM 上限和当前模式；该视图不暴露 App Token。
+- 同一个 App 或 Provider 不能重复配置 quota。
+- App RPM 命中限流时返回 `rate_limited`，HTTP 状态码为 429，且不会进入 Provider 路由。
+- Provider RPM 命中限流时跳过该 Provider 候选，继续尝试下一个符合 Policy/Router 的候选；如果所有候选都不可用，则返回 `rate_limited`。
+- Trace 会写入 `quota_checked` 或 `quota_rejected` 事件。
+- 运行时健康接口会通过 `quota_runtime` 返回 App/Provider quota 数量、启用 RPM 数量、总 RPM 上限和当前模式；该视图不暴露 App Token。
 - 应用列表接口和控制台“应用与授权”面板会展示 App quota 摘要，仅包含是否启用和 `requests_per_minute`。
 - 应用列表支持 `quota_enabled=true|false` 筛选，便于快速找出未配置 RPM 限流的 App。
 - 控制台运行问题汇总会以 info 级别提示具备 `chat` grant 但未启用 App RPM 的应用，点击后联动到应用列表并筛选未启用配额项。
 
 ## 后续配置草案
 
-后续可继续增加：
+后续可继续增加 token/day、预算和工具级配额：
 
 ```json
 {
@@ -103,7 +111,7 @@ flowchart LR
 }
 ```
 
-除 `requests_per_minute` 外，其他字段不应新增到正式配置中，除非同步完成校验、控制台展示和测试。
+Provider 级 `requests_per_minute` 已进入正式配置；除 `requests_per_minute` 外，其他字段不应新增到正式配置中，除非同步完成校验、控制台展示和测试。
 
 ## 决策顺序
 
@@ -112,11 +120,12 @@ flowchart LR
 1. App Token 校验。
 2. `chat` grant 校验。
 3. Policy 评估。
-4. 请求前 quota/rate 检查。
+4. App 请求前 quota/rate 检查。
 5. Router 生成符合策略的 Provider 候选。
-6. Provider 调用。
-7. 请求后 usage 记账。
-8. Trace/Audit 写入配额和预算结果。
+6. Provider 候选调用前 quota/rate 检查，超限则跳过该候选。
+7. Provider 调用。
+8. 请求后 usage 记账。
+9. Trace/Audit 写入配额和预算结果。
 
 工具调用建议在 scope 校验后执行 quota/rate 检查。
 
@@ -142,7 +151,7 @@ Provider adapter 已返回：
 | --- | --- |
 | App RPM 超限 | 请求前拒绝，返回 `rate_limited`。 |
 | App 日 token 超限 | 请求前拒绝。 |
-| Provider RPM 超限 | Router 跳过该 Provider，记录 skip reason。 |
+| Provider RPM 超限 | Pipeline 在调用前跳过该 Provider，记录 `quota_rejected`；如果无候选可用则返回 `rate_limited`。 |
 | 云端预算超限 | 跳过云端 Provider，不自动绕过 `deny_cloud_for_sensitive`。 |
 | 本地额度超限且云端允许 | 只有 Policy 允许云端时才可尝试云端。 |
 | usage 不可得 | 允许请求完成，但 Audit 标记 `usage_source=unknown`。 |
@@ -152,7 +161,7 @@ Provider adapter 已返回：
 | Code | 说明 |
 | --- | --- |
 | `quota_exceeded` | App、Provider 或 Tool 非 RPM 配额耗尽，待实现。 |
-| `rate_limited` | 网关本地 RPM 限流命中，已用于 App 级请求限流。 |
+| `rate_limited` | 网关本地 RPM 限流命中，已用于 App 和 Provider 级请求限流。 |
 | `budget_exceeded` | Provider 或组织预算耗尽。 |
 
 ## Audit 字段
@@ -199,8 +208,8 @@ Provider adapter 已返回：
 
 当前版本保持：
 
-- 只做 App 级 `requests_per_minute` 限流。
+- 只做 App 和 Provider 级 `requests_per_minute` 限流。
 - 不做真实预算扣减。
-- 不新增 Provider 预算、token/day 或成本字段。
+- 不新增 token/day、成本或预算扣减字段。
 - 不改变 Provider fallback 顺序。
 - Usage 只随 OpenAI-compatible 响应返回给调用方。
