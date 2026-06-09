@@ -92,6 +92,67 @@ function Capture-Screenshot {
   }
 }
 
+function Capture-DOM {
+  param(
+    [string]$Browser,
+    [string]$Url,
+    [string]$Output,
+    [string]$WindowSize
+  )
+  $resolvedOutput = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Output)
+  $userDataDir = Join-Path $env:TEMP ("client-ai-gateway-ui-smoke-dom-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $userDataDir | Out-Null
+  try {
+    $args = @(
+      "--headless=new",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--virtual-time-budget=5000",
+      "--user-data-dir=$userDataDir",
+      "--window-size=$WindowSize",
+      "--dump-dom",
+      "${Url}/console"
+    )
+    $stdoutPath = Join-Path $userDataDir "dom.stdout.html"
+    $stderrPath = Join-Path $userDataDir "dom.stderr.log"
+    $process = Start-Process -FilePath $Browser -ArgumentList $args -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+    if ($process.ExitCode -ne 0) {
+      throw "Browser DOM dump failed, ExitCode=$($process.ExitCode), WindowSize=$WindowSize"
+    }
+    if (Test-Path $stdoutPath) {
+      Copy-Item -LiteralPath $stdoutPath -Destination $resolvedOutput -Force
+    }
+    if (-not (Test-Path $resolvedOutput)) {
+      throw "DOM dump was not created: $resolvedOutput"
+    }
+    $file = Get-Item $resolvedOutput
+    if ($file.Length -lt 20000) {
+      throw "DOM dump is too small; console may not have rendered: $resolvedOutput ($($file.Length) bytes)"
+    }
+  } finally {
+    Remove-Item -LiteralPath $userDataDir -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Assert-FileContains {
+  param(
+    [string]$Path,
+    [string[]]$Needles
+  )
+  $content = Get-Content -Path $Path -Raw -Encoding UTF8
+  foreach ($needle in $Needles) {
+    if (-not $content.Contains($needle)) {
+      throw "Expected UI smoke artifact '$Path' to contain '$needle'."
+    }
+  }
+}
+
+function New-Text {
+  param([int[]]$CodePoints)
+  return -join ($CodePoints | ForEach-Object { [char]$_ })
+}
+
 $browser = Find-Browser
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 
@@ -109,6 +170,43 @@ try {
   Wait-Gateway $BaseUrl
   Capture-Screenshot -Browser $browser -Url $BaseUrl -Output (Join-Path $OutDir "console-desktop.png") -WindowSize "1440,1000"
   Capture-Screenshot -Browser $browser -Url $BaseUrl -Output (Join-Path $OutDir "console-narrow.png") -WindowSize "390,900"
+
+  $desktopDOM = Join-Path $OutDir "console-desktop.dom.html"
+  $narrowDOM = Join-Path $OutDir "console-narrow.dom.html"
+  Capture-DOM -Browser $browser -Url $BaseUrl -Output $desktopDOM -WindowSize "1440,1000"
+  Capture-DOM -Browser $browser -Url $BaseUrl -Output $narrowDOM -WindowSize "390,900"
+
+  $zhTitle = (New-Text @(0x5ba2, 0x6237, 0x7aef)) + " AI " + (New-Text @(0x7f51, 0x5173, 0x63a7, 0x5236, 0x53f0))
+  $zhIssues = New-Text @(0x8fd0, 0x884c, 0x95ee, 0x9898, 0x6c47, 0x603b)
+  $zhApps = New-Text @(0x5e94, 0x7528, 0x4e0e, 0x6388, 0x6743)
+  $zhProviders = "Provider " + (New-Text @(0x76ee, 0x5f55))
+  $zhTraces = New-Text @(0x8bf7, 0x6c42, 0x8ffd, 0x8e2a)
+  $zhAudit = New-Text @(0x5ba1, 0x8ba1, 0x4e8b, 0x4ef6)
+  $zhQuotaRejected = New-Text @(0x914d, 0x989d, 0x62d2, 0x7edd)
+  $zhPrev = New-Text @(0x4e0a, 0x4e00, 0x9875)
+  $zhNext = New-Text @(0x4e0b, 0x4e00, 0x9875)
+
+  Assert-FileContains -Path $desktopDOM -Needles @(
+    $zhTitle,
+    $zhIssues,
+    $zhApps,
+    $zhProviders,
+    $zhTraces,
+    $zhAudit,
+    $zhQuotaRejected,
+    $zhPrev,
+    $zhNext,
+    "English"
+  )
+  Assert-FileContains -Path $narrowDOM -Needles @(
+    $zhTitle,
+    $zhIssues,
+    $zhApps,
+    $zhTraces,
+    $zhAudit,
+    $zhPrev,
+    $zhNext
+  )
   Write-Host "UI smoke passed: $OutDir"
 } finally {
   if ($startedProcess -and -not $startedProcess.HasExited) {

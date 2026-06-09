@@ -10,7 +10,7 @@
 | Provider 路由 | 已完成 MVP | 支持本地/云端 Provider、健康状态、启停、探测、模型目录。 |
 | Policy Engine | 已完成 MVP | 支持 allow、deny、force_local、deny_cloud_for_sensitive 和 dry-run。 |
 | Trace / Audit | 已完成 MVP | 支持 JSONL 持久化、分页、筛选、导出、Trace 关联，并展示配额和 Provider 启停 before/after。 |
-| 控制台 | 已完成 MVP | 中文优先、中英文切换、分页、筛选、清空、对象联动、空状态，并有 headless 浏览器 smoke。 |
+| 控制台 | 已完成 MVP | 中文优先、中英文切换、分页、筛选、清空、对象联动、空状态，并有 headless 浏览器截图和 DOM 内容 smoke。 |
 | 工具调用 | 已完成只读 MVP | 支持内置只读工具、scope 校验、Trace/Audit。 |
 | MCP | Manifest MVP | 只加载 Manifest，不执行 MCP Server。 |
 | 企业部署说明 | 已补齐初版 | 已有部署、权限审计、失败降级专题文档。 |
@@ -26,7 +26,7 @@
 
 | 优先级 | 缺口 | 当前风险 |
 | --- | --- | --- |
-| P0 | 真实浏览器 UI 回归 | 已补最小 headless smoke，后续需要 Playwright 级交互断言和像素回归。 |
+| P0 | 真实浏览器 UI 回归 | 已补 headless 桌面/窄屏截图和 DOM 关键内容断言，后续需要 Playwright 级交互断言和像素回归。 |
 | P0 | 安全审查清单 | 已补齐初版，后续随真实 MCP / 插件 SDK 继续扩展。 |
 | P1 | Provider SDK 边界 | 已补齐初版，后续需要示例模板和能力矩阵。 |
 | P1 | 插件 / Tool SDK | 已补齐初版，后续需要签名/来源校验、示例模板和真实沙箱模型。 |

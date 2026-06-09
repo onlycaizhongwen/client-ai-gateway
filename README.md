@@ -125,7 +125,7 @@ http://127.0.0.1:18765/console
 powershell -ExecutionPolicy Bypass -File scripts/ui-smoke.ps1
 ```
 
-脚本会使用本机 Edge/Chrome headless 打开控制台，并生成桌面和窄屏截图到 `artifacts/ui-smoke/`。
+脚本会使用本机 Edge/Chrome headless 打开控制台，生成桌面和窄屏截图，并导出对应 DOM 快照到 `artifacts/ui-smoke/`。Smoke 会断言控制台中文标题、关键面板、配额指标和分页控件已经渲染，避免只验证空白截图。
 
 ## 快速聊天请求
 
