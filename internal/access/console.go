@@ -590,6 +590,7 @@ const consoleHTML = `<!doctype html>
                 <option value="tool.invoke" data-i18n="tools">工具调用</option>
                 <option value="policy.dry_run" data-i18n="actionPolicyDryRun">策略试算</option>
                 <option value="routing.explain" data-i18n="actionRoutingExplain">路由解释</option>
+                <option value="app.quota" data-i18n="actionAppQuota">App 配额</option>
                 <option value="provider.enabled" data-i18n="actionProviderEnabled">Provider 启停</option>
                 <option value="provider.probe" data-i18n="actionProviderProbe">Provider 探测</option>
                 <option value="provider.quota" data-i18n="actionProviderQuota">Provider 配额</option>
@@ -1183,6 +1184,9 @@ const consoleHTML = `<!doctype html>
         loadingTraces: "正在加载追踪...",
         noTraces: "暂无 Trace。",
         loadingProviders: "正在加载 Provider...",
+        appQuotaInputTitle: "App RPM，0 表示禁用配额",
+        appQuotaInvalid: "App RPM 必须是大于等于 0 的整数。",
+        savingAppQuota: "正在保存 App 配额：",
         providerQuotaInputTitle: "Provider RPM，0 表示禁用配额",
         providerQuotaInvalid: "Provider RPM 必须是大于等于 0 的整数。",
         savingProviderQuota: "正在保存 Provider 配额：",
@@ -1201,6 +1205,7 @@ const consoleHTML = `<!doctype html>
         actionConfigReload: "配置重载",
         actionPolicyDryRun: "策略试算",
         actionRoutingExplain: "\u8def\u7531\u89e3\u91ca",
+        actionAppQuota: "App 配额",
         actionProviderEnabled: "Provider 启停",
         actionProviderProbe: "Provider 探测",
         actionProviderQuota: "Provider 配额",
@@ -1491,6 +1496,9 @@ const consoleHTML = `<!doctype html>
         loadingTraces: "Loading traces...",
         noTraces: "No traces.",
         loadingProviders: "Loading providers...",
+        appQuotaInputTitle: "App RPM, 0 disables quota",
+        appQuotaInvalid: "App RPM must be an integer greater than or equal to 0.",
+        savingAppQuota: "Saving app quota: ",
         providerQuotaInputTitle: "Provider RPM, 0 disables quota",
         providerQuotaInvalid: "Provider RPM must be an integer greater than or equal to 0.",
         savingProviderQuota: "Saving provider quota: ",
@@ -1509,6 +1517,7 @@ const consoleHTML = `<!doctype html>
         actionConfigReload: "config reload",
         actionPolicyDryRun: "policy dry-run",
         actionRoutingExplain: "routing explain",
+        actionAppQuota: "app quota",
         actionProviderEnabled: "provider enabled",
         actionProviderProbe: "provider probe",
         actionProviderQuota: "provider quota",
@@ -1739,6 +1748,9 @@ const consoleHTML = `<!doctype html>
       totalProviderRpm: "\u603b Provider RPM"
       ,
       save: "\u4fdd\u5b58",
+      appQuotaInputTitle: "App RPM\uff0c0 \u8868\u793a\u7981\u7528\u914d\u989d",
+      appQuotaInvalid: "App RPM \u5fc5\u987b\u662f\u5927\u4e8e\u7b49\u4e8e 0 \u7684\u6574\u6570\u3002",
+      savingAppQuota: "\u6b63\u5728\u4fdd\u5b58 App \u914d\u989d\uff1a",
       providerQuotaInputTitle: "Provider RPM\uff0c0 \u8868\u793a\u7981\u7528\u914d\u989d",
       providerQuotaInvalid: "Provider RPM \u5fc5\u987b\u662f\u5927\u4e8e\u7b49\u4e8e 0 \u7684\u6574\u6570\u3002",
       savingProviderQuota: "\u6b63\u5728\u4fdd\u5b58 Provider \u914d\u989d\uff1a",
@@ -1798,6 +1810,7 @@ const consoleHTML = `<!doctype html>
         "config.reload": t("actionConfigReload"),
         "policy.dry_run": t("actionPolicyDryRun"),
         "routing.explain": t("actionRoutingExplain"),
+        "app.quota": t("actionAppQuota"),
         "provider.enabled": t("actionProviderEnabled"),
         "provider.probe": t("actionProviderProbe"),
         "provider.quota": t("actionProviderQuota"),
@@ -2428,10 +2441,11 @@ const consoleHTML = `<!doctype html>
         "<tr>" +
           "<td><strong>" + esc(item.name || item.id) + "</strong><div class=\"muted\">" + renderAppLink(item.id) + "</div></td>" +
           "<td class=\"trace-id\">" + esc(item.token_hint || "-") + "</td>" +
-          "<td>" + renderAppQuota(item.quota || {}) + "</td>" +
+          "<td>" + renderAppQuotaEditor(item.id, item.quota || {}) + "</td>" +
           "<td title=\"" + esc((item.grants || []).join(", ")) + "\">" + renderGrantLinks(item.grants || []) + "</td>" +
         "</tr>"
       ).join("");
+      appRows.querySelectorAll("[data-action='app-quota']").forEach(button => button.addEventListener("click", () => setAppQuota(button.dataset.app)));
       if (!allApps.length) {
         appRows.innerHTML = "<tr><td colspan=\"4\" class=\"muted\">" + emptyText("noApps", appCatalogQuery()) + "</td></tr>";
       }
@@ -2441,6 +2455,13 @@ const consoleHTML = `<!doctype html>
         return "<span class=\"status disabled\">" + esc(t("disabled")) + "</span>";
       }
       return "<span class=\"status healthy\">" + esc(t("enabled")) + "</span><div class=\"muted\">RPM " + esc(quota.requests_per_minute || 0) + "</div>";
+    }
+    function renderAppQuotaEditor(appID, quota) {
+      const rpm = quota && quota.enabled ? quota.requests_per_minute || 0 : 0;
+      return "<div class=\"provider-actions\">" +
+        "<input data-app-quota-input=\"" + esc(appID) + "\" type=\"number\" min=\"0\" step=\"1\" value=\"" + esc(rpm) + "\" title=\"" + esc(t("appQuotaInputTitle")) + "\" style=\"width: 92px;\" />" +
+        "<button class=\"secondary\" data-app=\"" + esc(appID) + "\" data-action=\"app-quota\">" + t("save") + "</button>" +
+      "</div><div class=\"muted\">" + (rpm > 0 ? "RPM " + esc(rpm) : esc(t("quotaDisabled"))) + "</div>";
     }
     function renderProviderQuota(quota) {
       if (!quota || !quota.enabled) {
@@ -2917,6 +2938,9 @@ const consoleHTML = `<!doctype html>
       if (event.action === "tool.invoke" || metadata.tool_id) {
         return renderToolLink(metadata.tool_id || target);
       }
+      if (event.action === "app.quota") {
+        return renderAppLink(target);
+      }
       if (event.action === "provider.enabled" || event.action === "provider.probe" || event.action === "provider.quota") {
         return renderProviderLink(target);
       }
@@ -3148,6 +3172,25 @@ const consoleHTML = `<!doctype html>
         await Promise.all([loadProviders(), loadProviderCatalog(), loadRuntimeHealth(), loadAudit()]);
       } catch (err) {
         auditMessage.textContent = t("failedPrefix") + err.message;
+      }
+    }
+    async function setAppQuota(appId) {
+      const input = Array.from(document.querySelectorAll("[data-app-quota-input]")).find(item => item.dataset.appQuotaInput === appId);
+      const rpm = Number(input && input.value);
+      if (!Number.isInteger(rpm) || rpm < 0) {
+        appMessage.textContent = t("failedPrefix") + t("appQuotaInvalid");
+        return;
+      }
+      appMessage.textContent = t("savingAppQuota") + appId + "...";
+      try {
+        await providerRequest("/gateway/v1/apps/" + encodeURIComponent(appId) + "/quota", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requests_per_minute: rpm })
+        });
+        await Promise.all([loadApps(), loadRuntimeHealth(), loadAudit()]);
+      } catch (err) {
+        appMessage.textContent = t("failedPrefix") + err.message;
       }
     }
     async function configReload() {

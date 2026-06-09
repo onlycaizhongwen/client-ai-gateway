@@ -539,6 +539,41 @@ func TestAppsListMasksTokensAndFilters(t *testing.T) {
 	}
 }
 
+func TestAppQuotaManagementHTTP(t *testing.T) {
+	handler, auditStore, cleanup := newManagementTestHandler(t)
+	defer cleanup()
+
+	res := postJSON(handler, "/gateway/v1/apps/dev-app/quota", "dev-token", map[string]any{"requests_per_minute": 7})
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for non-admin app quota update, got %d", res.Code)
+	}
+
+	res = postJSON(handler, "/gateway/v1/apps/dev-app/quota", "admin-token", map[string]any{"requests_per_minute": 7})
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200 for app quota update, got %d: %s", res.Code, res.Body.String())
+	}
+	req := httptest.NewRequest(http.MethodGet, "/gateway/v1/apps?app_id=dev-app", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	appsRes := httptest.NewRecorder()
+	handler.ServeHTTP(appsRes, req)
+	var appsBody struct {
+		Apps []appView `json:"apps"`
+	}
+	decodeBody(t, appsRes, &appsBody)
+	if len(appsBody.Apps) != 1 || !appsBody.Apps[0].Quota.Enabled || appsBody.Apps[0].Quota.RequestsPerMinute != 7 {
+		t.Fatalf("expected app quota view after update, got %+v", appsBody.Apps)
+	}
+
+	res = postJSON(handler, "/gateway/v1/apps/dev-app/quota", "admin-token", map[string]any{"requests_per_minute": -1})
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for negative app quota update, got %d", res.Code)
+	}
+	quotaEvents := auditStore.List(audit.ListQuery{Action: "app.quota"})
+	if len(quotaEvents) < 2 || quotaEvents[0].Result != audit.ResultFailed || quotaEvents[1].Result != audit.ResultSuccess {
+		t.Fatalf("expected app.quota audit success and failure, got %+v", quotaEvents)
+	}
+}
+
 func TestAppsExportMasksTokens(t *testing.T) {
 	handler, _ := newTestHandlerWithQuota(config.Quotas{Apps: []config.AppQuota{{
 		AppID:             "dev-app",
@@ -1497,6 +1532,10 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function buildTraceStats",
 		"function quotaEventSubject",
 		"function exportAudit()",
+		"function setAppQuota",
+		"data-app-quota-input",
+		"appQuotaInvalid",
+		"savingAppQuota",
 		"function setProviderQuota",
 		"data-provider-quota-input",
 		"providerQuotaInvalid",
@@ -2036,24 +2075,8 @@ func TestConfigReloadHTTP(t *testing.T) {
 }
 
 func TestProviderManagementHTTP(t *testing.T) {
-	path := writeHandlerConfig(t, `{
-	  "listen_addr": "127.0.0.1:0",
-	  "trace_store_path": "memory",
-	  "policy_version": "v1",
-	  "apps": [
-	    {"id":"dev-app","token":"dev-token","grants":["chat"]},
-	    {"id":"admin-app","token":"admin-token","grants":["admin"]}
-	  ],
-	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}]
-	}`)
-	store := trace.NewMemoryStore()
-	manager, err := gatewayruntime.NewManager(path, store)
-	if err != nil {
-		t.Fatalf("new manager: %v", err)
-	}
-	defer manager.Close()
-	auditStore := audit.NewMemoryStore()
-	handler := NewRuntimeHandler(manager, store).WithAudit(auditStore).Routes()
+	handler, auditStore, cleanup := newManagementTestHandler(t)
+	defer cleanup()
 
 	res := postJSON(handler, "/gateway/v1/providers/local-mock/enabled", "dev-token", map[string]any{"enabled": false})
 	if res.Code != http.StatusUnauthorized {
@@ -2115,6 +2138,28 @@ func TestProviderManagementHTTP(t *testing.T) {
 	if len(quotaEvents) < 2 || quotaEvents[0].Result != audit.ResultFailed || quotaEvents[1].Result != audit.ResultSuccess {
 		t.Fatalf("expected provider.quota audit success and failure, got %+v", quotaEvents)
 	}
+}
+
+func newManagementTestHandler(t *testing.T) (http.Handler, *audit.MemoryStore, func()) {
+	t.Helper()
+	path := writeHandlerConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [
+	    {"id":"dev-app","token":"dev-token","grants":["chat"]},
+	    {"id":"admin-app","token":"admin-token","grants":["admin"]}
+	  ],
+	  "providers": [{"id":"local-mock","class":"local","models":["local-small"],"healthy":true}]
+	}`)
+	store := trace.NewMemoryStore()
+	manager, err := gatewayruntime.NewManager(path, store)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	auditStore := audit.NewMemoryStore()
+	handler := NewRuntimeHandler(manager, store).WithAudit(auditStore).Routes()
+	return handler, auditStore, manager.Close
 }
 
 func TestAuditListRequiresAdmin(t *testing.T) {

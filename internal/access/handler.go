@@ -79,6 +79,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /gateway/v1/runtime/health", h.runtimeHealth)
 	mux.HandleFunc("GET /gateway/v1/apps", h.appsList)
 	mux.HandleFunc("GET /gateway/v1/apps/export", h.appsExport)
+	mux.HandleFunc("POST /gateway/v1/apps/", h.appAction)
 	mux.HandleFunc("GET /gateway/v1/grants", h.grantsList)
 	mux.HandleFunc("GET /gateway/v1/grants/export", h.grantsExport)
 	mux.HandleFunc("GET /gateway/v1/policies", h.policiesList)
@@ -307,6 +308,10 @@ type providerEnabledRequest struct {
 }
 
 type providerQuotaRequest struct {
+	RequestsPerMinute int `json:"requests_per_minute"`
+}
+
+type appQuotaRequest struct {
 	RequestsPerMinute int `json:"requests_per_minute"`
 }
 
@@ -598,6 +603,45 @@ func (h *Handler) appsExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSONL(w, "apps.jsonl", h.appViews(r))
+}
+
+func (h *Handler) appAction(w http.ResponseWriter, r *http.Request) {
+	if h.runtime == nil {
+		writeError(w, http.StatusServiceUnavailable, "", "runtime_unavailable", "runtime manager is not configured")
+		return
+	}
+	appID, action, ok := parseAppAction(r.URL.Path)
+	if !ok {
+		writeError(w, http.StatusNotFound, "", "not_found", "app action not found")
+		return
+	}
+	app, ok := h.requireAdmin(w, r)
+	if !ok {
+		h.saveAudit(audit.Event{
+			Action: "app." + action,
+			Target: appID,
+			Result: audit.ResultDenied,
+			Error:  "admin grant is required",
+		})
+		return
+	}
+	switch action {
+	case "quota":
+		var req appQuotaRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "", "invalid_request", err.Error())
+			return
+		}
+		if err := h.runtime.SetAppRPMQuota(appID, req.RequestsPerMinute); err != nil {
+			h.saveAudit(audit.Event{AppID: app.ID, Action: "app.quota", Target: appID, Result: audit.ResultFailed, Error: err.Error(), Metadata: map[string]any{"requests_per_minute": req.RequestsPerMinute}})
+			writeError(w, http.StatusBadRequest, "", "app_quota_update_failed", err.Error())
+			return
+		}
+		h.saveAudit(audit.Event{AppID: app.ID, Action: "app.quota", Target: appID, Result: audit.ResultSuccess, Metadata: map[string]any{"requests_per_minute": req.RequestsPerMinute}})
+		writeJSON(w, http.StatusOK, map[string]any{"status": "updated", "app_id": appID, "requests_per_minute": req.RequestsPerMinute})
+	default:
+		writeError(w, http.StatusNotFound, "", "not_found", "app action not found")
+	}
 }
 
 func (h *Handler) grantsList(w http.ResponseWriter, r *http.Request) {
@@ -1655,6 +1699,15 @@ func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) (config.A
 
 func parseProviderAction(path string) (string, string, bool) {
 	rest := strings.TrimPrefix(path, "/gateway/v1/providers/")
+	parts := strings.Split(rest, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
+func parseAppAction(path string) (string, string, bool) {
+	rest := strings.TrimPrefix(path, "/gateway/v1/apps/")
 	parts := strings.Split(rest, "/")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", "", false

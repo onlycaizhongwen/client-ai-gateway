@@ -582,6 +582,11 @@ go test ./...
 ```powershell
 curl "http://127.0.0.1:18765/gateway/v1/apps?limit=20&offset=0&grant=tool" `
   -H "Authorization: Bearer admin-token"
+
+curl -X POST http://127.0.0.1:18765/gateway/v1/apps/dev-app/quota `
+  -H "Authorization: Bearer admin-token" `
+  -H "Content-Type: application/json" `
+  -d "{\"requests_per_minute\":120}"
 ```
 
 支持查询参数：
@@ -590,7 +595,7 @@ curl "http://127.0.0.1:18765/gateway/v1/apps?limit=20&offset=0&grant=tool" `
 - `grant`：只看具备指定 grant 的应用，例如 `chat`、`tool`、`tool:runtime.read` 或 `admin`。
 - `quota_enabled`：按 App RPM 配额是否启用筛选，支持 `true` 或 `false`。
 
-响应包含 `apps`、`total`、`offset`、`limit` 和当前 `filters`。控制台“应用与授权”面板复用同一接口，列表展示 App、Token 提示、配额摘要和 Grants，并支持按当前筛选条件导出 JSONL。
+响应包含 `apps`、`total`、`offset`、`limit` 和当前 `filters`。控制台“应用与授权”面板复用同一接口，列表展示 App、Token 提示、配额摘要和 Grants，并支持按当前筛选条件导出 JSONL。管理员也可以通过控制台或管理 API 调整 App RPM 配额；`requests_per_minute=0` 表示关闭该 App 配额，负数会被拒绝。
 
 ## Grant 目录
 

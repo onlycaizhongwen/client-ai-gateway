@@ -18,6 +18,7 @@
 | `GET /gateway/v1/audit/events` | 必须携带 `admin` Grant。 |
 | `GET /gateway/v1/audit/events/export` | 必须携带 `admin` Grant。 |
 | `POST /gateway/v1/config/reload` | 必须携带 `admin` Grant。 |
+| `POST /gateway/v1/apps/{id}/quota` | 必须携带 `admin` Grant。 |
 | `POST /gateway/v1/providers/{id}/enabled` | 必须携带 `admin` Grant。 |
 | `POST /gateway/v1/providers/{id}/quota` | 必须携带 `admin` Grant。 |
 | `POST /gateway/v1/providers/{id}/probe` | 必须携带 `admin` Grant。 |

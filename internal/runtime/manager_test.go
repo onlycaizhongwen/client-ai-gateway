@@ -140,6 +140,48 @@ func TestManagerSetProviderRPMQuota(t *testing.T) {
 	}
 }
 
+func TestManagerSetAppRPMQuota(t *testing.T) {
+	path := writeRuntimeConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"app","token":"token","grants":["chat"]}],
+	  "providers": [{"id":"local","class":"local","models":["m"],"healthy":true}]
+	}`)
+	manager, err := NewManager(path, trace.NewMemoryStore())
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+
+	if err := manager.SetAppRPMQuota("app", 11); err != nil {
+		t.Fatalf("set app rpm quota: %v", err)
+	}
+	quotas := manager.Snapshot().Config.Quotas.Apps
+	if len(quotas) != 1 || quotas[0].AppID != "app" || quotas[0].RequestsPerMinute != 11 {
+		t.Fatalf("expected app quota after reload, got %+v", quotas)
+	}
+
+	if err := manager.SetAppRPMQuota("app", 4); err != nil {
+		t.Fatalf("update app rpm quota: %v", err)
+	}
+	quotas = manager.Snapshot().Config.Quotas.Apps
+	if len(quotas) != 1 || quotas[0].RequestsPerMinute != 4 {
+		t.Fatalf("expected updated app quota, got %+v", quotas)
+	}
+
+	if err := manager.SetAppRPMQuota("app", 0); err != nil {
+		t.Fatalf("disable app rpm quota: %v", err)
+	}
+	if got := manager.Snapshot().Config.Quotas.Apps; len(got) != 0 {
+		t.Fatalf("expected app quota to be removed, got %+v", got)
+	}
+
+	if err := manager.SetAppRPMQuota("app", -1); err == nil {
+		t.Fatal("expected negative app rpm quota to fail")
+	}
+}
+
 func TestManagerHealthView(t *testing.T) {
 	path := writeRuntimeConfig(t, `{
 	  "listen_addr": "127.0.0.1:0",

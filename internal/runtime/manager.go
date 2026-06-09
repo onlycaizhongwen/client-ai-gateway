@@ -135,6 +135,46 @@ func (m *Manager) SetProviderRPMQuota(providerID string, requestsPerMinute int) 
 	return m.writeConfigAndReload(cfg)
 }
 
+func (m *Manager) SetAppRPMQuota(appID string, requestsPerMinute int) error {
+	if requestsPerMinute < 0 {
+		return fmt.Errorf("app %q requests_per_minute must be >= 0", appID)
+	}
+	cfg, err := config.Load(m.configPath)
+	if err != nil {
+		return err
+	}
+	foundApp := false
+	for _, app := range cfg.Apps {
+		if app.ID == appID {
+			foundApp = true
+			break
+		}
+	}
+	if !foundApp {
+		return fmt.Errorf("app %q not found", appID)
+	}
+	foundQuota := false
+	for i := range cfg.Quotas.Apps {
+		if cfg.Quotas.Apps[i].AppID != appID {
+			continue
+		}
+		foundQuota = true
+		if requestsPerMinute == 0 {
+			cfg.Quotas.Apps = append(cfg.Quotas.Apps[:i], cfg.Quotas.Apps[i+1:]...)
+		} else {
+			cfg.Quotas.Apps[i].RequestsPerMinute = requestsPerMinute
+		}
+		break
+	}
+	if !foundQuota && requestsPerMinute > 0 {
+		cfg.Quotas.Apps = append(cfg.Quotas.Apps, config.AppQuota{
+			AppID:             appID,
+			RequestsPerMinute: requestsPerMinute,
+		})
+	}
+	return m.writeConfigAndReload(cfg)
+}
+
 func (m *Manager) ProbeProvider(ctx context.Context, providerID string) (providerhealth.View, error) {
 	snapshot := m.Snapshot()
 	for _, provider := range snapshot.Config.Providers {

@@ -33,6 +33,7 @@ The gateway returns stable error codes in JSON error responses and records the f
 | `reload_unavailable` | Runtime manager is not available in the current handler mode. |
 | `reload_failed` | Config reload failed and the previous runtime snapshot remains active. |
 | `runtime_unavailable` | Runtime manager is not available for Provider management or tool invocation. |
+| `app_quota_update_failed` | App RPM quota config update failed. |
 | `provider_update_failed` | Provider enable/disable config update failed. |
 | `provider_quota_update_failed` | Provider RPM quota config update failed. |
 | `provider_probe_failed` | Provider probe failed; inspect Provider health for the classified reason. |
