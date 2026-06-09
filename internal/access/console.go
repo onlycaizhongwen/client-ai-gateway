@@ -592,6 +592,7 @@ const consoleHTML = `<!doctype html>
                 <option value="routing.explain" data-i18n="actionRoutingExplain">路由解释</option>
                 <option value="provider.enabled" data-i18n="actionProviderEnabled">Provider 启停</option>
                 <option value="provider.probe" data-i18n="actionProviderProbe">Provider 探测</option>
+                <option value="provider.quota" data-i18n="actionProviderQuota">Provider 配额</option>
                 <option value="config.reload" data-i18n="actionConfigReload">配置重载</option>
               </select>
               <select id="audit-result-filter">
@@ -1166,6 +1167,7 @@ const consoleHTML = `<!doctype html>
         allEnabled: "全部启用状态",
         applyFilter: "筛选",
         clearFilter: "清空",
+        save: "保存",
         loadingTools: "\u6b63\u5728\u52a0\u8f7d\u5de5\u5177...",
         noTools: "\u6682\u65e0\u53ef\u7528\u5de5\u5177\u3002",
         invokeTool: "\u6267\u884c\u5de5\u5177",
@@ -1181,6 +1183,9 @@ const consoleHTML = `<!doctype html>
         loadingTraces: "正在加载追踪...",
         noTraces: "暂无 Trace。",
         loadingProviders: "正在加载 Provider...",
+        providerQuotaInputTitle: "Provider RPM，0 表示禁用配额",
+        providerQuotaInvalid: "Provider RPM 必须是大于等于 0 的整数。",
+        savingProviderQuota: "正在保存 Provider 配额：",
         loadingAudit: "正在加载审计事件...",
         loadingRuntime: "正在加载运行时状态...",
         ready: "就绪。",
@@ -1198,6 +1203,7 @@ const consoleHTML = `<!doctype html>
         actionRoutingExplain: "\u8def\u7531\u89e3\u91ca",
         actionProviderEnabled: "Provider 启停",
         actionProviderProbe: "Provider 探测",
+        actionProviderQuota: "Provider 配额",
         runtimeHealthy: "健康",
         runtimeDegraded: "降级",
         runtimeUnhealthy: "异常",
@@ -1469,6 +1475,7 @@ const consoleHTML = `<!doctype html>
         allEnabled: "All enabled states",
         applyFilter: "Apply",
         clearFilter: "Clear",
+        save: "Save",
         loadingTools: "Loading tools...",
         noTools: "No tools available.",
         invokeTool: "Invoke Tool",
@@ -1484,6 +1491,9 @@ const consoleHTML = `<!doctype html>
         loadingTraces: "Loading traces...",
         noTraces: "No traces.",
         loadingProviders: "Loading providers...",
+        providerQuotaInputTitle: "Provider RPM, 0 disables quota",
+        providerQuotaInvalid: "Provider RPM must be an integer greater than or equal to 0.",
+        savingProviderQuota: "Saving provider quota: ",
         loadingAudit: "Loading audit events...",
         loadingRuntime: "Loading runtime status...",
         ready: "Ready.",
@@ -1501,6 +1511,7 @@ const consoleHTML = `<!doctype html>
         actionRoutingExplain: "routing explain",
         actionProviderEnabled: "provider enabled",
         actionProviderProbe: "provider probe",
+        actionProviderQuota: "provider quota",
         runtimeHealthy: "healthy",
         runtimeDegraded: "degraded",
         runtimeUnhealthy: "unhealthy",
@@ -1727,6 +1738,10 @@ const consoleHTML = `<!doctype html>
       providerRpmEnabled: "\u542f\u7528 Provider RPM",
       totalProviderRpm: "\u603b Provider RPM"
       ,
+      save: "\u4fdd\u5b58",
+      providerQuotaInputTitle: "Provider RPM\uff0c0 \u8868\u793a\u7981\u7528\u914d\u989d",
+      providerQuotaInvalid: "Provider RPM \u5fc5\u987b\u662f\u5927\u4e8e\u7b49\u4e8e 0 \u7684\u6574\u6570\u3002",
+      savingProviderQuota: "\u6b63\u5728\u4fdd\u5b58 Provider \u914d\u989d\uff1a",
       allTraceEvents: "\u5168\u90e8\u4e8b\u4ef6",
       quotaRejectedEvent: "\u914d\u989d\u62d2\u7edd",
       quotaCheckedEvent: "\u914d\u989d\u68c0\u67e5",
@@ -1785,6 +1800,7 @@ const consoleHTML = `<!doctype html>
         "routing.explain": t("actionRoutingExplain"),
         "provider.enabled": t("actionProviderEnabled"),
         "provider.probe": t("actionProviderProbe"),
+        "provider.quota": t("actionProviderQuota"),
         "tool.invoke": t("tools")
       })[value] || value || "";
     }
@@ -2432,6 +2448,13 @@ const consoleHTML = `<!doctype html>
       }
       return "<span class=\"status healthy\">" + esc(t("enabled")) + "</span><div class=\"muted\">RPM " + esc(quota.requests_per_minute || 0) + "</div>";
     }
+    function renderProviderQuotaEditor(providerID, quota) {
+      const rpm = quota && quota.enabled ? quota.requests_per_minute || 0 : 0;
+      return "<div class=\"provider-actions\">" +
+        "<input data-provider-quota-input=\"" + esc(providerID) + "\" type=\"number\" min=\"0\" step=\"1\" value=\"" + esc(rpm) + "\" title=\"" + esc(t("providerQuotaInputTitle")) + "\" style=\"width: 92px;\" />" +
+        "<button class=\"secondary\" data-provider=\"" + esc(providerID) + "\" data-action=\"quota\">" + t("save") + "</button>" +
+      "</div><div class=\"muted\">" + (rpm > 0 ? "RPM " + esc(rpm) : esc(t("quotaDisabled"))) + "</div>";
+    }
     function exportGrants() {
       const query = grantCatalogQuery();
       exportAdminJSONL("/gateway/v1/grants/export", query, "grants.jsonl", grantMessage);
@@ -2497,7 +2520,7 @@ const consoleHTML = `<!doctype html>
           "<td>" + renderProviderClassLink(item.class) + "</td>" +
           "<td>" + esc(item.adapter || "mock") + "</td>" +
           "<td title=\"" + esc((item.models || []).join(", ")) + "\">" + renderModelLinks(item.models || [], item.id) + "</td>" +
-          "<td>" + renderProviderQuota(item.quota || {}) + "</td>" +
+          "<td>" + renderProviderQuotaEditor(item.id, item.quota || {}) + "</td>" +
           "<td><span class=\"status " + esc(runtimeStatus) + "\">" + esc(labelRuntime(runtimeStatus)) + "</span><div class=\"muted\">" + (item.enabled === false ? t("disabled") : t("enabled")) + "</div></td>" +
           "<td><div class=\"provider-actions\">" +
             "<button class=\"secondary\" data-provider=\"" + esc(item.id) + "\" data-action=\"probe\">" + t("probe") + "</button>" +
@@ -2507,6 +2530,7 @@ const consoleHTML = `<!doctype html>
       }).join("");
       providerRows.querySelectorAll("[data-action='probe']").forEach(button => button.addEventListener("click", () => probeProvider(button.dataset.provider)));
       providerRows.querySelectorAll("[data-action='toggle']").forEach(button => button.addEventListener("click", () => setProviderEnabled(button.dataset.provider, button.dataset.enabled === "true")));
+      providerRows.querySelectorAll("[data-action='quota']").forEach(button => button.addEventListener("click", () => setProviderQuota(button.dataset.provider)));
       if (!allProviders.length) {
         providerRows.innerHTML = "<tr><td colspan=\"7\" class=\"muted\">" + emptyText("noProviders", providerCatalogQuery()) + "</td></tr>";
       }
@@ -2893,7 +2917,7 @@ const consoleHTML = `<!doctype html>
       if (event.action === "tool.invoke" || metadata.tool_id) {
         return renderToolLink(metadata.tool_id || target);
       }
-      if (event.action === "provider.enabled" || event.action === "provider.probe") {
+      if (event.action === "provider.enabled" || event.action === "provider.probe" || event.action === "provider.quota") {
         return renderProviderLink(target);
       }
       if (metadata.policy_rule_id) {
@@ -3103,6 +3127,25 @@ const consoleHTML = `<!doctype html>
           body: JSON.stringify({ enabled })
         });
         await Promise.all([loadProviders(), loadModels(), loadProviderCatalog(), loadModelCatalog(), loadAudit()]);
+      } catch (err) {
+        auditMessage.textContent = t("failedPrefix") + err.message;
+      }
+    }
+    async function setProviderQuota(providerId) {
+      const input = Array.from(document.querySelectorAll("[data-provider-quota-input]")).find(item => item.dataset.providerQuotaInput === providerId);
+      const rpm = Number(input && input.value);
+      if (!Number.isInteger(rpm) || rpm < 0) {
+        auditMessage.textContent = t("failedPrefix") + t("providerQuotaInvalid");
+        return;
+      }
+      auditMessage.textContent = t("savingProviderQuota") + providerId + "...";
+      try {
+        await providerRequest("/gateway/v1/providers/" + encodeURIComponent(providerId) + "/quota", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requests_per_minute: rpm })
+        });
+        await Promise.all([loadProviders(), loadProviderCatalog(), loadRuntimeHealth(), loadAudit()]);
       } catch (err) {
         auditMessage.textContent = t("failedPrefix") + err.message;
       }

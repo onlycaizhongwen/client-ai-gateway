@@ -98,6 +98,48 @@ func TestManagerSetProviderEnabled(t *testing.T) {
 	}
 }
 
+func TestManagerSetProviderRPMQuota(t *testing.T) {
+	path := writeRuntimeConfig(t, `{
+	  "listen_addr": "127.0.0.1:0",
+	  "trace_store_path": "memory",
+	  "policy_version": "v1",
+	  "apps": [{"id":"app","token":"token","grants":["chat"]}],
+	  "providers": [{"id":"local","class":"local","models":["m"],"healthy":true}]
+	}`)
+	manager, err := NewManager(path, trace.NewMemoryStore())
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	defer manager.Close()
+
+	if err := manager.SetProviderRPMQuota("local", 9); err != nil {
+		t.Fatalf("set provider rpm quota: %v", err)
+	}
+	quotas := manager.Snapshot().Config.Quotas.Providers
+	if len(quotas) != 1 || quotas[0].ProviderID != "local" || quotas[0].RequestsPerMinute != 9 {
+		t.Fatalf("expected provider quota after reload, got %+v", quotas)
+	}
+
+	if err := manager.SetProviderRPMQuota("local", 3); err != nil {
+		t.Fatalf("update provider rpm quota: %v", err)
+	}
+	quotas = manager.Snapshot().Config.Quotas.Providers
+	if len(quotas) != 1 || quotas[0].RequestsPerMinute != 3 {
+		t.Fatalf("expected updated provider quota, got %+v", quotas)
+	}
+
+	if err := manager.SetProviderRPMQuota("local", 0); err != nil {
+		t.Fatalf("disable provider rpm quota: %v", err)
+	}
+	if got := manager.Snapshot().Config.Quotas.Providers; len(got) != 0 {
+		t.Fatalf("expected provider quota to be removed, got %+v", got)
+	}
+
+	if err := manager.SetProviderRPMQuota("local", -1); err == nil {
+		t.Fatal("expected negative provider rpm quota to fail")
+	}
+}
+
 func TestManagerHealthView(t *testing.T) {
 	path := writeRuntimeConfig(t, `{
 	  "listen_addr": "127.0.0.1:0",

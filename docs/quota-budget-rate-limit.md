@@ -74,6 +74,7 @@ flowchart LR
 - Provider RPM 命中限流时跳过该 Provider 候选，继续尝试下一个符合 Policy/Router 的候选；如果所有候选都不可用，则返回 `rate_limited`。
 - Trace 会写入 `quota_checked` 或 `quota_rejected` 事件，并在事件中携带结构化 `quota` 字段：`subject`、`id`、`window`、`limit`、`remaining`、`reset_at`。
 - 运行时健康接口会通过 `quota_runtime` 返回 App/Provider quota 数量、启用 RPM 数量、总 RPM 上限和当前模式；该视图不暴露 App Token。
+- 管理员可通过控制台或 `POST /gateway/v1/providers/{id}/quota` 调整 Provider `requests_per_minute`；`0` 表示移除该 Provider RPM 配额，负数会被拒绝。
 - 应用列表接口和控制台“应用与授权”面板会展示 App quota 摘要，仅包含是否启用和 `requests_per_minute`。
 - 应用列表支持 `quota_enabled=true|false` 筛选，便于快速找出未配置 RPM 限流的 App。
 - 控制台运行问题汇总会以 info 级别提示具备 `chat` grant 但未启用 App RPM 的应用，点击后联动到应用列表并筛选未启用配额项。

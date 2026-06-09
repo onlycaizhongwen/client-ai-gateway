@@ -1497,6 +1497,10 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function buildTraceStats",
 		"function quotaEventSubject",
 		"function exportAudit()",
+		"function setProviderQuota",
+		"data-provider-quota-input",
+		"providerQuotaInvalid",
+		"savingProviderQuota",
 		"traceExportSafety",
 		"auditExportSafety",
 		"noFilterResults",
@@ -2064,11 +2068,39 @@ func TestProviderManagementHTTP(t *testing.T) {
 	providersRes := httptest.NewRecorder()
 	handler.ServeHTTP(providersRes, req)
 	var providersBody struct {
-		Providers []providerhealth.View `json:"providers"`
+		Providers []struct {
+			providerhealth.View
+			Quota struct {
+				RequestsPerMinute int  `json:"requests_per_minute"`
+				Enabled           bool `json:"enabled"`
+			} `json:"quota"`
+		} `json:"providers"`
 	}
 	decodeBody(t, providersRes, &providersBody)
 	if len(providersBody.Providers) != 1 || providersBody.Providers[0].Enabled {
 		t.Fatalf("expected disabled provider view, got %+v", providersBody.Providers)
+	}
+
+	res = postJSON(handler, "/gateway/v1/providers/local-mock/quota", "dev-token", map[string]any{"requests_per_minute": 5})
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for non-admin quota update, got %d", res.Code)
+	}
+
+	res = postJSON(handler, "/gateway/v1/providers/local-mock/quota", "admin-token", map[string]any{"requests_per_minute": 5})
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200 for quota update, got %d: %s", res.Code, res.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/providers?provider_id=local-mock", nil)
+	providersRes = httptest.NewRecorder()
+	handler.ServeHTTP(providersRes, req)
+	decodeBody(t, providersRes, &providersBody)
+	if len(providersBody.Providers) != 1 || !providersBody.Providers[0].Quota.Enabled || providersBody.Providers[0].Quota.RequestsPerMinute != 5 {
+		t.Fatalf("expected provider quota view after update, got %+v", providersBody.Providers)
+	}
+
+	res = postJSON(handler, "/gateway/v1/providers/local-mock/quota", "admin-token", map[string]any{"requests_per_minute": -1})
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for negative quota update, got %d", res.Code)
 	}
 
 	res = postJSON(handler, "/gateway/v1/providers/local-mock/probe", "admin-token", map[string]any{})
@@ -2078,6 +2110,10 @@ func TestProviderManagementHTTP(t *testing.T) {
 	events := auditStore.List(audit.ListQuery{Action: "provider.enabled"})
 	if len(events) == 0 || events[0].Result != audit.ResultSuccess {
 		t.Fatalf("expected provider.enabled audit success, got %+v", events)
+	}
+	quotaEvents := auditStore.List(audit.ListQuery{Action: "provider.quota"})
+	if len(quotaEvents) < 2 || quotaEvents[0].Result != audit.ResultFailed || quotaEvents[1].Result != audit.ResultSuccess {
+		t.Fatalf("expected provider.quota audit success and failure, got %+v", quotaEvents)
 	}
 }
 

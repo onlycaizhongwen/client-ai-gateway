@@ -92,14 +92,47 @@ func (m *Manager) SetProviderEnabled(providerID string, enabled bool) error {
 	if !found {
 		return fmt.Errorf("provider %q not found", providerID)
 	}
-	encoded, err := json.MarshalIndent(cfg, "", "  ")
+	return m.writeConfigAndReload(cfg)
+}
+
+func (m *Manager) SetProviderRPMQuota(providerID string, requestsPerMinute int) error {
+	if requestsPerMinute < 0 {
+		return fmt.Errorf("provider %q requests_per_minute must be >= 0", providerID)
+	}
+	cfg, err := config.Load(m.configPath)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(m.configPath, append(encoded, '\n'), 0644); err != nil {
-		return err
+	foundProvider := false
+	for _, provider := range cfg.Providers {
+		if provider.ID == providerID {
+			foundProvider = true
+			break
+		}
 	}
-	return m.Reload()
+	if !foundProvider {
+		return fmt.Errorf("provider %q not found", providerID)
+	}
+	foundQuota := false
+	for i := range cfg.Quotas.Providers {
+		if cfg.Quotas.Providers[i].ProviderID != providerID {
+			continue
+		}
+		foundQuota = true
+		if requestsPerMinute == 0 {
+			cfg.Quotas.Providers = append(cfg.Quotas.Providers[:i], cfg.Quotas.Providers[i+1:]...)
+		} else {
+			cfg.Quotas.Providers[i].RequestsPerMinute = requestsPerMinute
+		}
+		break
+	}
+	if !foundQuota && requestsPerMinute > 0 {
+		cfg.Quotas.Providers = append(cfg.Quotas.Providers, config.ProviderQuota{
+			ProviderID:        providerID,
+			RequestsPerMinute: requestsPerMinute,
+		})
+	}
+	return m.writeConfigAndReload(cfg)
 }
 
 func (m *Manager) ProbeProvider(ctx context.Context, providerID string) (providerhealth.View, error) {
@@ -116,6 +149,17 @@ func (m *Manager) ProbeProvider(ctx context.Context, providerID string) (provide
 		}
 	}
 	return providerhealth.View{}, fmt.Errorf("provider %q not found", providerID)
+}
+
+func (m *Manager) writeConfigAndReload(cfg config.Config) error {
+	encoded, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(m.configPath, append(encoded, '\n'), 0644); err != nil {
+		return err
+	}
+	return m.Reload()
 }
 
 func (m *Manager) Close() {

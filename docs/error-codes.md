@@ -34,6 +34,7 @@ The gateway returns stable error codes in JSON error responses and records the f
 | `reload_failed` | Config reload failed and the previous runtime snapshot remains active. |
 | `runtime_unavailable` | Runtime manager is not available for Provider management or tool invocation. |
 | `provider_update_failed` | Provider enable/disable config update failed. |
+| `provider_quota_update_failed` | Provider RPM quota config update failed. |
 | `provider_probe_failed` | Provider probe failed; inspect Provider health for the classified reason. |
 | `audit_unavailable` | Audit store is not configured. |
 | `tool_denied` | Tool invocation was blocked by the current read-only MVP safety boundary. |

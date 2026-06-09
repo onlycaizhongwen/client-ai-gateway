@@ -19,6 +19,7 @@
 | `GET /gateway/v1/audit/events/export` | 必须携带 `admin` Grant。 |
 | `POST /gateway/v1/config/reload` | 必须携带 `admin` Grant。 |
 | `POST /gateway/v1/providers/{id}/enabled` | 必须携带 `admin` Grant。 |
+| `POST /gateway/v1/providers/{id}/quota` | 必须携带 `admin` Grant。 |
 | `POST /gateway/v1/providers/{id}/probe` | 必须携带 `admin` Grant。 |
 | `GET /gateway/v1/apps` / `GET /gateway/v1/grants` | 必须携带 `admin` Grant。 |
 
@@ -104,4 +105,3 @@ git diff --check
 - 敏感请求的 Trace 快照已脱敏。
 - MCP 仍处于 Manifest-only，不会执行外部命令。
 - 企业试点配置不复用 `dev-token` / `admin-token`。
-

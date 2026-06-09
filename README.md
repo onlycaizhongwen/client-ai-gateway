@@ -206,11 +206,16 @@ curl -X POST http://127.0.0.1:18765/gateway/v1/providers/local-mock/enabled `
   -H "Content-Type: application/json" `
   -d "{\"enabled\":false}"
 
+curl -X POST http://127.0.0.1:18765/gateway/v1/providers/local-mock/quota `
+  -H "Authorization: Bearer admin-token" `
+  -H "Content-Type: application/json" `
+  -d "{\"requests_per_minute\":60}"
+
 curl -X POST http://127.0.0.1:18765/gateway/v1/providers/local-mock/probe `
   -H "Authorization: Bearer admin-token"
 ```
 
-Provider 启停会写回配置文件并重新加载运行时快照。Provider 探测只更新运行时健康状态。
+Provider 启停和 RPM 配额调整会写回配置文件并重新加载运行时快照。`requests_per_minute=0` 表示关闭该 Provider 的 RPM 配额；负数会被拒绝。Provider 探测只更新运行时健康状态。
 
 ## 配置重载
 

@@ -306,6 +306,10 @@ type providerEnabledRequest struct {
 	Enabled bool `json:"enabled"`
 }
 
+type providerQuotaRequest struct {
+	RequestsPerMinute int `json:"requests_per_minute"`
+}
+
 type modelView struct {
 	Model         string `json:"model"`
 	ProviderID    string `json:"provider_id"`
@@ -1518,6 +1522,19 @@ func (h *Handler) providerAction(w http.ResponseWriter, r *http.Request) {
 		}
 		h.saveAudit(audit.Event{AppID: app.ID, Action: "provider.enabled", Target: providerID, Result: audit.ResultSuccess})
 		writeJSON(w, http.StatusOK, map[string]any{"status": "updated", "provider_id": providerID, "enabled": req.Enabled})
+	case "quota":
+		var req providerQuotaRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "", "invalid_request", err.Error())
+			return
+		}
+		if err := h.runtime.SetProviderRPMQuota(providerID, req.RequestsPerMinute); err != nil {
+			h.saveAudit(audit.Event{AppID: app.ID, Action: "provider.quota", Target: providerID, Result: audit.ResultFailed, Error: err.Error(), Metadata: map[string]any{"requests_per_minute": req.RequestsPerMinute}})
+			writeError(w, http.StatusBadRequest, "", "provider_quota_update_failed", err.Error())
+			return
+		}
+		h.saveAudit(audit.Event{AppID: app.ID, Action: "provider.quota", Target: providerID, Result: audit.ResultSuccess, Metadata: map[string]any{"requests_per_minute": req.RequestsPerMinute}})
+		writeJSON(w, http.StatusOK, map[string]any{"status": "updated", "provider_id": providerID, "requests_per_minute": req.RequestsPerMinute})
 	case "probe":
 		view, err := h.runtime.ProbeProvider(r.Context(), providerID)
 		if err != nil {
