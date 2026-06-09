@@ -1561,12 +1561,14 @@ func (h *Handler) providerAction(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "", "invalid_request", err.Error())
 			return
 		}
-		if err := h.runtime.SetProviderEnabled(providerID, req.Enabled); err != nil {
-			h.saveAudit(audit.Event{AppID: app.ID, Action: "provider.enabled", Target: providerID, Result: audit.ResultFailed, Error: err.Error()})
+		change, err := h.runtime.SetProviderEnabled(providerID, req.Enabled)
+		metadata := providerEnabledAuditMetadata(change, req.Enabled)
+		if err != nil {
+			h.saveAudit(audit.Event{AppID: app.ID, Action: "provider.enabled", Target: providerID, Result: audit.ResultFailed, Error: err.Error(), Metadata: metadata})
 			writeError(w, http.StatusBadRequest, "", "provider_update_failed", err.Error())
 			return
 		}
-		h.saveAudit(audit.Event{AppID: app.ID, Action: "provider.enabled", Target: providerID, Result: audit.ResultSuccess})
+		h.saveAudit(audit.Event{AppID: app.ID, Action: "provider.enabled", Target: providerID, Result: audit.ResultSuccess, Metadata: metadata})
 		writeJSON(w, http.StatusOK, map[string]any{"status": "updated", "provider_id": providerID, "enabled": req.Enabled})
 	case "quota":
 		var req providerQuotaRequest
@@ -1723,6 +1725,13 @@ func quotaChangeAuditMetadata(change gatewayruntime.RPMQuotaChange, requestedRPM
 	return map[string]any{
 		"old_requests_per_minute": change.OldRequestsPerMinute,
 		"requests_per_minute":     requestedRPM,
+	}
+}
+
+func providerEnabledAuditMetadata(change gatewayruntime.ProviderEnabledChange, requestedEnabled bool) map[string]any {
+	return map[string]any{
+		"old_enabled": change.OldEnabled,
+		"enabled":     requestedEnabled,
 	}
 }
 

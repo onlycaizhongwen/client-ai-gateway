@@ -45,6 +45,11 @@ type RPMQuotaChange struct {
 	RequestsPerMinute    int
 }
 
+type ProviderEnabledChange struct {
+	OldEnabled bool
+	Enabled    bool
+}
+
 func NewManager(configPath string, traceStore trace.Store) (*Manager, error) {
 	manager := &Manager{configPath: configPath, traceStore: traceStore, startedAt: time.Now().UTC()}
 	if err := manager.Reload(); err != nil {
@@ -88,16 +93,19 @@ func (m *Manager) reloadLocked() error {
 	return nil
 }
 
-func (m *Manager) SetProviderEnabled(providerID string, enabled bool) error {
-	return m.updateConfigAndReload(func(cfg *config.Config) error {
+func (m *Manager) SetProviderEnabled(providerID string, enabled bool) (ProviderEnabledChange, error) {
+	change := ProviderEnabledChange{Enabled: enabled}
+	err := m.updateConfigAndReload(func(cfg *config.Config) error {
 		for i := range cfg.Providers {
 			if cfg.Providers[i].ID == providerID {
+				change.OldEnabled = cfg.Providers[i].IsEnabled()
 				cfg.Providers[i].Enabled = &enabled
 				return nil
 			}
 		}
 		return fmt.Errorf("provider %q not found", providerID)
 	})
+	return change, err
 }
 
 func (m *Manager) SetProviderRPMQuota(providerID string, requestsPerMinute int) (RPMQuotaChange, error) {

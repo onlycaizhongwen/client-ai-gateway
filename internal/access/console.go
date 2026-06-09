@@ -3656,15 +3656,21 @@ const consoleHTML = `<!doctype html>
     }
     function renderAuditChangeValue(event) {
       const metadata = event && event.metadata || {};
-      if (!["app.quota", "provider.quota"].includes(event && event.action)) return "-";
-      if (metadata.old_requests_per_minute === undefined || metadata.requests_per_minute === undefined) return "-";
-      const oldValue = String(metadata.old_requests_per_minute);
-      const newValue = String(metadata.requests_per_minute);
-      return "RPM " + renderAuditMetadataValue("old_requests_per_minute", oldValue) + " -> " + renderAuditMetadataValue("requests_per_minute", newValue);
+      if (["app.quota", "provider.quota"].includes(event && event.action)) {
+        if (metadata.old_requests_per_minute === undefined || metadata.requests_per_minute === undefined) return "-";
+        const oldValue = String(metadata.old_requests_per_minute);
+        const newValue = String(metadata.requests_per_minute);
+        return "RPM " + renderAuditMetadataValue("old_requests_per_minute", oldValue) + " -> " + renderAuditMetadataValue("requests_per_minute", newValue);
+      }
+      if ((event && event.action) === "provider.enabled") {
+        if (metadata.old_enabled === undefined || metadata.enabled === undefined) return "-";
+        return "enabled " + renderAuditMetadataValue("old_enabled", String(metadata.old_enabled)) + " -> " + renderAuditMetadataValue("enabled", String(metadata.enabled));
+      }
+      return "-";
     }
     function renderAuditMetadataSummary(metadata) {
       if (!metadata || !Object.keys(metadata).length) return "";
-      const keys = ["tool_id", "provider_id", "policy_rule_id", "matched_grant", "missing_grants", "required_scopes", "origin", "server_id", "old_requests_per_minute", "requests_per_minute"];
+      const keys = ["tool_id", "provider_id", "policy_rule_id", "matched_grant", "missing_grants", "required_scopes", "origin", "server_id", "old_requests_per_minute", "requests_per_minute", "old_enabled", "enabled"];
       const cells = keys
         .filter(key => metadata[key] !== undefined && metadata[key] !== null && metadata[key] !== "")
         .map(key => "<div class=\"chain-cell\"><span class=\"k\">" + esc(key) + "</span><div>" + renderAuditMetadataValue(key, metadata[key]) + "</div></div>");

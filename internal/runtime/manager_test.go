@@ -88,8 +88,12 @@ func TestManagerSetProviderEnabled(t *testing.T) {
 	}
 	defer manager.Close()
 
-	if err := manager.SetProviderEnabled("local", false); err != nil {
+	change, err := manager.SetProviderEnabled("local", false)
+	if err != nil {
 		t.Fatalf("set enabled: %v", err)
+	}
+	if !change.OldEnabled || change.Enabled {
+		t.Fatalf("expected provider enabled change true -> false, got %+v", change)
 	}
 	views := manager.Snapshot().Health.Views(manager.Snapshot().Config.Providers)
 	if len(views) != 1 || views[0].Enabled {
@@ -232,7 +236,8 @@ func TestManagerConfigUpdatesAreSerialized(t *testing.T) {
 	}()
 	go func() {
 		defer wg.Done()
-		errs <- manager.SetProviderEnabled("local", false)
+		_, err := manager.SetProviderEnabled("local", false)
+		errs <- err
 	}()
 	wg.Wait()
 	close(errs)

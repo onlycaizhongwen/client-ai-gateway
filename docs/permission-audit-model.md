@@ -53,6 +53,7 @@ Trace 不保存 App Token。请求快照会按 `trace_redact_labels` 和 `trace_
 - `trace_id`：串联 Trace 和 Audit。
 - `app_id`：调用方身份。
 - `action`：例如 `tool.invoke`、`policy.dry_run`、`routing.explain`、`provider.enabled`。
+- Provider 启停操作会在 metadata 中记录 `old_enabled` 和新的 `enabled`，便于回溯管理变更前后状态。
 - `result`：`success`、`denied`、`failed`。
 - `target`：工具、Provider、Policy 或其他对象 ID。
 - `metadata`：结构化解释信息。
@@ -82,4 +83,3 @@ Trace 不保存 App Token。请求快照会按 `trace_redact_labels` 和 `trace_
 - MCP Manifest 当前不可执行。
 - 只读工具之外的工具会被拒绝。
 - 缺少工具 scope 时返回稳定拒绝结果，并写入 Audit。
-

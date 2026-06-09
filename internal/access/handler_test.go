@@ -1617,6 +1617,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function renderAuditPolicy",
 		"old_requests_per_minute",
 		"requests_per_minute",
+		"old_enabled",
 		"quotaChange",
 		"function buildIssues()",
 		"function traceHasEvent",
@@ -2144,6 +2145,9 @@ func TestProviderManagementHTTP(t *testing.T) {
 	events := auditStore.List(audit.ListQuery{Action: "provider.enabled"})
 	if len(events) == 0 || events[0].Result != audit.ResultSuccess {
 		t.Fatalf("expected provider.enabled audit success, got %+v", events)
+	}
+	if events[0].Metadata["old_enabled"] != true || events[0].Metadata["enabled"] != false {
+		t.Fatalf("expected provider.enabled old/new metadata, got %+v", events[0].Metadata)
 	}
 	quotaEvents := auditStore.List(audit.ListQuery{Action: "provider.quota"})
 	if len(quotaEvents) < 2 || quotaEvents[0].Result != audit.ResultFailed || quotaEvents[1].Result != audit.ResultSuccess {
