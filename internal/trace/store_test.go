@@ -67,6 +67,23 @@ func TestMemoryStorePageFiltersAndOffsets(t *testing.T) {
 	if page.Items[0].TraceID != "trace-page-c" || page.Items[1].TraceID != "trace-page-a" {
 		t.Fatalf("expected newest filtered page after offset, got %+v", page.Items)
 	}
+
+	page = store.Page(ListQuery{EventType: "quota_rejected", Limit: 10})
+	if page.Total != 0 || len(page.Items) != 0 {
+		t.Fatalf("expected no quota traces before event is saved, got %+v", page)
+	}
+	if err := store.Save(Record{
+		TraceID:   "trace-quota",
+		Status:    "failed",
+		StartedAt: base.Add(10 * time.Minute),
+		Events:    []Event{{Type: "quota_rejected", Message: "rate limited", At: base}},
+	}); err != nil {
+		t.Fatalf("save quota trace: %v", err)
+	}
+	page = store.Page(ListQuery{EventType: "quota_rejected", Limit: 10})
+	if page.Total != 1 || len(page.Items) != 1 || page.Items[0].TraceID != "trace-quota" {
+		t.Fatalf("expected quota rejected trace, got %+v", page)
+	}
 }
 
 func TestJSONLStoreRetentionKeepsNewestRecords(t *testing.T) {

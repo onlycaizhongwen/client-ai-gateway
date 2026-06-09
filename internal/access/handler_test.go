@@ -176,6 +176,26 @@ func TestTraceListFiltersHTTP(t *testing.T) {
 	if len(body.Traces) != 1 || body.Traces[0].Status != "failed" {
 		t.Fatalf("expected one failed trace, got %+v", body.Traces)
 	}
+
+	quotaHandler, _ := newTestHandlerWithQuota(config.Quotas{Apps: []config.AppQuota{{AppID: "dev-app", RequestsPerMinute: 1}}})
+	postJSON(quotaHandler, "/v1/chat/completions", "dev-token", map[string]any{
+		"model":    "local-small",
+		"messages": []map[string]string{{"role": "user", "content": "first"}},
+	})
+	postJSON(quotaHandler, "/v1/chat/completions", "dev-token", map[string]any{
+		"model":    "local-small",
+		"messages": []map[string]string{{"role": "user", "content": "second"}},
+	})
+	req = httptest.NewRequest(http.MethodGet, "/gateway/v1/traces?event_type=quota_rejected", nil)
+	res = httptest.NewRecorder()
+	quotaHandler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.Code)
+	}
+	decodeBody(t, res, &body)
+	if len(body.Traces) != 1 || !hasTraceEvent(body.Traces[0].Events, "quota_rejected") {
+		t.Fatalf("expected one quota rejected trace, got %+v", body.Traces)
+	}
 }
 
 func TestTraceListPaginationHTTP(t *testing.T) {
@@ -1346,6 +1366,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"id=\"trace-export-message\"",
 		"id=\"trace-app-filter\"",
 		"id=\"trace-provider-filter\"",
+		"id=\"trace-event-filter\"",
 		"id=\"trace-filter-apply\"",
 		"id=\"trace-filter-clear\"",
 		"id=\"issue-refresh\"",
@@ -1534,9 +1555,11 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"function renderAuditMetadataFilter",
 		"function renderAuditPolicy",
 		"function buildIssues()",
+		"function traceHasEvent",
 		"function renderIssues()",
 		"function renderIssueTarget",
 		"data-issue-trace-id",
+		"data-issue-trace-event-type",
 		"data-issue-audit-trace-id",
 		"data-issue-audit-target",
 		"data-issue-app-id",
@@ -1550,6 +1573,7 @@ func TestConsoleIncludesExportActions(t *testing.T) {
 		"data-issue-mcp-runtime",
 		"issueAppQuotaDisabled",
 		"issueProviderQuotaDisabled",
+		"issueQuotaRejected",
 		"function labelSeverity",
 		"function renderTracePolicy",
 		"function renderTraceSummary",
@@ -2266,4 +2290,13 @@ func errorTraceID(t *testing.T, res *httptest.ResponseRecorder) string {
 	}
 	decodeBody(t, res, &body)
 	return body.Error.TraceID
+}
+
+func hasTraceEvent(events []trace.Event, eventType string) bool {
+	for _, event := range events {
+		if event.Type == eventType {
+			return true
+		}
+	}
+	return false
 }

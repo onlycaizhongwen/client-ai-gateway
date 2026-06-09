@@ -530,6 +530,11 @@ const consoleHTML = `<!doctype html>
                 <option value="completed" data-i18n="statusCompleted">已完成</option>
                 <option value="failed" data-i18n="statusFailed">失败</option>
               </select>
+              <select id="trace-event-filter" style="max-width: 170px;">
+                <option value="" data-i18n="allTraceEvents">全部事件</option>
+                <option value="quota_rejected" data-i18n="quotaRejectedEvent">配额拒绝</option>
+                <option value="quota_checked" data-i18n="quotaCheckedEvent">配额检查</option>
+              </select>
               <button class="secondary" id="trace-filter-apply" data-i18n="applyFilter">筛选</button>
               <button class="secondary" id="trace-filter-clear" data-i18n="clearFilter">清空</button>
               <button class="secondary" id="trace-export" data-i18n="export">导出</button>
@@ -799,6 +804,7 @@ const consoleHTML = `<!doctype html>
     const detail = document.querySelector("#detail");
     const summary = document.querySelector("#summary");
     const statusFilter = document.querySelector("#status-filter");
+    const traceEventFilter = document.querySelector("#trace-event-filter");
     const traceAppFilter = document.querySelector("#trace-app-filter");
     const traceProviderFilter = document.querySelector("#trace-provider-filter");
     const traceExportMessage = document.querySelector("#trace-export-message");
@@ -1060,6 +1066,7 @@ const consoleHTML = `<!doctype html>
         issueMCPServerDisabled: "MCP Server \u5df2\u7981\u7528\uff0c\u5df2\u542f\u7528\u5de5\u5177 {enabled}/{total}",
         issueMCPRuntime: "MCP \u8fd0\u884c\u65f6\u72b6\u6001\u4e3a {status}{reason}",
         issueTraceFailed: "\u6700\u8fd1\u8bf7\u6c42\u5931\u8d25\uff1a{error}",
+        issueQuotaRejected: "\u6700\u8fd1\u8bf7\u6c42\u547d\u4e2d\u914d\u989d\u62d2\u7edd\uff1a{error}",
         issueAuditProblem: "\u6700\u8fd1\u5ba1\u8ba1\u5f02\u5e38\uff1a{action} / {result}{error}",
         issueRange: "{range} / {total} | \u7b2c {page} / {pages} \u9875",
         replayTrace: "\u56de\u586b\u5230\u5feb\u6377\u8bf7\u6c42",
@@ -1229,6 +1236,9 @@ const consoleHTML = `<!doctype html>
         requestTraces: "Request Traces",
         allStatus: "All status",
         traceExportSafety: "Trace export uses the current filters and the stored safe request snapshot. Redacted or truncated values stay redacted, and app tokens are not included.",
+        allTraceEvents: "All events",
+        quotaRejectedEvent: "Quota rejected",
+        quotaCheckedEvent: "Quota checked",
         auditExportSafety: "Audit export requires an admin token and uses the current filters. Request replay by trace_id still relies on the Trace safe snapshot.",
         explainChain: "Explain Chain",
         stage: "Stage",
@@ -1355,6 +1365,7 @@ const consoleHTML = `<!doctype html>
         issueMCPServerDisabled: "MCP server is disabled, enabled tools {enabled}/{total}",
         issueMCPRuntime: "MCP runtime status is {status}{reason}",
         issueTraceFailed: "Recent request failed: {error}",
+        issueQuotaRejected: "Recent request was rejected by quota: {error}",
         issueAuditProblem: "Recent audit problem: {action} / {result}{error}",
         issueRange: "{range} of {total} | Page {page} / {pages}",
         replayTrace: "Fill Quick Request",
@@ -1571,6 +1582,11 @@ const consoleHTML = `<!doctype html>
     document.addEventListener("click", event => {
       const button = event.target.closest("button[data-issue-trace-id]");
       if (!button) return;
+      if (button.dataset.issueTraceEventType) {
+        traceEventFilter.value = button.dataset.issueTraceEventType;
+        tracePage = 1;
+        loadTraces();
+      }
       loadDetail(button.dataset.issueTraceId);
     });
     document.addEventListener("click", event => {
@@ -1684,6 +1700,7 @@ const consoleHTML = `<!doctype html>
     document.querySelector("#mcp-prev").addEventListener("click", () => { mcpPage = Math.max(1, mcpPage - 1); loadMCPCatalog(); });
     document.querySelector("#mcp-next").addEventListener("click", () => { mcpPage += 1; loadMCPCatalog(); });
     statusFilter.addEventListener("change", () => { tracePage = 1; loadTraces(); });
+    traceEventFilter.addEventListener("change", () => { tracePage = 1; loadTraces(); });
 
     const zhFallback = {
       quotaRuntime: "\u914d\u989d\u8fd0\u884c\u65f6",
@@ -1697,6 +1714,11 @@ const consoleHTML = `<!doctype html>
       providerQuotaCount: "Provider \u914d\u989d",
       providerRpmEnabled: "\u542f\u7528 Provider RPM",
       totalProviderRpm: "\u603b Provider RPM"
+      ,
+      allTraceEvents: "\u5168\u90e8\u4e8b\u4ef6",
+      quotaRejectedEvent: "\u914d\u989d\u62d2\u7edd",
+      quotaCheckedEvent: "\u914d\u989d\u68c0\u67e5",
+      issueQuotaRejected: "\u6700\u8fd1\u8bf7\u6c42\u547d\u4e2d\u914d\u989d\u62d2\u7edd\uff1a{error}"
     };
 
     function t(key, vars = {}) {
@@ -1783,6 +1805,7 @@ const consoleHTML = `<!doctype html>
     function traceQuery(limit = tracePageSize, offset = (tracePage - 1) * tracePageSize) {
       const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
       if (statusFilter.value) query.set("status", statusFilter.value);
+      if (traceEventFilter.value) query.set("event_type", traceEventFilter.value);
       if (traceAppFilter.value.trim()) query.set("app_id", traceAppFilter.value.trim());
       if (traceProviderFilter.value.trim()) query.set("provider_id", traceProviderFilter.value.trim());
       return query;
@@ -1925,7 +1948,8 @@ const consoleHTML = `<!doctype html>
         }
       });
       allTraces.filter(item => item.status === "failed").forEach(item => {
-        addIssue("critical", "trace", item.trace_id, t("issueTraceFailed", { error: item.error || "-" }), item.started_at, { trace_id: item.trace_id });
+        const quotaRejected = traceHasEvent(item, "quota_rejected");
+        addIssue("critical", "trace", item.trace_id, quotaRejected ? t("issueQuotaRejected", { error: item.error || "-" }) : t("issueTraceFailed", { error: item.error || "-" }), item.started_at, { trace_id: item.trace_id, event_type: quotaRejected ? "quota_rejected" : "" });
       });
       allAuditEvents.filter(item => item.result === "denied" || item.result === "failed").forEach(item => {
         addIssue(item.result === "failed" ? "critical" : "warning", "audit", item.target || item.trace_id || "-", t("issueAuditProblem", {
@@ -1940,6 +1964,9 @@ const consoleHTML = `<!doctype html>
         if (severityDiff !== 0) return severityDiff;
         return String(b.created_at || "").localeCompare(String(a.created_at || ""));
       });
+    }
+    function traceHasEvent(trace, eventType) {
+      return !!trace && (trace.events || []).some(event => event.type === eventType);
     }
     function labelSeverity(value) {
       return ({ critical: t("critical"), warning: t("warningLevel"), info: t("infoLevel") })[value] || value || "";
@@ -1971,7 +1998,7 @@ const consoleHTML = `<!doctype html>
     function renderIssueTarget(item) {
       if (!item || !item.target) return "-";
       if (item.source === "trace" && item.ref && item.ref.trace_id) {
-        return "<button class=\"link-button\" data-issue-trace-id=\"" + esc(item.ref.trace_id) + "\">" + esc(item.target) + "</button>";
+        return "<button class=\"link-button\" data-issue-trace-id=\"" + esc(item.ref.trace_id) + "\" data-issue-trace-event-type=\"" + esc(item.ref.event_type || "") + "\">" + esc(item.target) + "</button>";
       }
       if (item.source === "audit" && item.ref && (item.ref.trace_id || item.ref.target)) {
         return "<button class=\"link-button\" data-issue-audit-trace-id=\"" + esc(item.ref.trace_id || "") + "\" data-issue-audit-target=\"" + esc(item.ref.target || "") + "\">" + esc(item.target) + "</button>";
@@ -3123,6 +3150,7 @@ const consoleHTML = `<!doctype html>
       traceAppFilter.value = "";
       traceProviderFilter.value = "";
       statusFilter.value = "";
+      traceEventFilter.value = "";
       tracePage = 1;
       loadTraces();
     }

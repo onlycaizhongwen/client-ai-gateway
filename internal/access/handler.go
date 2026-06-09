@@ -178,6 +178,7 @@ func (h *Handler) traceList(w http.ResponseWriter, r *http.Request) {
 		Status:     r.URL.Query().Get("status"),
 		AppID:      r.URL.Query().Get("app_id"),
 		ProviderID: r.URL.Query().Get("provider_id"),
+		EventType:  r.URL.Query().Get("event_type"),
 	})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"traces": page.Items,
@@ -202,6 +203,7 @@ func (h *Handler) traceExport(w http.ResponseWriter, r *http.Request) {
 		Status:     r.URL.Query().Get("status"),
 		AppID:      r.URL.Query().Get("app_id"),
 		ProviderID: r.URL.Query().Get("provider_id"),
+		EventType:  r.URL.Query().Get("event_type"),
 	})
 	writeJSONL(w, "traces.jsonl", page.Items)
 }

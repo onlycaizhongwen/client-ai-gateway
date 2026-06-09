@@ -90,6 +90,7 @@ type ListQuery struct {
 	Status     string
 	AppID      string
 	ProviderID string
+	EventType  string
 }
 
 type Page struct {
@@ -283,6 +284,9 @@ func pageRecords(records map[string]Record, query ListQuery) Page {
 		if query.ProviderID != "" && record.ProviderID != query.ProviderID {
 			continue
 		}
+		if query.EventType != "" && !recordHasEventType(record, query.EventType) {
+			continue
+		}
 		out = append(out, record)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -297,6 +301,15 @@ func pageRecords(records map[string]Record, query ListQuery) Page {
 		end = total
 	}
 	return Page{Items: out[offset:end], Total: total, Offset: offset, Limit: limit}
+}
+
+func recordHasEventType(record Record, eventType string) bool {
+	for _, event := range record.Events {
+		if event.Type == eventType {
+			return true
+		}
+	}
+	return false
 }
 
 func sortedRecordsBySequence(records map[string]Record, sequences map[string]int64) []Record {
