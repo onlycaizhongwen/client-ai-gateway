@@ -22,6 +22,7 @@ type Record struct {
 	ProviderID  string            `json:"provider_id,omitempty"`
 	FinalModel  string            `json:"final_model,omitempty"`
 	Status      string            `json:"status"`
+	Usage       *Usage            `json:"usage,omitempty"`
 	Policy      PolicyDecision    `json:"policy"`
 	Routes      []RouteAttempt    `json:"routes"`
 	Fallbacks   []FallbackAttempt `json:"fallbacks"`
@@ -42,6 +43,13 @@ type RequestSnapshot struct {
 type MessageSnapshot struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+}
+
+type Usage struct {
+	PromptTokens     int    `json:"prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens"`
+	TotalTokens      int    `json:"total_tokens"`
+	Source           string `json:"source"`
 }
 
 type PolicyDecision struct {

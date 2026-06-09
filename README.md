@@ -149,6 +149,8 @@ curl "http://127.0.0.1:18765/gateway/v1/traces/export?limit=500&status=failed" -
 
 Trace 列表返回 `traces`、`total`、`offset`、`limit`。支持按 `status`、`app_id`、`provider_id` 过滤。控制台的 Trace 列表筛选和导出会复用同一组条件。
 
+成功的聊天 Trace 会保存 Provider 返回的 `usage`，包含 `prompt_tokens`、`completion_tokens`、`total_tokens` 和 `source`。当 Provider 未返回 usage 时 token 保持 `0`，`source` 标记为 `unknown`；当前阶段只做可观测记录，不做预算扣减或成本估算。
+
 默认 Trace 存储为 `data/traces.jsonl`。可通过配置项 `trace_retention_max` 控制最多保留条数；`0` 或不配置表示不裁剪。
 
 Trace 详情会保存一份用于复盘的请求快照，包含 `model`、`messages`、`metadata` 和 `data_labels`，但不会保存应用 Token。快照安全策略由配置控制：

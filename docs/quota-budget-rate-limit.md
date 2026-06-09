@@ -80,6 +80,7 @@ flowchart LR
 - 应用列表接口和控制台“应用与授权”面板会展示 App quota 摘要，仅包含是否启用和 `requests_per_minute`。
 - 应用列表支持 `quota_enabled=true|false` 筛选，便于快速找出未配置 RPM 限流的 App。
 - 控制台运行问题汇总会以 info 级别提示具备 `chat` grant 但未启用 App RPM 的应用，点击后联动到应用列表并筛选未启用配额项。
+- 成功的聊天 Trace 会保存 Provider 返回的 usage，字段为 `prompt_tokens`、`completion_tokens`、`total_tokens` 和 `source`；Provider 未返回 usage 时 token 计数保持 `0`，`source=unknown`。
 
 ## 后续配置草案
 
@@ -215,4 +216,4 @@ Provider adapter 已返回：
 - 不做真实预算扣减。
 - 不新增 token/day、成本或预算扣减字段。
 - 不改变 Provider fallback 顺序。
-- Usage 只随 OpenAI-compatible 响应返回给调用方。
+- Usage 会随 OpenAI-compatible 响应返回给调用方，并进入 Trace 作为后续 token/day 记账和趋势报表的数据基础。

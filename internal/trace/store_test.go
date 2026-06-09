@@ -18,6 +18,7 @@ func TestJSONLStorePersistsAndReloads(t *testing.T) {
 		AppID:     "dev-app",
 		Model:     "local-small",
 		Status:    "completed",
+		Usage:     &Usage{PromptTokens: 2, CompletionTokens: 3, TotalTokens: 5, Source: "provider"},
 		StartedAt: time.Now().UTC(),
 		Events:    []Event{{Type: "request_started", Message: "ok", At: time.Now().UTC()}},
 	}
@@ -35,6 +36,9 @@ func TestJSONLStorePersistsAndReloads(t *testing.T) {
 	}
 	if got.AppID != record.AppID || got.Status != record.Status {
 		t.Fatalf("unexpected record: %+v", got)
+	}
+	if got.Usage == nil || got.Usage.TotalTokens != 5 || got.Usage.Source != "provider" {
+		t.Fatalf("expected persisted usage, got %+v", got.Usage)
 	}
 }
 

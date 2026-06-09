@@ -167,6 +167,7 @@ func (p *Pipeline) Chat(ctx context.Context, token string, req ChatRequest) (Cha
 			record.Status = "completed"
 			record.ProviderID = result.ProviderID
 			record.FinalModel = result.Model
+			record.Usage = traceUsage(result.Usage)
 			record.FinishedAt = time.Now().UTC()
 			record.Events = append(record.Events, trace.Event{Type: "request_completed", Message: "provider returned response", At: record.FinishedAt})
 			_ = p.deps.TraceStore.Save(record)
@@ -232,6 +233,19 @@ func quotaTraceEvent(eventType, message, subject, id string, decision quota.Deci
 			Remaining: decision.Remaining,
 			ResetAt:   decision.ResetAt,
 		},
+	}
+}
+
+func traceUsage(usage adapters.Usage) *trace.Usage {
+	source := "provider"
+	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && usage.TotalTokens == 0 {
+		source = "unknown"
+	}
+	return &trace.Usage{
+		PromptTokens:     usage.PromptTokens,
+		CompletionTokens: usage.CompletionTokens,
+		TotalTokens:      usage.TotalTokens,
+		Source:           source,
 	}
 }
 

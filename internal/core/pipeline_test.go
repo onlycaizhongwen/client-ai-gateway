@@ -16,7 +16,7 @@ import (
 )
 
 func TestPipelineChatSuccess(t *testing.T) {
-	pipeline, _ := newTestPipeline()
+	pipeline, store := newTestPipeline()
 
 	resp, err := pipeline.Chat(context.Background(), "dev-token", core.ChatRequest{
 		Model:    "local-small",
@@ -30,6 +30,13 @@ func TestPipelineChatSuccess(t *testing.T) {
 	}
 	if resp.Choices[0].Message.Content == "" {
 		t.Fatal("expected mock content")
+	}
+	record, ok := store.Get(resp.TraceID)
+	if !ok {
+		t.Fatal("expected trace record")
+	}
+	if record.Usage == nil || record.Usage.Source != "provider" || record.Usage.TotalTokens != resp.Usage.TotalTokens {
+		t.Fatalf("expected provider usage in trace, got trace=%+v response=%+v", record.Usage, resp.Usage)
 	}
 }
 
